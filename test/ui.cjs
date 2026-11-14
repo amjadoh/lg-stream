@@ -305,6 +305,28 @@ async function main() {
     await page.locator('#speed-cancel').click();
     await page.locator('#close-speed').click();
     await page.evaluate(() => { window.__speedRequests = []; });
+
+    // Cancelling an automatic refresh directly from settings must reschedule it
+    // with the short foreground-action backoff instead of losing it forever.
+    const requestsBeforeDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true;
+      window.__advanceTime(5 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeDirectCancel);
+    await page.locator('#setup-button').click();
+    await page.locator('#cancel-playlist').click();
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Direct settings cancellation aborts the automatic catalogue download');
+    await page.locator('#close-setup').click();
+    const requestsAfterDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => { window.__advanceTime(4 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsAfterDirectCancel, 'Direct cancellation waits for the five-minute backoff');
+    await page.evaluate(() => { window.__advanceTime(60 * 1000 + 1); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsAfterDirectCancel);
+    await page.waitForFunction(() => document.getElementById('status').textContent.includes('تم تحديث القائمة تلقائيًا'));
+
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
