@@ -1,10 +1,10 @@
 {
   "name": "lg-stream",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "description": "Native webOS playback probe: one stream, deliberate switching, private session-only sources.",
   "scripts": {
-    "check": "node --check app/core.js && node --check app/app.js && node --check app/speed-test.js && node --check scripts/preview.cjs && node --test test/*.test.cjs",
+    "check": "node --check app/core.js && node --check app/app.js && node --check app/playlist.js && node --check app/speed-test.js && node --check scripts/preview.cjs && node --test test/*.test.cjs",
     "test": "node --test test/*.test.cjs",
     "check:ui": "node test/ui.cjs",
     "preview": "node scripts/preview.cjs",

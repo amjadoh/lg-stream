@@ -59,7 +59,21 @@ async function main() {
       let elapsed = 0;
       performance.now = () => originalNow() + elapsed;
       window.__speedRequests = [];
+      window.__playlistRequests = [];
       window.fetch = (url, options) => {
+        if (!String(url).startsWith('https://speed.cloudflare.com/')) {
+          const request = { url: String(url), options, aborted: false };
+          window.__playlistRequests.push(request);
+          options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
+          const lines = ['#EXTM3U'];
+          for (let index = 1; index <= 12; index++) {
+            lines.push(`#EXTINF:-1 group-title="مجموعة ${Math.ceil(index / 4)}",قناة ${index}`);
+            lines.push(`https://media.example.test/live/${index}.m3u8?token=synthetic`);
+          }
+          const bytes = new TextEncoder().encode(lines.join('\n'));
+          const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
+          return Promise.resolve({ ok: true, status: 200, headers: { get: name => name === 'content-length' ? String(bytes.byteLength) : null }, body });
+        }
         const request = { url: String(url), options, aborted: false, controller: null };
         window.__speedRequests.push(request);
         const body = new ReadableStream({ start(controller) { request.controller = controller; } });
@@ -101,7 +115,7 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'source-1');
     await page.locator('#clear-sources').focus();
     await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'source-1');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'playlist-url');
     await page.keyboard.press('Shift+Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'clear-sources');
     await page.locator('#source-1').fill('https://example.test/first.m3u8?token=synthetic');
@@ -187,6 +201,25 @@ async function main() {
     await page.keyboard.press('PageUp');
     await page.waitForTimeout(180);
     assert.equal(await page.evaluate(() => window.__mediaStarts), singleStarts);
+
+    // A full private M3U URL loads names into memory and renders only one small page at a time.
+    await page.locator('#setup-button').click();
+    await page.locator('#playlist-url').fill('https://provider.example.test/get.php?username=private&password=secret&type=m3u_plus&output=mpegts');
+    await page.locator('#load-playlist').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), 1);
+    assert.equal(await page.locator('#channels .channel-button').count(), 4);
+    assert.match(await page.locator('#page-label').innerText(), /1 من 3/);
+    assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
+    assert.equal((await page.locator('body').innerText()).includes('password=secret'), false);
+    assert.match(await page.locator('#channels').innerText(), /قناة 1/);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-playlist-1080.png') });
+    await page.locator('#next-page').click();
+    assert.equal(await page.locator('#channels .channel-button').first().getAttribute('data-index'), '4');
+    assert.match(await page.locator('#channels').innerText(), /قناة 5/);
+    const playlistStarts = await page.evaluate(() => window.__mediaStarts);
+    await page.locator('#channels .channel-button').first().click();
+    assert.equal(await page.evaluate(() => window.__mediaStarts), playlistStarts + 1);
 
     await pendingThen('speed-button');
     assert.equal(await page.locator('video').count(), 1, 'Opening speed controls alone must preserve playback');

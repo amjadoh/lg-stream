@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../app');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png' };
-const allowed = new Set(['/', '/index.html', '/app.js', '/core.js', '/speed-test.js', '/style.css', '/appinfo.json', '/icon.png']);
+const allowed = new Set(['/', '/index.html', '/app.js', '/core.js', '/playlist.js', '/speed-test.js', '/style.css', '/appinfo.json', '/icon.png']);
 http.createServer((req, res) => {
   let pathname;
   try { pathname = new URL(req.url, 'http://localhost').pathname; } catch { res.writeHead(400).end(); return; }
