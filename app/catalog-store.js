@@ -55,12 +55,13 @@
         var requests = [];
         for (var index = 0; index < meta.chunkCount; index += 1) requests.push(requestResult(store.get(meta.revision + ':' + index)));
         var chunks = await Promise.all(requests); await done;
-        var entries = [];
+        var entries = new Array(meta.count); var offset = 0;
         for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
           if (!chunks[chunkIndex] || chunks[chunkIndex].revision !== meta.revision) return { state: 'corrupt' };
-          entries = entries.concat(chunks[chunkIndex].entries || []);
+          var ownEntries = chunks[chunkIndex].entries || [];
+          for (var entryIndex = 0; entryIndex < ownEntries.length; entryIndex += 1) entries[offset++] = ownEntries[entryIndex];
         }
-        if (entries.length !== meta.count) return { state: 'corrupt' };
+        if (offset !== meta.count) return { state: 'corrupt' };
         return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt };
       } catch (_) { return { state: 'error' }; }
     }

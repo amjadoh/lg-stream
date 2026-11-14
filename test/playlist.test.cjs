@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseM3U, createLoader, MAX_BYTES, TIMEOUT_MS } = require('../app/playlist.js');
+const { parseM3U, createLoader, TIMEOUT_MS } = require('../app/playlist.js');
 
 test('parses named M3U entries, resolves relative URLs and ignores unsafe lines', () => {
   const parsed = parseM3U(`#EXTM3U url-tvg="https://provider.example/epg.xml"

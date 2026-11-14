@@ -345,10 +345,13 @@
   }
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
-    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = step > 0 ? Math.min(indexes.length - 1, position + step) : Math.max(0, position + step);
+    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var rawNext = position + step; var next = step > 0 ? Math.min(indexes.length - 1, rawNext) : Math.max(0, rawNext);
     if (next < 0 || next >= indexes.length) return false;
     if (next === position) return false;
-    if (next >= contentWindowStart && next < contentWindowStart + contentWindowSize) return false;
+    if (next >= contentWindowStart && next < contentWindowStart + contentWindowSize) {
+      if (rawNext === next) return false;
+      var edgeCard = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (edgeCard) edgeCard.focus(); return !!edgeCard;
+    }
     contentWindowStart = step > 0 ? Math.floor(Math.max(0, next - (contentWindowSize - 4)) / 4) * 4 : Math.floor(next / 4) * 4;
     contentWindowStart = Math.min(contentMaxStart(indexes.length), contentWindowStart); renderChannels();
     var card = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (card) card.focus(); return true;
