@@ -7,6 +7,7 @@
   var sourceNames = [];
   var sourceGroups = [];
   var sourceIds = [];
+  var sourceDetails = [];
   var sourcePrograms = {};
   var epgUrl = null;
   var favorites = {};
@@ -15,7 +16,9 @@
   var sourceMode = 'manual';
   var selected = 0;
   var channelPage = 0;
+  var channelWindowStart = 0;
   var pageSize = 4;
+  var channelWindowSize = 40;
   var playingIndex = null;
   var lastState = 'idle';
   var keyboardVisible = false;
@@ -27,6 +30,8 @@
   var searchPanel = $('search-panel');
   var diagnostics = $('diagnostics-panel');
   var speedPanel = $('speed-panel');
+  var detailsPanel = $('details-panel');
+  var detailsIndex = null;
   var speedTest = window.LGSpeedTest.createTest();
   var speedConnection = null;
   var speedRunning = false;
@@ -89,7 +94,7 @@
       var title = document.createElement('h3'); title.textContent = section[1] + ' (' + matches.length + ')'; box.appendChild(title);
       matches.slice(0, 12).forEach(function (index) {
         var button = document.createElement('button'); button.type = 'button'; button.textContent = sourceNames[index] || 'عنصر';
-        button.addEventListener('click', function () { closeSearch(); activeSection = section[0]; activeGroup = sourceGroups[index] || ''; renderPrimary(); renderGroups(); renderChannels(); activateChannel(index); });
+        button.addEventListener('click', function () { closeSearch(); activeSection = section[0]; activeGroup = sourceGroups[index] || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
       $('search-results').appendChild(box);
@@ -118,12 +123,12 @@
       button.addEventListener('focus', function (event) {
         event.currentTarget.scrollIntoView({ block: 'nearest' });
         if (activeGroup === event.currentTarget.dataset.group) return;
-        activeGroup = event.currentTarget.dataset.group; channelPage = 0;
+        activeGroup = event.currentTarget.dataset.group; channelPage = 0; channelWindowStart = 0;
         Array.prototype.forEach.call($('groups').querySelectorAll('.group-button'), function (own) { own.classList.toggle('active', own === event.currentTarget); });
         renderChannels();
       });
       button.addEventListener('click', function (event) {
-        activeGroup = event.currentTarget.dataset.group; channelPage = 0; renderGroups(); renderChannels();
+        activeGroup = event.currentTarget.dataset.group; channelPage = 0; channelWindowStart = 0; renderGroups(); renderChannels();
         var first = (activeSection === 'movies' || activeSection === 'series') ? $('movie-grid').querySelector('.movie-card') : $('channels').querySelector('.channel-button');
         if (first) first.focus();
       });
@@ -140,8 +145,17 @@
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var name = document.createElement('span'); name.textContent = sourceNames[index] || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
-      card.addEventListener('click', function () { activateChannel(index); }); $('movie-grid').appendChild(card);
+      card.addEventListener('click', function () { openDetails(index); }); $('movie-grid').appendChild(card);
     });
+  }
+  function closeDetails() { detailsPanel.hidden = true; detailsIndex = null; focusSelected(); }
+  function openDetails(index) {
+    detailsIndex = index; var details = sourceDetails[index] || {};
+    $('details-title').textContent = sourceNames[index] || (activeSection === 'series' ? 'مسلسل' : 'فيلم');
+    $('details-year').textContent = details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر';
+    $('details-description').textContent = details.description || 'الوصف غير متوفر في بيانات القائمة.';
+    $('details-status').textContent = details.trailer ? '' : 'الإعلان غير متوفر من المزود.';
+    $('details-trailer').hidden = !details.trailer; detailsPanel.hidden = false; $('details-play').focus();
   }
   var player = api.createPlayer({
     createVideo: function () {
@@ -199,10 +213,12 @@
     $('empty-title').textContent = sources.length ? 'اختر قناة وابدأ المشاهدة' : 'مساحتك للمشاهدة';
     $('empty-description').textContent = sources.length ? 'تم تحميل ' + sources.length + ' قناة أو فيديو. تنقّل بالأسهم ثم اضغط موافق.' : 'أضف رابط M3U كاملًا أو روابط مباشرة.';
     $('start-button').textContent = sources.length ? 'تغيير القائمة' : 'إضافة قائمة M3U';
+    var contentMode = activeSection === 'movies' || activeSection === 'series';
     var pageCount = Math.max(1, Math.ceil(indexes.length / pageSize));
     channelPage = Math.max(0, Math.min(channelPage, pageCount - 1));
-    var start = channelPage * pageSize;
-    var end = Math.min(start + pageSize, indexes.length);
+    channelWindowStart = Math.max(0, Math.min(channelWindowStart, Math.max(0, indexes.length - channelWindowSize)));
+    var start = contentMode ? channelPage * pageSize : channelWindowStart;
+    var end = Math.min(start + (contentMode ? pageSize : channelWindowSize), indexes.length);
     for (var position = start; position < end; position += 1) {
       var index = indexes[position];
       var row = document.createElement('div'); row.className = 'channel-row';
@@ -234,12 +250,8 @@
       });
       row.appendChild(button); row.appendChild(favorite); $('channels').appendChild(row);
     }
-    $('channel-paging').hidden = indexes.length <= pageSize;
     $('movie-paging').hidden = !(activeSection === 'movies' || activeSection === 'series') || indexes.length <= pageSize;
-    $('page-label').textContent = (channelPage + 1) + ' من ' + pageCount;
     $('movie-page-label').textContent = (channelPage + 1) + ' من ' + pageCount;
-    $('previous-page').disabled = channelPage === 0;
-    $('next-page').disabled = channelPage >= pageCount - 1;
     $('previous-movie-page').disabled = channelPage === 0;
     $('next-movie-page').disabled = channelPage >= pageCount - 1;
     updateChannelStates();
@@ -248,8 +260,7 @@
     var indexes = visibleIndexes();
     var position = indexes.indexOf(index);
     if (position < 0) { if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); else if ($('groups button')) $('groups button').focus(); return; }
-    var targetPage = Math.floor(position / pageSize);
-    if (targetPage !== channelPage) { channelPage = targetPage; renderChannels(); }
+    if (position < channelWindowStart || position >= channelWindowStart + channelWindowSize) { channelWindowStart = Math.max(0, position - 4); renderChannels(); }
     var button = $('channels').querySelector('[data-index="' + index + '"]');
     if (button) button.focus();
     else $('start-button').focus();
@@ -259,6 +270,13 @@
     renderChannels();
     var card = $('movie-grid').querySelector('[data-index="' + selected + '"]') || $('movie-grid').querySelector('.movie-card');
     if (card) card.focus(); else if ($('groups button')) $('groups button').focus();
+  }
+  function moveChannelWindow(step) {
+    if (activeSection === 'movies' || activeSection === 'series' || !document.activeElement.classList.contains('channel-button')) return false;
+    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = position + step;
+    if (next < 0 || next >= indexes.length) return false;
+    if (next >= channelWindowStart && next < channelWindowStart + channelWindowSize) return false;
+    channelWindowStart = Math.max(0, next - (step > 0 ? 4 : channelWindowSize - 5)); renderChannels(); focusChannel(indexes[next]); return true;
   }
   function playChannel(intent) {
     var index = intent.index;
@@ -275,6 +293,7 @@
     $('channel-title').textContent = sourceNames[index] || 'المصدر ' + (index + 1);
     if (!watchMode && activeSection === 'tv') focusChannel(index);
     player.start(sources[index], index + 1, intent.requestedAt);
+    if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
   var lastConfirmIndex = null;
@@ -374,7 +393,7 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     stop(); sources = result; sourceNames = result.map(function (_, index) { return 'المصدر ' + (index + 1); });
-    sourceGroups = result.map(function () { return ''; }); sourceIds = result.map(function () { return ''; }); sourcePrograms = {}; epgUrl = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0;
+    sourceGroups = result.map(function () { return ''; }); sourceIds = result.map(function () { return ''; }); sourceDetails = result.map(function () { return {}; }); sourcePrograms = {}; epgUrl = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0; channelWindowStart = 0;
     renderPrimary(); renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
@@ -403,8 +422,8 @@
       sources = result.entries.map(function (entry) { return entry.url; });
       sourceNames = result.entries.map(function (entry) { return entry.name; });
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
-      sourceIds = result.entries.map(function (entry) { return entry.id || ''; }); sourcePrograms = {}; epgUrl = result.epgUrl || null;
-      favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
+      sourceIds = result.entries.map(function (entry) { return entry.id || ''; }); sourceDetails = result.entries.map(function (entry) { return { year: entry.year || '', description: entry.description || '', trailer: entry.trailer || null }; }); sourcePrograms = {}; epgUrl = result.epgUrl || null;
+      favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'playlist'; selected = 0; channelPage = 0; channelWindowStart = 0; playingIndex = null;
       renderPrimary(); renderGroups(); renderChannels();
       $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
       closeSetup();
@@ -413,18 +432,10 @@
   });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
-    cancelPlaylist(); cancelEpg(); stop(); sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0; renderPrimary(); renderGroups(); renderChannels();
+    cancelPlaylist(); cancelEpg(); stop(); sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourceDetails = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
     $('form-error').textContent = ''; inputs[0].focus();
-  });
-  $('previous-page').addEventListener('click', function () {
-    var indexes = visibleIndexes();
-    if (channelPage > 0) { channelPage -= 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
-  });
-  $('next-page').addEventListener('click', function () {
-    var indexes = visibleIndexes();
-    if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
   });
   $('previous-movie-page').addEventListener('click', function () {
     var indexes = visibleIndexes();
@@ -438,9 +449,16 @@
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
   $('nav-search').addEventListener('click', openSearch);
   $('close-search').addEventListener('click', closeSearch);
+  $('close-details').addEventListener('click', closeDetails);
+  $('details-play').addEventListener('click', function () { var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
+  $('details-trailer').addEventListener('click', function () {
+    var details = sourceDetails[detailsIndex] || {}; if (!details.trailer) return;
+    detailsPanel.hidden = true; detailsIndex = null; playingIndex = null; $('movie-browser').hidden = true; $('empty-state').hidden = true;
+    $('channel-title').textContent = 'الإعلان'; player.start(details.trailer, 'trailer', performance.now()); setWatchMode(true);
+  });
   Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
     button.addEventListener('click', function (event) {
-      activeSection = event.currentTarget.dataset.section; activeGroup = ''; channelPage = 0;
+      activeSection = event.currentTarget.dataset.section; activeGroup = ''; channelPage = 0; channelWindowStart = 0;
       setPrimary(false); renderPrimary(); renderGroups(); renderChannels();
       var first = $('groups').querySelector('button'); if (first) first.focus();
     });
@@ -582,7 +600,8 @@
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();
-      if (!setup.hidden) closeSetup();
+      if (!detailsPanel.hidden) closeDetails();
+      else if (!setup.hidden) closeSetup();
       else if (!searchPanel.hidden) closeSearch();
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
@@ -592,7 +611,7 @@
       else window.close();
       return;
     }
-    var dialog = !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
+    var dialog = !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
       if (key === 'Tab') {
         var controls = visibleControls(dialog);
@@ -606,6 +625,7 @@
       return;
     }
     if (isSelect || (isInput && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
+    if ((key === 'ArrowDown' && moveChannelWindow(1)) || (key === 'ArrowUp' && moveChannelWindow(-1))) { event.preventDefault(); return; }
     if (watchMode && (key === 'Enter' || key === 'Tab' || /^Arrow/.test(key))) {
       setWatchMode(false); focusSelected(); event.preventDefault(); return;
     }
@@ -641,7 +661,7 @@
   });
   window.addEventListener('pagehide', function () {
     cancelPlaylist(); cancelEpg(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; channelPage = 0; renderPrimary(); renderGroups(); renderChannels();
+    sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourceDetails = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; channelPage = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
   renderPrimary(); renderGroups(); renderChannels();

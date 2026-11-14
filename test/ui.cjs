@@ -70,7 +70,8 @@ async function main() {
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 80; index++) {
             const group = index === 64 ? 'قنوات أفلام' : index > 72 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
-            lines.push(`#EXTINF:-1 group-title="${group}",قناة ${index}`);
+            const details = index === 65 ? ' year="2024" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4"' : '';
+            lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
             lines.push(`https://media.example.test/${index > 72 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
@@ -219,11 +220,14 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 1);
-    assert.equal(await page.locator('#channels .channel-button').count(), 4);
-    assert.match(await page.locator('#page-label').innerText(), /1 من 16/);
+    assert.equal(await page.locator('#channels .channel-button').count(), 40);
+    assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
     assert.equal((await page.locator('body').innerText()).includes('password=secret'), false);
     assert.match(await page.locator('#channels').innerText(), /قناة 1/);
+    await page.locator('#channels .channel-button').last().focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '40', 'Channel window advances while scrolling with the remote');
     assert.equal(await page.locator('#groups [data-group="قنوات أفلام"]').count(), 1, 'Live movie channels must stay in TV groups');
     await page.locator('#groups [data-group="قنوات أفلام"]').focus();
     const groupBounds = await page.evaluate(() => {
@@ -268,6 +272,13 @@ async function main() {
     await page.locator('#previous-movie-page').click();
     assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '64');
     await page.locator('#movie-grid .movie-card').first().click();
+    assert.equal(await page.locator('#details-panel').isVisible(), true);
+    assert.match(await page.locator('#details-year').innerText(), /2024/);
+    assert.match(await page.locator('#details-description').innerText(), /وصف تجريبي/);
+    assert.equal(await page.locator('#details-trailer').isVisible(), true);
+    await page.locator('#details-play').click();
+    assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
+    await page.keyboard.press('Escape');
     await page.locator('#stop-button').click();
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Stopping content must restore its visible card');
     assert.equal(await page.locator('.channels-panel').isVisible(), false, 'Movies use groups plus cards without a duplicate channel list');
@@ -283,9 +294,6 @@ async function main() {
     await page.locator('.primary-button[data-section="tv"]').click();
     await page.locator('#groups [data-group=""]').click();
     await page.screenshot({ path: path.join(root, 'artifacts/ui-playlist-1080.png') });
-    await page.locator('#next-page').click();
-    assert.equal(await page.locator('#channels .channel-button').first().getAttribute('data-index'), '4');
-    assert.match(await page.locator('#channels').innerText(), /قناة 5/);
     const playlistStarts = await page.evaluate(() => window.__mediaStarts);
     await page.locator('#channels .channel-button').first().click();
     assert.equal(await page.evaluate(() => window.__mediaStarts), playlistStarts + 1);

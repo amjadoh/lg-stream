@@ -31,7 +31,6 @@
         <section class="groups-panel"><h1>المجموعات</h1><div id="groups" class="group-list"></div></section>
         <section class="channels-panel"><h1>القنوات</h1>
         <div id="channels" class="channel-list"></div>
-        <div id="channel-paging" class="channel-paging" hidden><button id="previous-page" type="button">السابق</button><span id="page-label"></span><button id="next-page" type="button">التالي</button></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
         <div class="remote-hint"><span>↑ ↓</span> للتنقل بين القنوات<br><span>OK</span> للتشغيل · <span>CH + / −</span> للتبديل</div>
         </section>
@@ -48,6 +47,9 @@
   </div>
   <section id="search-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="search-title" hidden>
     <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
+  </section>
+  <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
+    <div class="setup-card details-card"><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button" hidden>مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div>
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">

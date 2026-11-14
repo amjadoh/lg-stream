@@ -26,14 +26,15 @@ main { display: flex; direction: ltr; gap: 30px; min-height: 0; flex: 1; }
 .primary-panel { grid-column: 1; }
 .library-panel.primary-open .primary-panel { display: flex; }
 .primary-mark { direction: ltr; display: grid; place-items: center; width: 54px; height: 54px; margin: 0 auto 12px; border-radius: 15px; background: #a6e8cf; color: #102c25; font: bold 20px Arial, sans-serif; }
-.primary-panel button { width: 100%; padding: 12px 8px; display: grid; place-items: center; gap: 3px; font: 25px/1 Arial, sans-serif; }
-.primary-panel button span { font: 15px/1.3 Tahoma, sans-serif; }
+.primary-panel button { width: 100%; padding: 15px 8px; display: grid; place-items: center; gap: 5px; font: 28px/1 Arial, sans-serif; }
+.primary-panel button span { font: 17px/1.3 Tahoma, sans-serif; }
 .primary-panel button.active { background: #18372f; border-color: #81cdb0; color: #b4f0d8; }
 .primary-settings { margin-top: auto; }
 .groups-panel, .channels-panel { direction: rtl; min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; padding: 10px 6px; }
 .groups-panel { grid-column: 2; }
 .channels-panel { grid-column: 3; }
-.group-list { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 9px; margin-top: 10px; overflow: auto; padding: 4px; }
+.group-list { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 9px; margin-top: 10px; overflow: auto; scrollbar-width: none; padding: 4px; }
+.group-list::-webkit-scrollbar, .channel-list::-webkit-scrollbar { display: none; }
 .group-button { width: 100%; min-height: 58px; text-align: right; padding: 12px 14px; white-space: normal; line-height: 1.35; overflow-wrap: anywhere; font-size: 19px; }
 .group-button.active { background: #18372f; border-color: #81cdb0; color: #b4f0d8; }
 .viewing-panel { direction: rtl; }
@@ -46,7 +47,7 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .search-section { min-width: 0; padding: 16px; background: #0e1722; border: 1px solid #3b4d64; border-radius: 14px; }
 .search-section h3 { margin: 0 0 12px; color: #a6e8cf; }
 .search-section button { width: 100%; margin-top: 8px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
-.channel-list { margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+.channel-list { flex: 1; min-height: 0; margin-top: 14px; overflow: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 12px; }
 .channel-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .channel-button { width: 100%; text-align: right; padding: 20px 16px; background: #141e2b; display: grid; grid-template-columns: 40px 1fr; column-gap: 12px; align-items: center; }
 .favorite-button { padding: 10px 14px; font: 28px/1 Arial, sans-serif; color: #a1aec1; }
@@ -100,6 +101,8 @@ input { background: #0b131e; color: #edf6fb; border: 1px solid #52657e; border-r
 input::placeholder { color: #7f90a7; }
 .form-error { color: #ffc6b5 !important; min-height: 28px; margin: 12px 0; }
 .setup-card .small-note { font-size: 18px; margin: 20px 0 0; }
+.details-card { width: 900px; }
+.details-card .details-year { color: #a6e8cf; font-weight: bold; }
 .setup-divider { margin: 26px 0 8px; padding-top: 20px; border-top: 1px solid #3b4d64; font-size: 22px; }
 .playlist-status { min-height: 28px; margin: 10px 0 !important; color: #b4f0d8 !important; }
 #clear-sources { color: #ffc6b5; }

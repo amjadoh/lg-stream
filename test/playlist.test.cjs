@@ -12,8 +12,8 @@ https://media.example/movie.m3u8?token=private
 #EXTINF:-1,Bad
 file:///private`, 'https://provider.example/get.php?token=private');
   assert.deepEqual(parsed, { entries: [
-    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts' },
-    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private' }
+    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts', year: '', description: '', trailer: null },
+    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private', year: '', description: '', trailer: null }
   ], truncated: false, epgUrl: 'https://provider.example/epg.xml' });
 });
 

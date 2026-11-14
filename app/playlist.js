@@ -47,10 +47,16 @@
         var group = /group-title="([^"]*)"/i.exec(line);
         var tvgName = /tvg-name="([^"]*)"/i.exec(line);
         var tvgId = /tvg-id="([^"]*)"/i.exec(line);
+        var year = /(?:year|release-date|releasedate)="([^"]*)"/i.exec(line);
+        var description = /(?:description|plot)="([^"]*)"/i.exec(line);
+        var trailer = /(?:trailer|trailer-url)="([^"]*)"/i.exec(line);
         metadata = {
           name: safeText(comma >= 0 ? line.slice(comma + 1) : (tvgName && tvgName[1]), 'قناة', 120),
           group: safeText(group && group[1], '', 80),
-          id: safeText(tvgId && tvgId[1], '', 160)
+          id: safeText(tvgId && tvgId[1], '', 160),
+          year: safeText(year && year[1], '', 24),
+          description: safeText(description && description[1], '', 1200),
+          trailer: resolveHttpUrl(trailer && trailer[1])
         };
         return;
       }
@@ -59,7 +65,7 @@
       if (!url) { metadata = null; return; }
       var type = sourceType(url);
       if (entries.length >= MAX_ENTRIES || counts[type] >= limits[type]) { truncated = true; metadata = null; return; }
-      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '' });
+      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', year: metadata ? metadata.year : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
       counts[type] += 1;
       metadata = null;
     }
