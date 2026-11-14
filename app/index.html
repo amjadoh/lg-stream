@@ -20,7 +20,10 @@
     <main>
       <aside class="channels-panel" aria-label="القنوات">
         <h1>القنوات</h1>
-        <p class="muted">اختر قناة ثم اضغط موافق</p>
+        <div class="channel-tools">
+          <label for="group-filter">المجموعة</label><select id="group-filter"><option value="">كل القنوات</option><option value="__favorites">المفضلة</option></select>
+          <label for="channel-search">بحث</label><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="اسم القناة"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div>
+        </div>
         <div id="channels" class="channel-list"></div>
         <div id="channel-paging" class="channel-paging" hidden><button id="previous-page" type="button">السابق</button><span id="page-label"></span><button id="next-page" type="button">التالي</button></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
@@ -30,7 +33,7 @@
         <div id="video-host" class="video-host"></div>
         <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
         <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق أو رجوع لإظهار التحكم</p>
-        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="status" role="status" aria-live="polite">جاهز</span></div>
+        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
     <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>

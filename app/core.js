@@ -16,6 +16,17 @@
     } catch (_) { return null; }
   }
 
+  function qualityLabel(width, height) {
+    var edge = Math.max(Number(width) || 0, Number(height) || 0);
+    var shortEdge = Math.min(Number(width) || 0, Number(height) || 0);
+    if (!edge || !shortEdge) return '';
+    if (shortEdge >= 2160 || edge >= 3840) return '4K';
+    if (shortEdge >= 1440 || edge >= 2560) return 'QHD';
+    if (shortEdge >= 1080 || edge >= 1920) return 'FHD';
+    if (shortEdge >= 720 || edge >= 1280) return 'HD';
+    return 'SD';
+  }
+
   function createSwitchScheduler(commit, timers, delay) {
     timers = timers || {
       setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
@@ -166,6 +177,7 @@
       });
       on('ended', function () { clearStartup(entry); finishWait(entry); entry.state = 'ended'; notify(entry); });
       on('loadedmetadata', function () { notify(entry); });
+      on('resize', function () { notify(entry); });
       on('error', function () {
         var code = video.error && video.error.code;
         entry.errorCode = typeof code === 'number' && code >= 1 && code <= 4 ? code : 0;
@@ -205,5 +217,5 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { validateSource: validateSource, qualityLabel: qualityLabel, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

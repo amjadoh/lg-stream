@@ -6,6 +6,7 @@
   var sources = [];
   var sourceNames = [];
   var sourceGroups = [];
+  var favorites = {};
   var sourceMode = 'manual';
   var selected = 0;
   var channelPage = 0;
@@ -33,6 +34,25 @@
     'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
     'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
   };
+  function visibleIndexes() {
+    var group = $('group-filter').value;
+    var query = $('channel-search').value.trim().toLocaleLowerCase();
+    return sources.map(function (_, index) { return index; }).filter(function (index) {
+      if (group === '__favorites' && !favorites[index]) return false;
+      if (group && group !== '__favorites' && sourceGroups[index] !== group) return false;
+      return !query || (sourceNames[index] || '').toLocaleLowerCase().indexOf(query) >= 0;
+    });
+  }
+  function renderGroups() {
+    var selectedGroup = $('group-filter').value;
+    var groups = [];
+    sourceGroups.forEach(function (group) { if (group && groups.indexOf(group) < 0) groups.push(group); });
+    $('group-filter').replaceChildren();
+    [['', 'كل القنوات'], ['__favorites', 'المفضلة']].concat(groups.map(function (group) { return [group, group]; })).forEach(function (item) {
+      var option = document.createElement('option'); option.value = item[0]; option.textContent = item[1]; $('group-filter').appendChild(option);
+    });
+    $('group-filter').value = Array.prototype.some.call($('group-filter').options, function (option) { return option.value === selectedGroup; }) ? selectedGroup : '';
+  }
   var player = api.createPlayer({
     createVideo: function () {
       var video = document.createElement('video');
@@ -64,11 +84,14 @@
       $('stall-count').textContent = state.stalls || 0;
       $('stall-ms').textContent = (state.stallMs || 0) + ' ms';
       $('video-size').textContent = state.width ? state.width + ' × ' + state.height : '—';
+      var quality = api.qualityLabel(state.width, state.height);
+      $('quality-badge').textContent = quality;
+      $('quality-badge').hidden = !quality;
       $('error-code').textContent = state.errorCode || '—';
     }
   });
   function updateChannelStates() {
-    Array.prototype.forEach.call($('channels').children, function (button) {
+    Array.prototype.forEach.call($('channels').querySelectorAll('.channel-button'), function (button) {
       var index = Number(button.dataset.index);
       var current = playingIndex === index;
       button.classList.toggle('active', current);
@@ -77,16 +100,20 @@
     });
   }
   function renderChannels() {
+    var indexes = visibleIndexes();
     $('channels').replaceChildren();
-    $('channel-empty').hidden = sources.length > 0;
+    $('channel-empty').hidden = indexes.length > 0;
+    $('channel-empty').innerHTML = sources.length ? 'لا توجد قنوات مطابقة<br><span>غيّر المجموعة أو البحث</span>' : 'قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span>';
     $('empty-title').textContent = sources.length ? 'اختر قناة وابدأ المشاهدة' : 'مساحتك للمشاهدة';
     $('empty-description').textContent = sources.length ? 'تم تحميل ' + sources.length + ' قناة أو فيديو. تنقّل بالأسهم ثم اضغط موافق.' : 'أضف رابط M3U كاملًا أو روابط مباشرة.';
     $('start-button').textContent = sources.length ? 'تغيير القائمة' : 'إضافة قائمة M3U';
-    var pageCount = Math.max(1, Math.ceil(sources.length / pageSize));
+    var pageCount = Math.max(1, Math.ceil(indexes.length / pageSize));
     channelPage = Math.max(0, Math.min(channelPage, pageCount - 1));
     var start = channelPage * pageSize;
-    var end = Math.min(start + pageSize, sources.length);
-    for (var index = start; index < end; index += 1) {
+    var end = Math.min(start + pageSize, indexes.length);
+    for (var position = start; position < end; position += 1) {
+      var index = indexes[position];
+      var row = document.createElement('div'); row.className = 'channel-row';
       var button = document.createElement('button');
       button.type = 'button';
       button.className = 'channel-button' + (playingIndex === index ? ' active' : '');
@@ -101,16 +128,31 @@
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); });
       button.addEventListener('click', function (event) { requestChannel(Number(event.currentTarget.dataset.index), false); });
-      $('channels').appendChild(button);
+      var favorite = document.createElement('button');
+      favorite.type = 'button'; favorite.className = 'favorite-button'; favorite.dataset.favoriteIndex = index;
+      favorite.textContent = favorites[index] ? '★' : '☆'; favorite.setAttribute('aria-pressed', String(!!favorites[index]));
+      favorite.setAttribute('aria-label', (favorites[index] ? 'إزالة من المفضلة: ' : 'إضافة إلى المفضلة: ') + (sourceNames[index] || 'القناة'));
+      favorite.addEventListener('click', function (event) {
+        var ownIndex = Number(event.currentTarget.dataset.favoriteIndex);
+        favorites[ownIndex] = !favorites[ownIndex];
+        if (!favorites[ownIndex]) delete favorites[ownIndex];
+        renderChannels();
+        var target = $('channels').querySelector('[data-favorite-index="' + ownIndex + '"]');
+        if (target) target.focus(); else if ($('channels').querySelector('button')) $('channels').querySelector('button').focus();
+      });
+      row.appendChild(button); row.appendChild(favorite); $('channels').appendChild(row);
     }
-    $('channel-paging').hidden = sources.length <= pageSize;
+    $('channel-paging').hidden = indexes.length <= pageSize;
     $('page-label').textContent = (channelPage + 1) + ' من ' + pageCount;
     $('previous-page').disabled = channelPage === 0;
     $('next-page').disabled = channelPage >= pageCount - 1;
     updateChannelStates();
   }
   function focusChannel(index) {
-    var targetPage = Math.floor(index / pageSize);
+    var indexes = visibleIndexes();
+    var position = indexes.indexOf(index);
+    if (position < 0) { if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); else $('group-filter').focus(); return; }
+    var targetPage = Math.floor(position / pageSize);
     if (targetPage !== channelPage) { channelPage = targetPage; renderChannels(); }
     var button = $('channels').querySelector('[data-index="' + index + '"]');
     if (button) button.focus();
@@ -213,8 +255,8 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     stop(); sources = result; sourceNames = result.map(function (_, index) { return 'المصدر ' + (index + 1); });
-    sourceGroups = result.map(function () { return ''; }); sourceMode = 'manual'; selected = 0; channelPage = 0;
-    renderChannels(); closeSetup();
+    sourceGroups = result.map(function () { return ''; }); favorites = {}; sourceMode = 'manual'; selected = 0; channelPage = 0;
+    renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
   $('load-playlist').addEventListener('click', function () {
@@ -242,21 +284,30 @@
       sources = result.entries.map(function (entry) { return entry.url; });
       sourceNames = result.entries.map(function (entry) { return entry.name; });
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
-      sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
-      renderChannels();
+      favorites = {}; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
+      renderGroups(); renderChannels();
       $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
       closeSetup();
     });
   });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
-    cancelPlaylist(); stop(); sources = []; sourceNames = []; sourceGroups = []; sourceMode = 'manual'; selected = 0; channelPage = 0; renderChannels();
+    cancelPlaylist(); stop(); sources = []; sourceNames = []; sourceGroups = []; favorites = {}; sourceMode = 'manual'; selected = 0; channelPage = 0; renderGroups(); renderChannels();
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
     $('form-error').textContent = ''; inputs[0].focus();
   });
-  $('previous-page').addEventListener('click', function () { if (channelPage > 0) { channelPage -= 1; renderChannels(); focusChannel(channelPage * pageSize); } });
-  $('next-page').addEventListener('click', function () { if ((channelPage + 1) * pageSize < sources.length) { channelPage += 1; renderChannels(); focusChannel(channelPage * pageSize); } });
+  $('previous-page').addEventListener('click', function () {
+    var indexes = visibleIndexes();
+    if (channelPage > 0) { channelPage -= 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
+  });
+  $('next-page').addEventListener('click', function () {
+    var indexes = visibleIndexes();
+    if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
+  });
+  $('group-filter').addEventListener('change', function () { channelPage = 0; renderChannels(); if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); });
+  $('channel-search').addEventListener('input', function () { channelPage = 0; renderChannels(); });
+  $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; channelPage = 0; renderChannels(); $('channel-search').focus(); });
   $('setup-button').addEventListener('click', openSetup);
   $('start-button').addEventListener('click', openSetup);
   $('close-setup').addEventListener('click', closeSetup);
@@ -350,7 +401,7 @@
   });
 
   function visibleControls(container) {
-    return Array.prototype.filter.call(container.querySelectorAll('button,input'), function (item) {
+    return Array.prototype.filter.call(container.querySelectorAll('button,input,select'), function (item) {
       return !item.disabled && item.offsetParent !== null;
     });
   }
@@ -387,7 +438,8 @@
     var key = event.key;
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
     var isInput = event.target.tagName === 'INPUT';
-    if (!setup.hidden && keyboardVisible) return;
+    var isSelect = event.target.tagName === 'SELECT';
+    if (isInput && keyboardVisible) return;
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();
@@ -413,11 +465,16 @@
       if (/^Arrow/.test(key)) { moveFocus(dialog, key); event.preventDefault(); }
       return;
     }
+    if (isSelect || (isInput && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
     if (watchMode && (key === 'Enter' || key === 'Tab' || /^Arrow/.test(key))) {
       setWatchMode(false); focusChannel(selected); event.preventDefault(); return;
     }
     if ((code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
-      selected = (selected + (code === 33 || code === 427 || key === 'PageUp' ? 1 : -1) + sources.length) % sources.length;
+      var indexes = visibleIndexes();
+      if (!indexes.length) return;
+      var position = indexes.indexOf(selected);
+      if (position < 0) position = 0;
+      selected = indexes[(position + (code === 33 || code === 427 || key === 'PageUp' ? 1 : -1) + indexes.length) % indexes.length];
       if (!watchMode) focusChannel(selected);
       requestChannel(selected, true); event.preventDefault(); return;
     }
@@ -437,9 +494,9 @@
   });
   window.addEventListener('pagehide', function () {
     cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; sourceNames = []; sourceGroups = []; selected = 0; channelPage = 0; renderChannels();
+    sources = []; sourceNames = []; sourceGroups = []; favorites = {}; selected = 0; channelPage = 0; renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
-  renderChannels();
+  renderGroups(); renderChannels();
   $('start-button').focus();
 }());

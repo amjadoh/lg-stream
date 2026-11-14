@@ -1,6 +1,6 @@
 {
   "name": "lg-stream",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Native webOS playback probe: one stream, deliberate switching, private session-only sources.",
   "scripts": {

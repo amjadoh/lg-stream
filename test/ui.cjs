@@ -40,6 +40,8 @@ async function main() {
       Object.defineProperty(proto, 'src', { configurable: true, get() { return state(this).source; }, set(value) { state(this).source = value; } });
       Object.defineProperty(proto, 'paused', { configurable: true, get() { return state(this).paused; } });
       Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; } });
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get() { return 1920; } });
+      Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get() { return 1080; } });
       proto.load = function () {};
       proto.play = function () {
         window.__mediaStarts++;
@@ -132,11 +134,12 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__mediaStarts), 0, 'Highlighting a channel must not start media');
     await page.keyboard.press('ArrowLeft');
     assert.notEqual(await page.evaluate(() => document.activeElement.dataset.index), '2', 'Left must leave the vertical channel list');
-    await page.locator('#channels button').nth(1).focus();
+    await page.locator('#channels .channel-button').nth(1).focus();
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '1', 'The selected channel must receive Enter');
     await page.keyboard.press('Enter');
     assert.deepEqual(errors, [], 'Browser errors before the first playback request');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1);
+    assert.equal(await page.locator('#quality-badge').innerText(), 'FHD');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1, 'Selecting the current channel must not restart it');
     await page.locator('#retry-button').click();
@@ -174,7 +177,7 @@ async function main() {
     await pendingThen('stop-button');
     assert.equal(await page.locator('video').count(), 0);
 
-    await page.locator('#channels button').first().click();
+    await page.locator('#channels .channel-button').first().click();
     const beforeHide = await page.evaluate(() => window.__mediaStarts);
     await page.evaluate(() => {
       Object.defineProperty(document, 'hidden', { configurable: true, value: true });
@@ -184,7 +187,7 @@ async function main() {
     });
     assert.equal(await page.locator('video').count(), 0, 'Leaving the app must release media');
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHide, 'Returning must not automatically restart media');
-    await page.locator('#channels button').first().click();
+    await page.locator('#channels .channel-button').first().click();
     await page.locator('#fullscreen-button').click();
     await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
     assert.equal(await page.locator('video').count(), 0);
@@ -196,7 +199,7 @@ async function main() {
     await page.locator('#source-2').fill('');
     await page.locator('#source-3').fill('');
     await page.locator('#source-form button[type=submit]').click();
-    await page.locator('#channels button').first().click();
+    await page.locator('#channels .channel-button').first().click();
     const singleStarts = await page.evaluate(() => window.__mediaStarts);
     await page.keyboard.press('PageUp');
     await page.waitForTimeout(180);
@@ -213,6 +216,17 @@ async function main() {
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
     assert.equal((await page.locator('body').innerText()).includes('password=secret'), false);
     assert.match(await page.locator('#channels').innerText(), /قناة 1/);
+    await page.locator('#channels .favorite-button').first().click();
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
+    await page.locator('#group-filter').selectOption('__favorites');
+    assert.equal(await page.locator('#channels .channel-button').count(), 1);
+    await page.locator('#group-filter').selectOption('مجموعة 2');
+    assert.match(await page.locator('#channels').innerText(), /قناة 5/);
+    await page.locator('#channel-search').fill('قناة 6');
+    assert.equal(await page.locator('#channels .channel-button').count(), 1);
+    assert.match(await page.locator('#channels').innerText(), /قناة 6/);
+    await page.locator('#clear-search').click();
+    await page.locator('#group-filter').selectOption('');
     await page.screenshot({ path: path.join(root, 'artifacts/ui-playlist-1080.png') });
     await page.locator('#next-page').click();
     assert.equal(await page.locator('#channels .channel-button').first().getAttribute('data-index'), '4');
