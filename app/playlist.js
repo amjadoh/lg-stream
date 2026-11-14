@@ -4,15 +4,15 @@
   else root.LGPlaylist = api;
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var MAX_BYTES = 256000000;
-  var MAX_ENTRIES = 100000;
+  var MAX_BYTES = 64000000;
+  var MAX_ENTRIES = 50000;
   var TIMEOUT_MS = 120000;
-  var EPG_MAX_BYTES = 4000000;
 
   function safeText(value, fallback, limit) {
     var text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
     return (text || fallback).slice(0, limit);
   }
+  function safeYear(value) { var match = /(?:19|20)\d{2}/.exec(String(value || '')); return match ? match[0] : ''; }
 
   function resolveHttpUrl(raw, baseUrl) {
     try {
@@ -26,22 +26,19 @@
     var metadata = null;
     var truncated = false;
     var truncatedReason = null;
-    var epgUrl = null;
     function push(rawLine) {
       var line = String(rawLine || '').trim();
       if (!line) return;
-      if (line.indexOf('#EXTM3U') === 0) {
-        var epg = /(?:x-tvg-url|url-tvg)=["']([^"']+)["']/i.exec(line);
-        epgUrl = epg ? resolveHttpUrl(epg[1], baseUrl) : null;
-        return;
-      }
+      if (line.indexOf('#EXTM3U') === 0) return;
       if (line.indexOf('#EXTINF:') === 0) {
         var comma = line.indexOf(',');
         var group = /group-title="([^"]*)"/i.exec(line);
         var tvgName = /tvg-name="([^"]*)"/i.exec(line);
         var tvgId = /tvg-id="([^"]*)"/i.exec(line);
         var poster = /(?:tvg-logo|poster)="([^"]*)"/i.exec(line);
-        var year = /(?:year|release-date|releasedate)="([^"]*)"/i.exec(line);
+        var year = /(?:year|release[-_]?date)="([^"]*)"/i.exec(line);
+        var rating = /(?:rating|tvg-rating)="([^"]*)"/i.exec(line);
+        var added = /(?:added|added[-_]at|date[-_]added)="([^"]*)"/i.exec(line);
         var description = /(?:description|plot)="([^"]*)"/i.exec(line);
         var trailer = /(?:trailer|trailer-url)="([^"]*)"/i.exec(line);
         metadata = {
@@ -49,8 +46,10 @@
           group: safeText(group && group[1], '', 80),
           id: safeText(tvgId && tvgId[1], '', 160),
           poster: resolveHttpUrl(poster && poster[1]),
-          year: safeText(year && year[1], '', 24),
-          description: safeText(description && description[1], '', 1200),
+          year: safeYear(year && year[1]),
+          rating: safeText(rating && rating[1], '', 24),
+          added: safeText(added && added[1], '', 32),
+          description: safeText(description && description[1], '', 600),
           trailer: resolveHttpUrl(trailer && trailer[1])
         };
         return;
@@ -59,40 +58,16 @@
       var url = resolveHttpUrl(line, baseUrl);
       if (!url) { metadata = null; return; }
       if (entries.length >= MAX_ENTRIES) { truncated = true; truncatedReason = 'entries'; metadata = null; return; }
-      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', poster: metadata ? metadata.poster : null, year: metadata ? metadata.year : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
+      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', poster: metadata ? metadata.poster : null, year: metadata ? metadata.year : '', rating: metadata ? metadata.rating : '', added: metadata ? metadata.added : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
       metadata = null;
     }
-    return { push: push, truncate: function (reason) { truncated = true; truncatedReason = reason; }, result: function () { return { entries: entries, truncated: truncated, truncatedReason: truncatedReason, epgUrl: epgUrl }; } };
+    return { push: push, truncate: function (reason) { truncated = true; truncatedReason = reason; }, result: function () { return { entries: entries, truncated: truncated, truncatedReason: truncatedReason }; } };
   }
 
   function parseM3U(text, baseUrl) {
     var parser = createM3UParser(baseUrl);
     String(text || '').split(/\r?\n/).forEach(parser.push);
     return parser.result();
-  }
-
-  function decodeXml(value) {
-    return String(value || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
-  }
-  function xmlTime(value) {
-    var match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s+([+-])(\d{2})(\d{2}))?/.exec(value || '');
-    if (!match) return NaN;
-    var time = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]);
-    if (match[7]) time -= (match[7] === '+' ? 1 : -1) * ((+match[8] * 60 + +match[9]) * 60000);
-    return time;
-  }
-  function parseEpg(text, ids, now) {
-    var wanted = {}; ids.forEach(function (id) { if (id) wanted[id] = true; });
-    var programmes = {}; var regex = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/gi; var match;
-    while ((match = regex.exec(String(text || '')))) {
-      var channel = /\bchannel=["']([^"']+)["']/i.exec(match[1]);
-      if (!channel || !wanted[decodeXml(channel[1])]) continue;
-      var start = /\bstart=["']([^"']+)["']/i.exec(match[1]); var stop = /\bstop=["']([^"']+)["']/i.exec(match[1]);
-      if (!start || !stop || xmlTime(start[1]) > now || xmlTime(stop[1]) <= now) continue;
-      var title = /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i.exec(match[2]);
-      if (title) programmes[decodeXml(channel[1])] = safeText(decodeXml(title[1].replace(/<[^>]+>/g, '')), 'لا توجد معلومات', 140);
-    }
-    return programmes;
   }
 
   function createLoader(options) {
@@ -153,7 +128,7 @@
         }
         pending += decoder.decode(); if (pending) parser.push(pending);
         var parsed = parser.result();
-        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: parsed.truncated, truncatedReason: parsed.truncatedReason, epgUrl: parsed.epgUrl } : { state: 'empty' });
+        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: parsed.truncated, truncatedReason: parsed.truncatedReason } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
 
@@ -170,7 +145,7 @@
           active = entry;
           entry.timer = timers.setTimeout(function () {
             var partial = entry.parser && entry.parser.result();
-            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout', epgUrl: partial.epgUrl } : { state: 'timeout' });
+            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout' } : { state: 'timeout' });
           }, TIMEOUT_MS);
           load(entry, url);
         });
@@ -179,37 +154,5 @@
     };
   }
 
-  function createEpgLoader(options) {
-    options = options || {};
-    var fetcher = options.fetch !== undefined ? options.fetch : (typeof fetch === 'function' ? fetch : null);
-    var Abort = options.AbortController !== undefined ? options.AbortController : (typeof AbortController === 'function' ? AbortController : null);
-    var Decoder = options.TextDecoder !== undefined ? options.TextDecoder : (typeof TextDecoder === 'function' ? TextDecoder : null);
-    var active = null;
-    function cancel() { if (active) { active.abort(); active = null; } }
-    return {
-      start: async function (rawUrl, ids) {
-        cancel(); var url = resolveHttpUrl(rawUrl); if (!url || !ids || !ids.length) return { state: 'empty', programmes: {} };
-        if (typeof fetcher !== 'function' || typeof Abort !== 'function' || typeof Decoder !== 'function') return { state: 'unsupported', programmes: {} };
-        var controller = new Abort(); active = controller; var timer = setTimeout(function () { controller.abort(); }, 12000);
-        try {
-          var response = await fetcher(url, { method: 'GET', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', mode: 'cors', signal: controller.signal });
-          if (!response.ok || !response.body || typeof response.body.getReader !== 'function') return { state: 'error', programmes: {} };
-          var reader = response.body.getReader(); var decoder = new Decoder('utf-8'); var text = ''; var bytes = 0;
-          while (bytes < EPG_MAX_BYTES) {
-            var chunk = await reader.read(); if (chunk.done) break;
-            var remaining = EPG_MAX_BYTES - bytes; var value = chunk.value.byteLength > remaining ? chunk.value.slice(0, remaining) : chunk.value;
-            bytes += value.byteLength; text += decoder.decode(value, { stream: true });
-            if (value.byteLength < chunk.value.byteLength) { try { await reader.cancel(); } catch (_) {} break; }
-          }
-          text += decoder.decode();
-          if (active !== controller) return { state: 'cancelled', programmes: {} };
-          return { state: 'complete', programmes: parseEpg(text, ids, Date.now()) };
-        } catch (_) { return { state: controller.signal.aborted ? 'cancelled' : 'error', programmes: {} }; }
-        finally { clearTimeout(timer); if (active === controller) active = null; }
-      },
-      cancel: cancel
-    };
-  }
-
-  return { createLoader: createLoader, createEpgLoader: createEpgLoader, parseM3U: parseM3U, parseEpg: parseEpg, MAX_BYTES: MAX_BYTES, MAX_ENTRIES: MAX_ENTRIES, TIMEOUT_MS: TIMEOUT_MS };
+  return { createLoader: createLoader, parseM3U: parseM3U, MAX_BYTES: MAX_BYTES, MAX_ENTRIES: MAX_ENTRIES, TIMEOUT_MS: TIMEOUT_MS };
 }));

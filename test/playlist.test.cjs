@@ -1,20 +1,20 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseM3U, parseEpg, createLoader, MAX_BYTES, TIMEOUT_MS } = require('../app/playlist.js');
+const { parseM3U, createLoader, MAX_BYTES, TIMEOUT_MS } = require('../app/playlist.js');
 
 test('parses named M3U entries, resolves relative URLs and ignores unsafe lines', () => {
   const parsed = parseM3U(`#EXTM3U url-tvg="https://provider.example/epg.xml"
-#EXTINF:-1 tvg-id="news.1" tvg-name="Fallback" group-title="News",Arabic News
+#EXTINF:-1 tvg-id="news.1" tvg-name="Fallback" group-title="News" rating="8.4" added="1731542400",Arabic News
 live/101.ts
-#EXTINF:-1 group-title="Movies",Movie One
+#EXTINF:-1 group-title="Movies" release-date="2023-05-01",Movie One
 https://media.example/movie.m3u8?token=private
 #EXTINF:-1,Bad
 file:///private`, 'https://provider.example/get.php?token=private');
   assert.deepEqual(parsed, { entries: [
-    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts', poster: null, year: '', description: '', trailer: null },
-    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private', poster: null, year: '', description: '', trailer: null }
-  ], truncated: false, truncatedReason: null, epgUrl: 'https://provider.example/epg.xml' });
+    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts', poster: null, year: '', rating: '8.4', added: '1731542400', description: '', trailer: null },
+    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private', poster: null, year: '2023', rating: '', added: '', description: '', trailer: null }
+  ], truncated: false, truncatedReason: null });
 });
 
 test('keeps every live item and finds real movie and series paths afterward', () => {
@@ -26,11 +26,6 @@ test('keeps every live item and finds real movie and series paths afterward', ()
   assert.equal(parsed.entries.filter(entry => entry.url.includes('/live/')).length, 3001);
   assert.equal(parsed.entries.some(entry => entry.url.includes('/movie/') && entry.name === 'فيلم حقيقي'), true);
   assert.equal(parsed.entries.some(entry => entry.url.includes('/series/') && entry.name === 'حلقة حقيقية'), true);
-});
-
-test('extracts only current EPG titles for requested channel ids', () => {
-  const xml = `<tv><programme start="20261114160000 +0300" stop="20261114180000 +0300" channel="news.1"><title>نشرة &amp; أخبار</title></programme><programme start="20261114180000 +0300" stop="20261114190000 +0300" channel="news.1"><title>لاحقًا</title></programme><programme start="20261114160000 +0300" stop="20261114180000 +0300" channel="other"><title>خاص</title></programme></tv>`;
-  assert.deepEqual(parseEpg(xml, ['news.1'], Date.UTC(2026, 10, 14, 14)), { 'news.1': 'نشرة & أخبار' });
 });
 
 function controlledStream(chunks) {

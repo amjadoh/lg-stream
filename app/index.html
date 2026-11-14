@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css">
   <script defer src="core.js"></script>
   <script defer src="playlist.js"></script>
+  <script defer src="catalog-store.js"></script>
   <script defer src="speed-test.js"></script>
   <script defer src="app.js"></script>
 </head>
@@ -38,27 +39,32 @@
       </aside>
       <section class="viewing-panel" aria-label="مشغّل البث">
         <div id="video-host" class="video-host"></div>
-        <section id="movie-browser" class="movie-browser" aria-label="الأفلام" hidden><h2 id="movie-title"></h2><div id="movie-grid" class="movie-grid"></div><div id="movie-paging" class="channel-paging" hidden><button id="previous-movie-page" type="button">السابق</button><span id="movie-page-label"></span><button id="next-movie-page" type="button">التالي</button></div></section>
+        <section id="movie-browser" class="movie-browser" aria-label="الأفلام" hidden>
+          <div class="movie-heading"><h2 id="movie-title"></h2><button id="sort-button" class="sort-button" type="button" aria-expanded="false">ترتيب: المزوّد</button></div>
+          <div id="sort-menu" class="sort-menu" hidden><button type="button" data-sort="provider">ترتيب المزوّد</button><button type="button" data-sort="year">السنة</button><button type="button" data-sort="rating">التقييم</button><button type="button" data-sort="added">تاريخ الإضافة</button><button type="button" data-sort="alpha">أبجدي</button></div>
+          <div id="movie-grid" class="movie-grid"></div>
+        </section>
         <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
         <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق أو رجوع لإظهار التحكم</p>
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="fit-button" type="button" disabled>الصورة: ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>
+    <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="fit-button" type="button" disabled>الصورة: ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
   </div>
   <section id="search-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="search-title" hidden>
     <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
   </section>
   <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
-    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button" hidden>مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
+    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button">مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
       <h2 id="setup-title">أضف مصادر البث</h2>
-      <p>ألصق رابط M3U الكامل لتحميل القنوات، أو أضف روابط مباشرة للاختبار. تبقى القائمة والروابط في ذاكرة هذه الجلسة فقط.</p>
+      <p>ألصق رابط M3U الكامل لتحميل القنوات. بعد نجاح القائمة كاملة تُحفظ محليًا على التلفزيون وتعود عند فتح التطبيق.</p>
       <label for="playlist-url">رابط قائمة M3U الكامل</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
-      <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
+      <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
+      <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="refresh-saved" type="button" hidden>تحديث القائمة المحفوظة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
       <h3 class="setup-divider">أو روابط مباشرة</h3>
       <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
