@@ -512,11 +512,12 @@
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
+    if (playlistRunning) return;
     if (automaticReleasedView) {
       if (!document.hidden && !unloading) restoreReleasedCatalog('', true).then(function (restored) { if (restored) scheduleAutoUpdate(); });
       return;
     }
-    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden) return;
+    if (!activePlaylistUrl || !activeCatalogSavedAt || document.hidden) return;
     var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
     if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
     if (autoNextAttemptAt > Date.now()) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, autoNextAttemptAt - Date.now()); return; }
