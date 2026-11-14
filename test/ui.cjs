@@ -388,6 +388,7 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
     await page.locator('#channel-search').fill('قناة 17');
+    await page.waitForFunction(() => document.getElementById('search-results').textContent.includes('البث المباشر (1)'));
     assert.match(await page.locator('#search-results').innerText(), /البث المباشر \(1\)/);
     assert.match(await page.locator('#search-results').innerText(), /قناة 17/);
     await page.locator('#clear-search').click();
