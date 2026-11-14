@@ -23,11 +23,12 @@ async function main() {
     page.setDefaultTimeout(5000);
     const errors = [];
     let externalRequests = 0;
+    let posterRequests = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
       const requestUrl = new URL(route.request().url());
       if (requestUrl.origin === 'http://127.0.0.1:4173' && route.request().resourceType() !== 'media') return route.continue();
-      if (requestUrl.hostname === 'images.example.test' && route.request().resourceType() === 'image') return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') });
+      if (requestUrl.hostname === 'images.example.test' && route.request().resourceType() === 'image') { posterRequests++; return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }); }
       externalRequests++;
       return route.abort();
     });
@@ -64,17 +65,22 @@ async function main() {
       performance.now = () => originalNow() + elapsed;
       window.__speedRequests = [];
       window.__playlistRequests = [];
+      window.__openedUrls = [];
+      window.open = url => { window.__openedUrls.push(String(url)); return {}; };
       window.fetch = (url, options) => {
         if (!String(url).startsWith('https://speed.cloudflare.com/')) {
           const request = { url: String(url), options, aborted: false };
           window.__playlistRequests.push(request);
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
+          if (String(url).includes('/fail')) return Promise.reject(new TypeError('Synthetic failure'));
+          if (String(url).includes('/stall')) return new Promise(() => {});
           const lines = ['#EXTM3U'];
-          for (let index = 1; index <= 80; index++) {
-            const group = index === 64 ? 'قنوات أفلام' : index > 72 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
-            const details = index === 65 ? ' year="2024" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4" tvg-logo="https://images.example.test/65.png"' : '';
+          for (let index = 1; index <= 120; index++) {
+            const group = index === 64 ? 'قنوات أفلام' : index > 104 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
+            const metadata = index === 65 ? ' year="2024" rating="8.4" added="1731542400" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4"' : index === 66 ? ' year="2022" rating="7.1" added="1700000000"' : '';
+            const details = metadata + (index > 64 && index <= 104 ? ` tvg-logo="https://images.example.test/${index}.png"` : '');
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
-            lines.push(`https://media.example.test/${index > 72 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
+            lines.push(`https://media.example.test/${index > 104 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
@@ -229,6 +235,24 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 1);
+    assert.match(await page.locator('#status').innerText(), /تم حفظ 120 عنصر/);
+
+    // Failed and cancelled refreshes must leave the last complete catalogue intact.
+    await page.locator('#setup-button').click();
+    await page.locator('#playlist-url').fill('https://provider.example.test/fail');
+    await page.locator('#load-playlist').click();
+    await page.waitForFunction(() => document.getElementById('playlist-status').textContent.includes('السابقة'));
+    await page.locator('#close-setup').click();
+    await page.locator('#setup-button').click();
+    await page.locator('#playlist-url').fill('https://provider.example.test/stall');
+    await page.locator('#load-playlist').click();
+    await page.locator('#cancel-playlist').click();
+    await page.locator('#close-setup').click();
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), 0, 'Startup restores the last complete catalogue without a network request');
+    assert.match(await page.locator('#status').innerText(), /استُعيدت القائمة المحفوظة/);
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
@@ -274,19 +298,49 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="movies"]').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
-    assert.equal(await page.locator('#movie-grid .movie-poster').count(), 1, 'Only visible content posters are requested');
-    await page.locator('#next-movie-page').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '68');
-    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true);
-    await page.locator('#previous-movie-page').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '64');
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 24);
+    assert.equal(await page.locator('#movie-grid .movie-poster').count(), 24);
+    await page.waitForTimeout(50);
+    assert.ok(posterRequests > 0 && posterRequests < 24, 'Only posters inside the visible viewport are requested');
+    assert.equal(await page.locator('#movie-paging').count(), 0, 'VOD scrolls without previous/next controls');
+    await page.locator('#movie-grid .movie-card').last().focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '91', 'The virtual VOD window advances continuously with the remote');
+    await page.locator('#groups [data-group="أفلام VOD"]').click();
+    await page.locator('#movie-browser').evaluate(browser => { browser.scrollTop = browser.scrollHeight; browser.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })); });
+    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '76', 'Magic Remote wheel advances the virtual VOD window');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Wheel keeps focus inside the VOD cards');
+    await page.locator('#sort-button').click();
+    assert.equal(await page.locator('#sort-menu [data-sort="year"]').isDisabled(), false);
+    await page.locator('#sort-menu [data-sort="year"]').click();
+    assert.match(await page.locator('#sort-button').innerText(), /السنة/);
+    await page.locator('#groups [data-group="أفلام VOD"]').click();
     await page.locator('#movie-grid .movie-card').first().click();
     assert.equal(await page.locator('#details-panel').isVisible(), true);
     assert.match(await page.locator('#details-year').innerText(), /2024/);
     assert.match(await page.locator('#details-description').innerText(), /وصف تجريبي/);
     assert.equal(await page.locator('#details-trailer').isVisible(), true);
     assert.equal(await page.locator('#details-poster').isVisible(), true);
+    await page.locator('#close-details').click();
+    await page.locator('#groups .group-button').first().focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.locator('#nav-search').click();
+    await page.locator('#channel-search').fill('قناة 66');
+    await page.locator('#search-results button', { hasText: 'قناة 66' }).click();
+    assert.match(await page.locator('#details-trailer').innerText(), /YouTube/);
+    await page.locator('#details-trailer').click();
+    const opened = await page.evaluate(() => window.__openedUrls.at(-1));
+    assert.match(opened, /^https:\/\/www\.youtube\.com\/results\?search_query=/);
+    assert.match(decodeURIComponent(opened), /قناة 66 2022 trailer/);
+    assert.doesNotMatch(opened, /token|password|media\.example/);
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
+    await page.waitForFunction(() => !document.getElementById('details-panel').hidden);
+    assert.match(await page.locator('#details-title').innerText(), /قناة 66/, 'Returning after reload restores the same content details');
+    assert.equal(await page.locator('.primary-button.active').getAttribute('data-section'), 'movies');
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'أفلام VOD');
+    await page.locator('#close-details').click();
+    await page.locator('#movie-grid [data-index="64"]').click();
     await page.locator('#details-play').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
     await page.keyboard.press('Escape');
@@ -298,7 +352,7 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="series"]').click();
     await page.locator('#groups [data-group="مسلسلات VOD"]').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 16);
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
@@ -372,7 +426,8 @@ async function main() {
     });
     assert.equal(await page.evaluate(() => window.__speedRequests.at(-1).aborted), true, 'Backgrounding must abort a pending download');
     assert.equal(await page.locator('#speed-results').innerText(), history, 'Aborted requests must not replace previous results');
-    assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+    const localState = await page.evaluate(() => JSON.stringify({ local: Object.values(localStorage), session: Object.values(sessionStorage) }));
+    assert.doesNotMatch(localState, /https?:|password|token|provider\.example/, 'View storage must never contain source URLs or credentials');
     assert.deepEqual(errors, [], 'Browser UI must not raise errors');
     assert.equal(externalRequests, 0, 'UI tests must never request media or external assets');
     console.log('UI checks passed: remote selection, same-channel guard, explicit retry, cancellation, fullscreen, dialog focus, background release, mocked speed downloads, and clean screenshots. No real network speed, TV playback, or Dolby was tested.');

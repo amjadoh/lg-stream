@@ -13,3 +13,4 @@
 - Developer Mode requires renewal. A successful IPK build or install is not proof that the television played media.
 - Work only in this project. The shared server's other services/projects, firewall, domains, and authentication are outside scope. Do not expose a public endpoint.
 - Keep changes reviewable and record exactly which checks passed and what still requires the user's television.
+- Keep only the latest two successful LG Stream build outputs on the server. Never apply this cleanup to Git history, another project, or the owner's Windows laptop.
