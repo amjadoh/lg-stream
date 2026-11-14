@@ -61,6 +61,7 @@ gh run download <run-id> --dir artifacts/github
 - نجح [بناء GitHub رقم 43599398489](https://github.com/amjadoh/lg-stream/actions/runs/43599398489) للنسخة `c4e026d`: فحوص المجموعات والبحث والمفضلة وشارة الجودة والحفاظ على عنصر فيديو واحد، ثم بناء `com.amjadoh.lgstream_0.3.0_all.ipk`. نُزّلت الحزمة إلى `artifacts/github-43599398489/` وتنتظر تجربة التلفزيون.
 - نجح [بناء GitHub رقم 43601646107](https://github.com/amjadoh/lg-stream/actions/runs/43601646107) للنسخة `8b3e556`: فحوص عمود المجموعات وبطاقات الأفلام وضغط OK مرتين وتغيير حجم الصورة دون إعادة الوسائط، ثم بناء `com.amjadoh.lgstream_0.4.0_all.ipk`. نُزّلت الحزمة إلى `artifacts/github-43601646107/` وتنتظر تجربة التلفزيون.
 - نجح [بناء GitHub رقم 43606057843](https://github.com/amjadoh/lg-stream/actions/runs/43606057843) للنسخة `7142ddc`: فحوص القائمة الرئيسية المخفية والبحث المقسم والمجموعات المقروءة وEPG المحدود وإلغائه عند التشغيل، ثم بناء `com.amjadoh.lgstream_0.5.0_all.ipk`. نُزّلت الحزمة إلى `artifacts/github-43606057843/` وتنتظر تجربة التلفزيون.
+- نجح [بناء GitHub رقم 43607159232](https://github.com/amjadoh/lg-stream/actions/runs/43607159232) للنسخة `04767e6`: فحوص أولوية مسار الرابط في تصنيف live/movie/series، وإخفاء القائمة الرئيسية عند العودة يمينًا، وعرض الأفلام والمسلسلات بالمجموعات والبطاقات فقط. بُنيت `com.amjadoh.lgstream_0.5.1_all.ipk` ونُزّلت إلى `artifacts/github-43607159232/`.
 
 ## طريقة إدخال الرابط المجربة
 
