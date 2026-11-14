@@ -96,6 +96,9 @@ async function main() {
     }
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.locator('#start-button').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'source-form', 'Opening setup must leave inputs unfocused so webOS can open its keyboard on selection');
+    await page.locator('#source-1').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'source-1');
     await page.locator('#clear-sources').focus();
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'source-1');

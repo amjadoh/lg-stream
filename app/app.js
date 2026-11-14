@@ -146,7 +146,10 @@
     inputs.forEach(function (input, index) { input.value = sources[index] || ''; });
     $('form-error').textContent = '';
     setup.hidden = false;
-    inputs[0].focus();
+    // Keep the field unfocused until the user selects it. On webOS, focusing
+    // an input while opening the dialog can leave it active without invoking
+    // the system keyboard when it is selected afterward.
+    $('source-form').focus();
   }
   function closeSetup() {
     setup.hidden = true;

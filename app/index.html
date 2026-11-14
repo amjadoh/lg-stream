@@ -34,7 +34,7 @@
     <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>
   </div>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
-    <form id="source-form" class="setup-card" autocomplete="off">
+    <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
       <h2 id="setup-title">أضف مصادر البث</h2>
       <p>أدخل رابط بث مباشر HTTP أو HTTPS. قائمة M3U الكاملة غير مدعومة في هذه التجربة. تبقى الروابط لهذه الجلسة فقط.</p>
       <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
@@ -42,7 +42,7 @@
       <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
       <p id="form-error" class="form-error" role="alert"></p>
       <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
-      <p class="small-note">بعد إغلاق لوحة المفاتيح، استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
+      <p class="small-note">اضغط داخل الخانة لفتح لوحة مفاتيح التلفزيون. بعد إغلاقها استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
     </form>
   </section>
   <section id="speed-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title" hidden>
