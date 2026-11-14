@@ -6,8 +6,12 @@
   var sources = [];
   var sourceNames = [];
   var sourceGroups = [];
+  var sourceIds = [];
+  var sourcePrograms = {};
+  var epgUrl = null;
   var favorites = {};
   var activeGroup = '';
+  var activeSection = 'tv';
   var sourceMode = 'manual';
   var selected = 0;
   var channelPage = 0;
@@ -20,6 +24,7 @@
   var fitIndex = 0;
   var fitModes = [{ value: 'contain', label: 'ملائم' }, { value: 'cover', label: 'ملء' }, { value: 'fill', label: 'تمديد' }];
   var setup = $('setup-panel');
+  var searchPanel = $('search-panel');
   var diagnostics = $('diagnostics-panel');
   var speedPanel = $('speed-panel');
   var speedTest = window.LGSpeedTest.createTest();
@@ -28,6 +33,8 @@
   var speedRevision = 0;
   var speedResults = [];
   var playlistLoader = playlistApi.createLoader();
+  var epgLoader = playlistApi.createEpgLoader();
+  var epgTimer = null;
   var playlistRevision = 0;
   var playlistRunning = false;
   var inputs = [$('source-1'), $('source-2'), $('source-3')];
@@ -37,20 +44,73 @@
     'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
     'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
   };
+  function cancelEpg() { clearTimeout(epgTimer); epgTimer = null; epgLoader.cancel(); }
+  function scheduleEpg() {
+    cancelEpg();
+    if (!epgUrl || !sourceIds.some(function (id) { return id; }) || lastState !== 'idle') return;
+    epgTimer = setTimeout(function () {
+      if (lastState !== 'idle' || document.hidden) return;
+      epgLoader.start(epgUrl, sourceIds).then(function (result) {
+        if (result.state === 'complete' && lastState === 'idle') { sourcePrograms = result.programmes; renderChannels(); }
+      });
+    }, 2000);
+  }
   function isMovieGroup(group) { return /movie|film|cinema|vod|أفلام|افلام|سينما/i.test(group || ''); }
+  function isSeriesGroup(group) { return /series|show|مسلسل|مسلسلات/i.test(group || ''); }
+  function entrySection(index) {
+    var group = sourceGroups[index] || ''; var url = sources[index] || '';
+    if (isSeriesGroup(group) || /\/series\//i.test(url)) return 'series';
+    if (isMovieGroup(group) || /\/movie\//i.test(url)) return 'movies';
+    return 'tv';
+  }
   function visibleIndexes() {
     var group = activeGroup;
-    var query = $('channel-search').value.trim().toLocaleLowerCase();
     return sources.map(function (_, index) { return index; }).filter(function (index) {
-      if (group === '__favorites' && !favorites[index]) return false;
-      if (group && group !== '__favorites' && sourceGroups[index] !== group) return false;
-      return !query || (sourceNames[index] || '').toLocaleLowerCase().indexOf(query) >= 0;
+      if (activeSection === 'favorites' ? !favorites[index] : entrySection(index) !== activeSection) return false;
+      if (group && sourceGroups[index] !== group) return false;
+      return true;
+    });
+  }
+  function setPrimary(open) {
+    document.querySelector('.library-panel').classList.toggle('primary-open', open);
+  }
+  function closeSearch() {
+    searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); $('search-status').textContent = 'اكتب حرفين على الأقل.';
+    setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups button'); if (group) group.focus();
+  }
+  function renderSearch() {
+    var query = $('channel-search').value.trim().toLocaleLowerCase(); $('search-results').replaceChildren();
+    if (query.length < 2) { $('search-status').textContent = 'اكتب حرفين على الأقل.'; return; }
+    var sections = [['tv', 'البث المباشر'], ['movies', 'الأفلام'], ['series', 'المسلسلات']]; var total = 0;
+    sections.forEach(function (section) {
+      var matches = sources.map(function (_, index) { return index; }).filter(function (index) {
+        return entrySection(index) === section[0] && (sourceNames[index] || '').toLocaleLowerCase().indexOf(query) >= 0;
+      });
+      total += matches.length;
+      var box = document.createElement('section'); box.className = 'search-section';
+      var title = document.createElement('h3'); title.textContent = section[1] + ' (' + matches.length + ')'; box.appendChild(title);
+      matches.slice(0, 12).forEach(function (index) {
+        var button = document.createElement('button'); button.type = 'button'; button.textContent = sourceNames[index] || 'عنصر';
+        button.addEventListener('click', function () { closeSearch(); activeSection = section[0]; activeGroup = sourceGroups[index] || ''; renderPrimary(); renderGroups(); renderChannels(); activateChannel(index); });
+        box.appendChild(button);
+      });
+      $('search-results').appendChild(box);
+    });
+    $('search-status').textContent = total ? 'وُجد ' + total + ' نتيجة. تظهر أول 12 نتيجة في كل قسم.' : 'لا توجد نتائج.';
+  }
+  function openSearch() { setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
+  function renderPrimary() {
+    Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
+      button.classList.toggle('active', button.dataset.section === activeSection);
     });
   }
   function renderGroups() {
     var groups = [];
-    sourceGroups.forEach(function (group) { if (group && groups.indexOf(group) < 0) groups.push(group); });
-    var items = [['', 'كل القنوات'], ['__favorites', '★ المفضلة']].concat(groups.map(function (group) { return [group, group]; }));
+    sourceGroups.forEach(function (group, index) {
+      if (group && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection) && groups.indexOf(group) < 0) groups.push(group);
+    });
+    var sectionLabels = { tv: 'كل قنوات البث', movies: 'كل الأفلام', series: 'كل المسلسلات', favorites: 'كل المفضلة' };
+    var items = [['', sectionLabels[activeSection]]].concat(groups.map(function (group) { return [group, group]; }));
     if (!items.some(function (item) { return item[0] === activeGroup; })) activeGroup = '';
     $('groups').replaceChildren();
     items.forEach(function (item) {
@@ -64,14 +124,14 @@
     });
   }
   function renderMovies(indexes) {
-    var movies = isMovieGroup(activeGroup);
-    $('movie-browser').hidden = !movies;
-    if (!movies) return;
-    $('movie-title').textContent = activeGroup;
+    var cards = activeSection === 'movies' || activeSection === 'series';
+    $('movie-browser').hidden = !cards;
+    if (!cards) return;
+    $('movie-title').textContent = activeGroup || (activeSection === 'movies' ? 'الأفلام' : 'المسلسلات');
     $('movie-grid').replaceChildren();
-    indexes.slice(0, 8).forEach(function (index) {
+    indexes.slice(channelPage * pageSize, channelPage * pageSize + pageSize).forEach(function (index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
-      var name = document.createElement('span'); name.textContent = sourceNames[index] || 'فيلم'; card.appendChild(name);
+      var name = document.createElement('span'); name.textContent = sourceNames[index] || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('click', function () { activateChannel(index); }); $('movie-grid').appendChild(card);
     });
   }
@@ -119,7 +179,7 @@
       var current = playingIndex === index;
       button.classList.toggle('active', current);
       button.setAttribute('aria-pressed', String(current));
-      button.querySelector('.channel-state').textContent = current ? (labels[lastState] || '') : (sourceGroups[index] || 'اضغط موافق');
+      button.querySelector('.channel-state').textContent = current ? (labels[lastState] || '') : (sourcePrograms[sourceIds[index]] || 'لا توجد معلومات برنامج');
     });
   }
   function renderChannels() {
@@ -160,7 +220,7 @@
         var ownIndex = Number(event.currentTarget.dataset.favoriteIndex);
         favorites[ownIndex] = !favorites[ownIndex];
         if (!favorites[ownIndex]) delete favorites[ownIndex];
-        renderChannels();
+        renderGroups(); renderChannels();
         var target = $('channels').querySelector('[data-favorite-index="' + ownIndex + '"]');
         if (target) target.focus(); else if ($('channels').querySelector('button')) $('channels').querySelector('button').focus();
       });
@@ -191,6 +251,7 @@
       return;
     }
     playingIndex = index;
+    cancelEpg();
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
     $('channel-title').textContent = sourceNames[index] || 'المصدر ' + (index + 1);
@@ -220,6 +281,7 @@
     $('channel-title').textContent = 'لا يوجد بث محدد';
     $('empty-state').hidden = false;
     $('retry-button').disabled = true;
+    scheduleEpg();
   }
   function setWatchMode(enabled) {
     watchMode = enabled;
@@ -294,8 +356,8 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     stop(); sources = result; sourceNames = result.map(function (_, index) { return 'المصدر ' + (index + 1); });
-    sourceGroups = result.map(function () { return ''; }); favorites = {}; activeGroup = ''; sourceMode = 'manual'; selected = 0; channelPage = 0;
-    renderGroups(); renderChannels(); closeSetup();
+    sourceGroups = result.map(function () { return ''; }); sourceIds = result.map(function () { return ''; }); sourcePrograms = {}; epgUrl = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0;
+    renderPrimary(); renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
   $('load-playlist').addEventListener('click', function () {
@@ -323,15 +385,17 @@
       sources = result.entries.map(function (entry) { return entry.url; });
       sourceNames = result.entries.map(function (entry) { return entry.name; });
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
-      favorites = {}; activeGroup = ''; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
-      renderGroups(); renderChannels();
+      sourceIds = result.entries.map(function (entry) { return entry.id || ''; }); sourcePrograms = {}; epgUrl = result.epgUrl || null;
+      favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
+      renderPrimary(); renderGroups(); renderChannels();
       $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
       closeSetup();
+      scheduleEpg();
     });
   });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
-    cancelPlaylist(); stop(); sources = []; sourceNames = []; sourceGroups = []; favorites = {}; activeGroup = ''; sourceMode = 'manual'; selected = 0; channelPage = 0; renderGroups(); renderChannels();
+    cancelPlaylist(); cancelEpg(); stop(); sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; channelPage = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
     $('form-error').textContent = ''; inputs[0].focus();
@@ -344,8 +408,18 @@
     var indexes = visibleIndexes();
     if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
   });
-  $('channel-search').addEventListener('input', function () { channelPage = 0; renderChannels(); });
-  $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; channelPage = 0; renderChannels(); $('channel-search').focus(); });
+  $('channel-search').addEventListener('input', renderSearch);
+  $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
+  $('nav-search').addEventListener('click', openSearch);
+  $('close-search').addEventListener('click', closeSearch);
+  Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
+    button.addEventListener('click', function (event) {
+      activeSection = event.currentTarget.dataset.section; activeGroup = ''; channelPage = 0;
+      setPrimary(false); renderPrimary(); renderGroups(); renderChannels();
+      var first = $('groups').querySelector('button'); if (first) first.focus();
+    });
+  });
+  $('nav-settings').addEventListener('click', function () { setPrimary(false); openSetup(); });
   $('setup-button').addEventListener('click', openSetup);
   $('start-button').addEventListener('click', openSetup);
   $('close-setup').addEventListener('click', closeSetup);
@@ -482,6 +556,7 @@
     if (back) {
       event.preventDefault();
       if (!setup.hidden) closeSetup();
+      else if (!searchPanel.hidden) closeSearch();
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
       else if (watchMode) { setWatchMode(false); focusChannel(selected); }
@@ -490,7 +565,7 @@
       else window.close();
       return;
     }
-    var dialog = !setup.hidden ? setup : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
+    var dialog = !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
       if (key === 'Tab') {
         var controls = visibleControls(dialog);
@@ -520,6 +595,9 @@
     if (code === 415) { scheduler.cancel(); player.resume(); event.preventDefault(); return; }
     if (code === 413) { stop(); focusChannel(selected); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { scheduler.cancel(); player.toggle(); event.preventDefault(); return; }
+    if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.groups-panel') && !document.querySelector('.library-panel').classList.contains('primary-open')) {
+      setPrimary(true); (document.querySelector('.primary-button.active') || $('nav-search')).focus(); event.preventDefault(); return;
+    }
     if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
       moveFocus(document.querySelector('.shell'), key);
       event.preventDefault();
@@ -531,10 +609,10 @@
     else if (setup.hidden && diagnostics.hidden) focusChannel(selected);
   });
   window.addEventListener('pagehide', function () {
-    cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; sourceNames = []; sourceGroups = []; favorites = {}; activeGroup = ''; selected = 0; channelPage = 0; renderGroups(); renderChannels();
+    cancelPlaylist(); cancelEpg(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
+    sources = []; sourceNames = []; sourceGroups = []; sourceIds = []; sourcePrograms = {}; epgUrl = null; cancelEpg(); favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; channelPage = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
-  renderGroups(); renderChannels();
+  renderPrimary(); renderGroups(); renderChannels();
   $('start-button').focus();
 }());

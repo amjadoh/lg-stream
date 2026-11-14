@@ -7,6 +7,7 @@
   var MAX_BYTES = 8000000;
   var MAX_ENTRIES = 5000;
   var TIMEOUT_MS = 20000;
+  var EPG_MAX_BYTES = 4000000;
 
   function safeText(value, fallback, limit) {
     var text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
@@ -25,16 +26,24 @@
     var entries = [];
     var metadata = null;
     var truncated = false;
+    var epgUrl = null;
     for (var index = 0; index < lines.length; index += 1) {
       var line = lines[index].trim();
       if (!line) continue;
+      if (line.indexOf('#EXTM3U') === 0) {
+        var epg = /(?:x-tvg-url|url-tvg)=["']([^"']+)["']/i.exec(line);
+        epgUrl = epg ? resolveHttpUrl(epg[1], baseUrl) : null;
+        continue;
+      }
       if (line.indexOf('#EXTINF:') === 0) {
         var comma = line.indexOf(',');
         var group = /group-title="([^"]*)"/i.exec(line);
         var tvgName = /tvg-name="([^"]*)"/i.exec(line);
+        var tvgId = /tvg-id="([^"]*)"/i.exec(line);
         metadata = {
           name: safeText(comma >= 0 ? line.slice(comma + 1) : (tvgName && tvgName[1]), 'قناة', 120),
-          group: safeText(group && group[1], '', 80)
+          group: safeText(group && group[1], '', 80),
+          id: safeText(tvgId && tvgId[1], '', 160)
         };
         continue;
       }
@@ -42,10 +51,34 @@
       var url = resolveHttpUrl(line, baseUrl);
       if (!url) { metadata = null; continue; }
       if (entries.length >= MAX_ENTRIES) { truncated = true; break; }
-      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '' });
+      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '' });
       metadata = null;
     }
-    return { entries: entries, truncated: truncated };
+    return { entries: entries, truncated: truncated, epgUrl: epgUrl };
+  }
+
+  function decodeXml(value) {
+    return String(value || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+  }
+  function xmlTime(value) {
+    var match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s+([+-])(\d{2})(\d{2}))?/.exec(value || '');
+    if (!match) return NaN;
+    var time = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]);
+    if (match[7]) time -= (match[7] === '+' ? 1 : -1) * ((+match[8] * 60 + +match[9]) * 60000);
+    return time;
+  }
+  function parseEpg(text, ids, now) {
+    var wanted = {}; ids.forEach(function (id) { if (id) wanted[id] = true; });
+    var programmes = {}; var regex = /<programme\b([^>]*)>([\s\S]*?)<\/programme>/gi; var match;
+    while ((match = regex.exec(String(text || '')))) {
+      var channel = /\bchannel=["']([^"']+)["']/i.exec(match[1]);
+      if (!channel || !wanted[decodeXml(channel[1])]) continue;
+      var start = /\bstart=["']([^"']+)["']/i.exec(match[1]); var stop = /\bstop=["']([^"']+)["']/i.exec(match[1]);
+      if (!start || !stop || xmlTime(start[1]) > now || xmlTime(stop[1]) <= now) continue;
+      var title = /<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i.exec(match[2]);
+      if (title) programmes[decodeXml(channel[1])] = safeText(decodeXml(title[1].replace(/<[^>]+>/g, '')), 'لا توجد معلومات', 140);
+    }
+    return programmes;
   }
 
   function createLoader(options) {
@@ -109,7 +142,7 @@
         }
         text += decoder.decode();
         var parsed = parseM3U(text, url);
-        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: reachedLimit || parsed.truncated } : { state: 'empty' });
+        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: reachedLimit || parsed.truncated, epgUrl: parsed.epgUrl } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
 
@@ -132,5 +165,37 @@
     };
   }
 
-  return { createLoader: createLoader, parseM3U: parseM3U, MAX_BYTES: MAX_BYTES, MAX_ENTRIES: MAX_ENTRIES, TIMEOUT_MS: TIMEOUT_MS };
+  function createEpgLoader(options) {
+    options = options || {};
+    var fetcher = options.fetch !== undefined ? options.fetch : (typeof fetch === 'function' ? fetch : null);
+    var Abort = options.AbortController !== undefined ? options.AbortController : (typeof AbortController === 'function' ? AbortController : null);
+    var Decoder = options.TextDecoder !== undefined ? options.TextDecoder : (typeof TextDecoder === 'function' ? TextDecoder : null);
+    var active = null;
+    function cancel() { if (active) { active.abort(); active = null; } }
+    return {
+      start: async function (rawUrl, ids) {
+        cancel(); var url = resolveHttpUrl(rawUrl); if (!url || !ids || !ids.length) return { state: 'empty', programmes: {} };
+        if (typeof fetcher !== 'function' || typeof Abort !== 'function' || typeof Decoder !== 'function') return { state: 'unsupported', programmes: {} };
+        var controller = new Abort(); active = controller; var timer = setTimeout(function () { controller.abort(); }, 12000);
+        try {
+          var response = await fetcher(url, { method: 'GET', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', mode: 'cors', signal: controller.signal });
+          if (!response.ok || !response.body || typeof response.body.getReader !== 'function') return { state: 'error', programmes: {} };
+          var reader = response.body.getReader(); var decoder = new Decoder('utf-8'); var text = ''; var bytes = 0;
+          while (bytes < EPG_MAX_BYTES) {
+            var chunk = await reader.read(); if (chunk.done) break;
+            var remaining = EPG_MAX_BYTES - bytes; var value = chunk.value.byteLength > remaining ? chunk.value.slice(0, remaining) : chunk.value;
+            bytes += value.byteLength; text += decoder.decode(value, { stream: true });
+            if (value.byteLength < chunk.value.byteLength) { try { await reader.cancel(); } catch (_) {} break; }
+          }
+          text += decoder.decode();
+          if (active !== controller) return { state: 'cancelled', programmes: {} };
+          return { state: 'complete', programmes: parseEpg(text, ids, Date.now()) };
+        } catch (_) { return { state: controller.signal.aborted ? 'cancelled' : 'error', programmes: {} }; }
+        finally { clearTimeout(timer); if (active === controller) active = null; }
+      },
+      cancel: cancel
+    };
+  }
+
+  return { createLoader: createLoader, createEpgLoader: createEpgLoader, parseM3U: parseM3U, parseEpg: parseEpg, MAX_BYTES: MAX_BYTES, MAX_ENTRIES: MAX_ENTRIES, TIMEOUT_MS: TIMEOUT_MS };
 }));

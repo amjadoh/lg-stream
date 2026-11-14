@@ -19,11 +19,17 @@
     </header>
     <main>
       <aside class="library-panel" aria-label="المجموعات والقنوات">
+        <nav class="primary-panel" aria-label="القائمة الرئيسية">
+          <div class="primary-mark">LS</div>
+          <button id="nav-search" type="button">⌕<span>بحث</span></button>
+          <button class="primary-button active" data-section="tv" type="button">▣<span>البث</span></button>
+          <button class="primary-button" data-section="movies" type="button">▶<span>أفلام</span></button>
+          <button class="primary-button" data-section="series" type="button">▤<span>مسلسلات</span></button>
+          <button class="primary-button" data-section="favorites" type="button">★<span>المفضلة</span></button>
+          <button id="nav-settings" type="button" class="primary-settings">⚙<span>الإعدادات</span></button>
+        </nav>
         <section class="groups-panel"><h1>المجموعات</h1><div id="groups" class="group-list"></div></section>
         <section class="channels-panel"><h1>القنوات</h1>
-        <div class="channel-tools">
-          <label for="channel-search">بحث</label><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="اسم القناة"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div>
-        </div>
         <div id="channels" class="channel-list"></div>
         <div id="channel-paging" class="channel-paging" hidden><button id="previous-page" type="button">السابق</button><span id="page-label"></span><button id="next-page" type="button">التالي</button></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
@@ -40,6 +46,9 @@
     </main>
     <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="fit-button" type="button" disabled>الصورة: ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>
   </div>
+  <section id="search-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="search-title" hidden>
+    <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
+  </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
       <h2 id="setup-title">أضف مصادر البث</h2>
