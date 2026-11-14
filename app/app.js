@@ -60,6 +60,7 @@
   var autoUpdateTimer = null;
   var autoNextAttemptAt = 0;
   var switchPending = false;
+  var youtubeBridge = null;
   var inputs = [$('source-1'), $('source-2'), $('source-3')];
   var labels = {
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
@@ -630,18 +631,19 @@
       $('channel-title').textContent = 'الإعلان'; player.start(details.trailer, 'trailer', performance.now()); setWatchMode(true); return;
     }
     stop();
-    var query = (details.name || '') + (details.year ? ' ' + details.year : '') + ' trailer';
-    var target = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query.trim());
-    if (typeof window.PalmServiceBridge === 'function') {
-      try {
-        var bridge = new window.PalmServiceBridge();
-        bridge.onservicecallback = function (raw) { try { if (JSON.parse(raw).returnValue === false) $('details-status').textContent = 'تعذر فتح متصفح LG.'; } catch (_) {} };
-        bridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({ id: 'com.webos.app.browser', params: { target: target } }));
-        return;
-      } catch (_) {}
-    }
-    var opened = window.open(target, '_blank');
-    if (!opened) $('details-status').textContent = 'تعذر فتح متصفح LG.';
+    var target = api.youtubeSearchTarget(details.name, details.year);
+    if (!target || typeof window.PalmServiceBridge !== 'function') { $('details-status').textContent = 'تعذر فتح تطبيق YouTube مباشرة على هذا الجهاز.'; return; }
+    $('details-status').textContent = 'جارٍ إرسال البحث إلى تطبيق YouTube…';
+    try {
+      youtubeBridge = new window.PalmServiceBridge();
+      youtubeBridge.onservicecallback = function (raw) {
+        var accepted = false;
+        try { accepted = JSON.parse(raw).returnValue === true; } catch (_) {}
+        $('details-status').textContent = accepted ? 'أُرسل طلب البحث إلى تطبيق YouTube.' : 'تعذر فتح تطبيق YouTube.';
+        youtubeBridge = null;
+      };
+      youtubeBridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({ id: 'youtube.leanback.v4', params: { contentTarget: target } }));
+    } catch (_) { youtubeBridge = null; $('details-status').textContent = 'تعذر فتح تطبيق YouTube.'; }
   });
   $('sort-button').addEventListener('click', function () {
     var open = $('sort-menu').hidden; $('sort-menu').hidden = !open; $('sort-button').setAttribute('aria-expanded', String(open));

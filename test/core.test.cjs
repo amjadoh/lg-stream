@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, uniqueGroups, searchCatalog, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, uniqueGroups, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -26,6 +26,14 @@ test('collects groups from a full-size catalogue in one pass and preserves provi
   const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
   assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
   assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
+});
+
+test('builds a YouTube TV voice search with title and year exactly once', () => {
+  const target = new URL(youtubeSearchTarget('فيلم تجريبي 2024', '2024'));
+  assert.equal(target.origin + target.pathname, 'https://www.youtube.com/tv');
+  assert.equal(target.searchParams.get('launch'), 'voice');
+  assert.equal(target.searchParams.get('vq'), 'Search for فيلم تجريبي 2024 on YouTube');
+  assert.equal(youtubeSearchTarget('', '2024'), null);
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {

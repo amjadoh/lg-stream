@@ -69,6 +69,15 @@ async function main() {
       window.__speedRequests = [];
       window.__playlistRequests = [];
       window.__openedUrls = [];
+      window.__bridgeCalls = [];
+      window.PalmServiceBridge = class {
+        call(uri, payload) {
+          window.__bridgeCalls.push({ uri, payload: JSON.parse(payload) });
+          const response = window.__failNextBridge ? { returnValue: false } : { returnValue: true };
+          window.__failNextBridge = false;
+          queueMicrotask(() => this.onservicecallback(JSON.stringify(response)));
+        }
+      };
       window.open = url => { window.__openedUrls.push(String(url)); return {}; };
       window.fetch = (url, options) => {
         if (!String(url).startsWith('https://speed.cloudflare.com/')) {
@@ -416,10 +425,17 @@ async function main() {
     await page.locator('#search-results button', { hasText: 'قناة 66' }).click();
     assert.match(await page.locator('#details-trailer').innerText(), /YouTube/);
     await page.locator('#details-trailer').click();
-    const opened = await page.evaluate(() => window.__openedUrls.at(-1));
-    assert.match(opened, /^https:\/\/www\.youtube\.com\/results\?search_query=/);
-    assert.match(decodeURIComponent(opened), /قناة 66 2022 trailer/);
-    assert.doesNotMatch(opened, /token|password|media\.example/);
+    const launch = await page.evaluate(() => window.__bridgeCalls.at(-1));
+    assert.equal(launch.uri, 'luna://com.webos.applicationManager/launch');
+    assert.equal(launch.payload.id, 'youtube.leanback.v4');
+    const contentTarget = new URL(launch.payload.params.contentTarget);
+    assert.equal(contentTarget.origin + contentTarget.pathname, 'https://www.youtube.com/tv');
+    assert.equal(contentTarget.searchParams.get('launch'), 'voice');
+    assert.equal(contentTarget.searchParams.get('vq'), 'Search for قناة 66 2022 on YouTube');
+    assert.doesNotMatch(launch.payload.params.contentTarget, /token|password|media\.example/);
+    await page.evaluate(() => { window.__failNextBridge = true; });
+    await page.locator('#details-trailer').click();
+    await page.waitForFunction(() => document.getElementById('details-status').textContent.includes('تعذر فتح تطبيق YouTube'));
     await page.reload();
     await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
     await page.waitForFunction(() => !document.getElementById('details-panel').hidden);
