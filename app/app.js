@@ -45,6 +45,7 @@
   var playlistAutomatic = false;
   var automaticReleasedView = null;
   var automaticRestoreMessage = '';
+  var automaticRestorePromise = null;
   var pendingViewState = null;
   var VIEW_KEY = 'lg-stream-view-v1';
   var sourceGeneration = 0;
@@ -181,6 +182,7 @@
   }
   function restoreReleasedCatalog(message, shouldFocus) {
     if (message) automaticRestoreMessage = message;
+    if (automaticRestorePromise) return automaticRestorePromise;
     if (!automaticReleasedView) {
       if (automaticRestoreMessage) $('status').textContent = automaticRestoreMessage;
       automaticRestoreMessage = '';
@@ -188,7 +190,7 @@
     }
     if (document.hidden || unloading) return Promise.resolve(false);
     var view = automaticReleasedView; var generation = sourceGeneration;
-    return catalogStore.load().then(function (saved) {
+    automaticRestorePromise = catalogStore.load().then(function (saved) {
       if (generation !== sourceGeneration) { automaticReleasedView = null; automaticRestoreMessage = ''; return false; }
       if (saved.state !== 'complete') {
         $('status').textContent = 'تعذر استعادة القائمة الآن — ستُعاد المحاولة عند الرجوع للتطبيق.';
@@ -200,6 +202,14 @@
       automaticRestoreMessage = '';
       return true;
     });
+    automaticRestorePromise = automaticRestorePromise.then(function (restored) {
+      automaticRestorePromise = null;
+      return restored;
+    }, function (error) {
+      automaticRestorePromise = null;
+      throw error;
+    });
+    return automaticRestorePromise;
   }
   function restoreRuntimeView(state, shouldFocus) {
     if (!state) return;
