@@ -46,11 +46,14 @@
     var active = null;
     var now = options.now || function () { return performance.now(); };
     var emit = options.onState || function () {};
+    var timers = options.timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    var startupTimeoutMs = options.startupTimeoutMs || 15000;
     function snapshot(entry) {
       return {
         channel: entry.channel,
         state: entry.state,
         playingMs: entry.playingMs,
+        progressMs: entry.progressMs,
         firstFrameMs: entry.firstFrameMs,
         frameApi: entry.frameApi,
         stalls: entry.stalls,
@@ -61,11 +64,28 @@
       };
     }
     function notify(entry) { if (active === entry) emit(snapshot(entry)); }
+    function clearStartup(entry) {
+      if (entry.startupTimer !== null) timers.clearTimeout(entry.startupTimer);
+      entry.startupTimer = null;
+    }
+    function armStartup(entry) {
+      clearStartup(entry);
+      if (entry.progressMs !== null || entry.firstFrameMs !== null) return;
+      var revision = ++entry.startupRevision;
+      entry.startupTimer = timers.setTimeout(function () {
+        if (active !== entry || entry.startupRevision !== revision || entry.startupTimer === null || entry.progressMs !== null || entry.firstFrameMs !== null) return;
+        entry.state = 'startup-timeout';
+        var timedOut = snapshot(entry);
+        release();
+        emit(timedOut);
+      }, startupTimeoutMs);
+    }
     function release() {
       generation += 1;
       var old = active;
       active = null;
       if (!old) return;
+      clearStartup(old);
       old.listeners.forEach(function (item) { old.video.removeEventListener(item[0], item[1]); });
       if (old.frameHandle !== null && old.video.cancelVideoFrameCallback) old.video.cancelVideoFrameCallback(old.frameHandle);
       old.video.pause();
@@ -73,14 +93,17 @@
       old.video.load();
       options.unmountVideo(old.video);
     }
-    function start(source, channel) {
+    function start(source, channel, requestedAt) {
       var valid = validateSource(source);
       if (!valid) return false;
       release();
       var ownGeneration = generation;
       var video = options.createVideo();
+      var started = now();
       var entry = {
-        video: video, channel: channel, state: 'loading', started: now(), playingMs: null,
+        video: video, channel: channel, state: 'loading', started: started, playingMs: null,
+        requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
+        progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
         frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, errorCode: 0
       };
@@ -98,8 +121,20 @@
         }
       }
       on('playing', function () {
-        if (entry.playingMs === null) entry.playingMs = Math.round(now() - entry.started);
+        if (entry.playingMs === null) {
+          entry.playingMs = Math.round(now() - entry.requested);
+          entry.lastMediaTime = video.currentTime || 0;
+        }
         finishWait(); entry.state = 'playing'; notify(entry);
+      });
+      on('timeupdate', function () {
+        var mediaTime = video.currentTime;
+        if (entry.playingMs === null || entry.progressMs !== null || video.paused || video.seeking || !isFinite(mediaTime)) return;
+        if (mediaTime > entry.lastMediaTime) {
+          entry.progressMs = Math.round(now() - entry.requested);
+          clearStartup(entry); notify(entry);
+        }
+        entry.lastMediaTime = mediaTime;
       });
       on('waiting', function () {
         if (entry.playingMs !== null && entry.waitingSince === null) {
@@ -107,12 +142,13 @@
         }
         entry.state = 'waiting'; notify(entry);
       });
-      on('pause', function () { finishWait(); entry.state = 'paused'; notify(entry); });
-      on('ended', function () { finishWait(); entry.state = 'ended'; notify(entry); });
+      on('pause', function () { clearStartup(entry); finishWait(); entry.state = 'paused'; notify(entry); });
+      on('ended', function () { clearStartup(entry); finishWait(); entry.state = 'ended'; notify(entry); });
       on('loadedmetadata', function () { notify(entry); });
       on('error', function () {
-        finishWait(); entry.state = 'error';
-        entry.errorCode = video.error && video.error.code || 0;
+        clearStartup(entry); finishWait(); entry.state = 'error';
+        var code = video.error && video.error.code;
+        entry.errorCode = typeof code === 'number' && code >= 1 && code <= 4 ? code : 0;
         notify(entry);
       });
       options.mountVideo(video);
@@ -120,16 +156,18 @@
       if (entry.frameApi) {
         entry.frameHandle = video.requestVideoFrameCallback(function () {
           if (!validEntry()) return;
-          entry.firstFrameMs = Math.round(now() - entry.started);
+          entry.firstFrameMs = Math.round(now() - entry.requested);
+          clearStartup(entry);
           notify(entry);
         });
       }
       notify(entry);
+      armStartup(entry);
       video.load();
       var promise = video.play();
       if (promise && promise.catch) promise.catch(function () {
         if (!validEntry() || entry.state === 'error') return;
-        entry.state = 'play-rejected'; notify(entry);
+        clearStartup(entry); entry.state = 'play-rejected'; notify(entry);
       });
       return true;
     }
@@ -140,10 +178,11 @@
       resume: function () {
         var entry = active;
         if (!entry) return;
+        armStartup(entry);
         var promise = entry.video.play();
         if (promise && promise.catch) promise.catch(function () {
           if (active !== entry) return;
-          entry.state = 'play-rejected'; notify(entry);
+          clearStartup(entry); entry.state = 'play-rejected'; notify(entry);
         });
       },
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }

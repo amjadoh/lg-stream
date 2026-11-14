@@ -44,8 +44,8 @@
   </section>
   <section id="diagnostics-panel" class="diagnostics" aria-labelledby="diagnostics-title" hidden>
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
-    <dl><dt>إشارة بدء التشغيل</dt><dd id="playing-ms">—</dd><dt>إشارة إطار الفيديو</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd></dl>
-    <p>إشارة التشغيل وقياس الإطار ليسا إثباتًا لوقت ظهور الصورة على الشاشة. التأكيد بالمشاهدة.</p>
+    <dl><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
+    <p>الأزمنة تقديرية تبدأ من آخر طلب تبديل وتشمل تأخير تجميع أزرار CH. ليست إثباتًا لظهور الصورة؛ التأكيد بالمشاهدة.</p>
     <p>Dolby Vision وAtmos: غير متحقق منهما. يتطلب التأكيد مؤشر التلفزيون أو الساوندبار ومصدرًا معروفًا.</p>
     <button id="close-diagnostics" type="button">إغلاق القياسات</button>
   </section>

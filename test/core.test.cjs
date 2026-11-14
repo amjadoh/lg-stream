@@ -23,7 +23,7 @@ test('rapid channel requests commit only the latest and cancelled callbacks rema
 function fakeVideo() {
   const handlers = new Map(); const historic = new Map();
   return {
-    paused: false, videoWidth: 1920, videoHeight: 1080, handlers, historic,
+    paused: false, seeking: false, currentTime: 0, videoWidth: 1920, videoHeight: 1080, handlers, historic,
     addEventListener(name, callback) { handlers.set(name, callback); historic.set(name, callback); },
     removeEventListener(name) { handlers.delete(name); },
     fire(name) { handlers.get(name)?.(); },
@@ -32,39 +32,65 @@ function fakeVideo() {
     load() {}, removeAttribute(name) { if (name === 'src') delete this.src; }
   };
 }
+function fakeTimers() {
+  const entries = [];
+  return {
+    entries,
+    setTimeout(callback, delay) { entries.push({ callback, delay, cancelled: false }); return entries.length; },
+    clearTimeout(id) { entries[id - 1].cancelled = true; }
+  };
+}
 
 test('switch releases old media and ignores stale events and promise rejection without exposing URLs', () => {
   const videos = []; const mounted = []; const states = []; const lifecycle = [];
+  const timers = fakeTimers();
   const player = createPlayer({
     createVideo: () => { const video = fakeVideo(); videos.push(video); return video; },
     mountVideo: video => { assert.equal(mounted.length, 0); mounted.push(video); lifecycle.push('mount'); },
     unmountVideo: video => { assert.equal(video.src, undefined); mounted.splice(mounted.indexOf(video), 1); lifecycle.push('release'); },
-    now: () => 100, onState: state => states.push(state)
+    now: () => 100, onState: state => states.push(state), timers
   });
   player.start('https://example.test/private-password-token', 1);
   player.start('https://example.test/second', 2);
   const count = states.length;
-  videos[0].historic.get('playing')(); videos[0].rejectPlay();
+  videos[0].historic.get('playing')(); videos[0].rejectPlay(); timers.entries[0].callback();
   assert.equal(states.length, count);
   assert.deepEqual(lifecycle, ['mount', 'release', 'mount']);
   assert.equal(mounted.length, 1);
   assert.equal(JSON.stringify(states).includes('example.test'), false);
   assert.equal(JSON.stringify(states).includes('private-password-token'), false);
+  videos[1].error = { code: 3, message: 'https://example.test/private-password-token' };
+  videos[1].fire('error');
+  assert.equal(states.at(-1).errorCode, 3);
+  assert.equal(JSON.stringify(states).includes('private-password-token'), false);
   player.stop(); assert.equal(mounted.length, 0);
 });
 
-test('measures startup separately from later buffering and does not invent first-frame evidence', () => {
-  let time = 0; let video; let state;
+test('measures intent-to-start/progress including switch delay and aborts a stalled startup safely', () => {
+  let time = 120; let video; let state; let mounted = 0;
+  const timers = fakeTimers();
   const player = createPlayer({
-    createVideo: () => (video = fakeVideo()), mountVideo: () => {}, unmountVideo: () => {},
-    now: () => time, onState: next => { state = next; }
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => time, onState: next => { state = next; }, timers
   });
-  player.start('https://example.test/live', 1);
-  time = 20; video.fire('waiting'); assert.equal(state.stalls, 0);
-  time = 400; video.fire('playing'); assert.equal(state.playingMs, 400);
+  player.start('https://example.test/live', 1, 0);
+  assert.equal(timers.entries[0].delay, 15000);
+  time = 140; video.fire('waiting'); assert.equal(state.stalls, 0);
+  time = 520; video.fire('playing'); assert.equal(state.playingMs, 520);
   assert.equal(state.firstFrameMs, null); assert.equal(state.frameApi, false);
+  video.fire('timeupdate'); assert.equal(state.progressMs, null);
+  time = 580; video.currentTime = 0.04; video.fire('timeupdate'); assert.equal(state.progressMs, 580);
+  assert.equal(timers.entries[0].cancelled, true);
+  timers.entries[0].callback(); assert.equal(mounted, 1); // A queued expired callback is harmless after progress.
   time = 1000; video.fire('waiting'); time = 1100; video.fire('waiting');
   assert.equal(state.stalls, 1);
   time = 1300; video.fire('playing'); assert.equal(state.stallMs, 300);
-  assert.equal(state.playingMs, 400);
+  assert.equal(state.playingMs, 520);
+  player.stop();
+  time = 2000; player.start('https://example.test/stuck', 2, 1880);
+  time = 17000; timers.entries.at(-1).callback();
+  assert.equal(state.state, 'startup-timeout'); assert.equal(mounted, 0); assert.equal(video.src, undefined);
+  const timedOut = state;
+  video.historic.get('playing')(); video.rejectPlay();
+  assert.equal(state, timedOut);
 });

@@ -13,7 +13,8 @@
   var labels = {
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
     paused: 'متوقف مؤقتًا', ended: 'انتهى البث', error: 'تعذر تشغيل المصدر — جرّب إعادة المحاولة',
-    'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة'
+    'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
+    'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
   };
   var player = api.createPlayer({
     createVideo: function () {
@@ -28,15 +29,18 @@
     onState: function (state) {
       lastState = state.state;
       $('status').textContent = labels[state.state] || 'جاهز';
+      if (state.state === 'error' && state.errorCode) $('status').textContent += ' (' + state.errorCode + ')';
       $('toggle-button').textContent = state.state === 'paused' ? 'متابعة البث' : 'إيقاف مؤقت';
-      $('toggle-button').disabled = ['idle', 'error', 'play-rejected', 'ended'].indexOf(state.state) >= 0;
+      $('toggle-button').disabled = ['playing', 'waiting', 'paused'].indexOf(state.state) < 0;
       $('stop-button').disabled = state.state === 'idle';
       $('retry-button').disabled = playingIndex === null;
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
+      $('progress-ms').textContent = state.progressMs === null || state.progressMs === undefined ? '—' : state.progressMs + ' ms';
       $('frame-ms').textContent = state.firstFrameMs === null || state.firstFrameMs === undefined ? (state.frameApi ? 'بانتظار الإشارة' : 'غير متاح') : state.firstFrameMs + ' ms';
       $('stall-count').textContent = state.stalls || 0;
       $('stall-ms').textContent = (state.stallMs || 0) + ' ms';
       $('video-size').textContent = state.width ? state.width + ' × ' + state.height : '—';
+      $('error-code').textContent = state.errorCode || '—';
     }
   });
   function renderChannels() {
@@ -49,7 +53,7 @@
       button.textContent = (index + 1) + '   المصدر ' + (index + 1);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function () { selected = index; });
-      button.addEventListener('click', function () { scheduler.immediate(index); });
+      button.addEventListener('click', function () { requestChannel(index, false); });
       $('channels').appendChild(button);
     });
   }
@@ -57,15 +61,20 @@
     var button = $('channels').children[index];
     if (button) button.focus();
   }
-  function playChannel(index) {
+  function playChannel(intent) {
+    var index = intent.index;
     if (!sources[index]) return;
     selected = index; playingIndex = index;
     $('empty-state').hidden = true;
     $('channel-title').textContent = 'المصدر ' + (index + 1);
     renderChannels(); focusChannel(index);
-    player.start(sources[index], index + 1);
+    player.start(sources[index], index + 1, intent.requestedAt);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
+  function requestChannel(index, coalesce) {
+    var intent = { index: index, requestedAt: performance.now() };
+    if (coalesce) scheduler.request(intent); else scheduler.immediate(intent);
+  }
   function stop() {
     scheduler.cancel();
     playingIndex = null;
@@ -126,7 +135,7 @@
   });
   $('close-diagnostics').addEventListener('click', closeDiagnostics);
   $('toggle-button').addEventListener('click', function () { player.toggle(); });
-  $('retry-button').addEventListener('click', function () { if (playingIndex !== null) scheduler.immediate(playingIndex); });
+  $('retry-button').addEventListener('click', function () { if (playingIndex !== null) requestChannel(playingIndex, false); });
   $('stop-button').addEventListener('click', function () { stop(); if (sources.length) focusChannel(selected); else $('start-button').focus(); });
 
   function visibleControls(container) {
@@ -168,9 +177,9 @@
       return;
     }
     if (!diagnostics.hidden) return;
-    if ((code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
-      selected = (selected + (code === 427 || key === 'PageUp' ? 1 : -1) + sources.length) % sources.length;
-      focusChannel(selected); scheduler.request(selected); event.preventDefault(); return;
+    if ((code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
+      selected = (selected + (code === 33 || code === 427 || key === 'PageUp' ? 1 : -1) + sources.length) % sources.length;
+      focusChannel(selected); requestChannel(selected, true); event.preventDefault(); return;
     }
     if (code === 19) { player.pause(); event.preventDefault(); return; }
     if (code === 415) { player.resume(); event.preventDefault(); return; }
@@ -185,7 +194,7 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { scheduler.cancel(); player.pause(); }
+    if (document.hidden) stop();
   });
   window.addEventListener('pagehide', function () { scheduler.cancel(); player.stop(); sources = []; inputs.forEach(function (input) { input.value = ''; }); });
   $('start-button').focus();
