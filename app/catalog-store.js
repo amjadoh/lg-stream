@@ -81,6 +81,7 @@
         var database = await open();
         if (generation !== writeGeneration) return { state: 'cancelled' };
         var revision = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        var savedAt = Date.now();
         var chunkCount = Math.ceil(entries.length / CHUNK_SIZE);
         var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
         activeWrite = transaction;
@@ -88,10 +89,10 @@
         for (var index = 0; index < chunkCount; index += 1) {
           chunks.put({ key: revision + ':' + index, revision: revision, index: index, entries: entries.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE) });
         }
-        transaction.objectStore('meta').put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: Date.now() });
+        transaction.objectStore('meta').put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
         await transactionDone(transaction); activeWrite = null;
         cleanup(database, revision);
-        return { state: 'complete', revision: revision, count: entries.length };
+        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt };
       } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
     }
     async function clear() {

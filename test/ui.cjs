@@ -62,6 +62,10 @@ async function main() {
       const originalNow = performance.now.bind(performance);
       let elapsed = 0;
       performance.now = () => originalNow() + elapsed;
+      const realDateNow = Date.now.bind(Date);
+      let dateOffset = 0;
+      Date.now = () => realDateNow() + dateOffset;
+      window.__advanceTime = milliseconds => { dateOffset += milliseconds; };
       window.__speedRequests = [];
       window.__playlistRequests = [];
       window.__openedUrls = [];
@@ -71,6 +75,7 @@ async function main() {
           const request = { url: String(url), options, aborted: false };
           window.__playlistRequests.push(request);
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
+          if (window.__failNextPlaylist) { window.__failNextPlaylist = false; return Promise.reject(new TypeError('Synthetic automatic refresh failure')); }
           if (String(url).includes('/fail')) return Promise.reject(new TypeError('Synthetic failure'));
           if (String(url).includes('/stall')) return new Promise(() => {});
           const lines = ['#EXTM3U'];
@@ -100,6 +105,14 @@ async function main() {
         request.controller.enqueue(new Uint8Array(1000000));
         request.controller.close();
       };
+      window.__catalogSavedAt = () => new Promise((resolve, reject) => {
+        const request = indexedDB.open('lg-stream-catalog', 1);
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const get = request.result.transaction('meta', 'readonly').objectStore('meta').get('active');
+          get.onerror = () => reject(get.error); get.onsuccess = () => resolve(get.result && get.result.savedAt);
+        };
+      });
     });
     await page.goto('http://127.0.0.1:4173');
     await mkdir(path.join(root, 'artifacts'), { recursive: true });
@@ -252,6 +265,16 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 0, 'Startup restores the last complete catalogue without a network request');
     assert.match(await page.locator('#status').innerText(), /استُعيدت القائمة المحفوظة/);
+    const savedBeforeAutomaticFailure = await page.evaluate(() => window.__catalogSavedAt());
+    await page.locator('#channels .channel-button').first().click();
+    const requestsBeforeAutomatic = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => { window.__failNextPlaylist = true; window.__advanceTime(24 * 60 * 60 * 1000 + 1); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Due automatic refresh must not start while media is active');
+    await page.locator('#stop-button').click();
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeAutomatic);
+    await page.waitForFunction(() => document.getElementById('status').textContent.includes('القائمة السابقة'));
+    assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeAutomaticFailure, 'Failed automatic refresh must not advance the last-success timestamp');
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);

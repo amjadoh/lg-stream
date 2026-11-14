@@ -7,6 +7,7 @@
   var sources = [];
   var activePlaylistUrl = null;
   var activeCatalogRevision = null;
+  var activeCatalogSavedAt = 0;
   var favorites = {};
   var activeGroup = '';
   var activeSection = 'tv';
@@ -39,6 +40,7 @@
   var playlistRevision = 0;
   var playlistRunning = false;
   var playlistSaving = false;
+  var playlistAutomatic = false;
   var pendingViewState = null;
   var VIEW_KEY = 'lg-stream-view-v1';
   var sourceGeneration = 0;
@@ -52,6 +54,9 @@
   var groupsCacheKey = '';
   var groupsCache = [];
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
+  var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
+  var autoUpdateTimer = null;
+  var autoAttemptedForSavedAt = 0;
   var inputs = [$('source-1'), $('source-2'), $('source-3')];
   var labels = {
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
@@ -141,9 +146,9 @@
       return state && state.revision === revision ? state : null;
     } catch (_) { return null; }
   }
-  function applyCatalog(entries, source, revision, restored) {
+  function applyCatalog(entries, source, revision, savedAt, restored) {
     sources = entries;
-    catalogViewRevision += 1; favoritesRevision += 1; activePlaylistUrl = source; activeCatalogRevision = revision; sourceMode = 'playlist'; favorites = {}; playingIndex = null;
+    catalogViewRevision += 1; favoritesRevision += 1; activePlaylistUrl = source; activeCatalogRevision = revision; activeCatalogSavedAt = savedAt || Date.now(); sourceMode = 'playlist'; favorites = {}; playingIndex = null;
     var state = readViewState(revision);
     activeSection = state && ['tv', 'movies', 'series', 'favorites'].indexOf(state.section) >= 0 ? state.section : 'tv';
     if (state && Array.isArray(state.favorites)) state.favorites.forEach(function (index) { if (sources[index]) favorites[index] = true; });
@@ -154,6 +159,18 @@
     if (state) requestAnimationFrame(function () { $('groups').scrollTop = Number(state.groupScrollTop) || 0; $('channels').scrollTop = Number(state.channelScrollTop) || 0; $('movie-browser').scrollTop = Number(state.contentScrollTop) || 0; });
     $('saved-catalog-status').textContent = 'قائمة محفوظة: ' + sources.length + ' عنصرًا.'; $('refresh-saved').hidden = false;
     if (restored) $('status').textContent = 'استُعيدت القائمة المحفوظة — اختر ما تريد تشغيله';
+  }
+  function captureRuntimeView() {
+    return { section: activeSection, group: activeGroup, sort: contentSort, selectedUrl: sources[selected] && sources[selected].url, favoriteUrls: Object.keys(favorites).map(function (index) { return sources[index] && sources[index].url; }).filter(Boolean), contentWindowStart: contentWindowStart, channelWindowStart: channelWindowStart, detailsOpen: detailsIndex !== null };
+  }
+  function restoreRuntimeView(state) {
+    if (!state) return;
+    activeSection = state.section; contentSort = state.sort; favorites = {}; favoritesRevision += 1;
+    var favoriteUrls = {}; state.favoriteUrls.forEach(function (url) { favoriteUrls[url] = true; });
+    sources.forEach(function (entry, index) { if (favoriteUrls[entry.url]) favorites[index] = true; });
+    activeGroup = state.group; selected = Math.max(0, sources.findIndex(function (entry) { return entry.url === state.selectedUrl; }));
+    contentWindowStart = state.contentWindowStart; channelWindowStart = state.channelWindowStart; renderPrimary(); renderGroups(); renderChannels(); saveViewState(state.detailsOpen);
+    if (state.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
   }
   function sectionGroups() {
     var cacheKey = [catalogViewRevision, favoritesRevision, activeSection].join('\u0001');
@@ -365,6 +382,7 @@
   }
   function playChannel(intent) {
     var index = intent.index;
+    if (playlistRunning && playlistAutomatic && !cancelPlaylist()) { $('status').textContent = 'جارٍ إتمام حفظ القائمة… أعد اختيار القناة بعد لحظة'; return; }
     if (!sources[index] || !speedPanel.hidden || speedRunning) return;
     selected = index;
     if (!intent.retry && playingIndex === index && ['loading', 'playing', 'waiting', 'paused'].indexOf(lastState) >= 0) {
@@ -402,6 +420,7 @@
     $('channel-title').textContent = 'لا يوجد بث محدد';
     $('empty-state').hidden = false;
     $('retry-button').disabled = true;
+    setTimeout(scheduleAutoUpdate, 0);
   }
   function setWatchMode(enabled) {
     watchMode = enabled;
@@ -422,9 +441,20 @@
     $('fit-button').textContent = 'الصورة: ' + fitModes[fitIndex].label;
   });
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
+  function scheduleAutoUpdate() {
+    clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
+    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden) return;
+    var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
+    if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
+    if (autoAttemptedForSavedAt === activeCatalogSavedAt) return;
+    var browsing = lastState === 'idle' && playingIndex === null && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && !watchMode;
+    if (!browsing) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, 60000); return; }
+    autoAttemptedForSavedAt = activeCatalogSavedAt;
+    loadPlaylist(activePlaylistUrl, true);
+  }
   function playlistControls(running) {
     playlistRunning = running;
-    if (!running) playlistSaving = false;
+    if (!running) { playlistSaving = false; playlistAutomatic = false; }
     $('load-playlist').disabled = running;
     $('cancel-playlist').disabled = !running;
     $('playlist-url').disabled = running;
@@ -453,7 +483,7 @@
     $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' : 'لا توجد قائمة محفوظة.';
     $('refresh-saved').hidden = !activePlaylistUrl;
     $('form-error').textContent = '';
-    playlistControls(false);
+    playlistControls(playlistRunning);
     setup.hidden = false;
     // Keep the field unfocused until the user selects it. On webOS, focusing
     // an input while opening the dialog can leave it active without invoking
@@ -487,19 +517,20 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     sourceGeneration += 1; catalogViewRevision += 1; favoritesRevision += 1; stop(); sources = result.map(function (url, index) { return { url: url, name: 'المصدر ' + (index + 1), group: '' }; });
-    activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
+    activePlaylistUrl = null; activeCatalogRevision = null; activeCatalogSavedAt = 0; clearTimeout(autoUpdateTimer); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
     renderPrimary(); renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
-  function loadPlaylist(url) {
+  function loadPlaylist(url, automatic) {
     if (playlistRunning) return;
+    var runtimeView = automatic ? captureRuntimeView() : null;
     sourceGeneration += 1; stop();
     var revision = ++playlistRevision;
+    playlistAutomatic = !!automatic;
     playlistControls(true);
-    $('playlist-status').textContent = 'جارٍ تحميل القائمة…';
-    $('cancel-playlist').focus();
+    if (automatic) $('status').textContent = 'جارٍ تحديث القائمة تلقائيًا…'; else { $('playlist-status').textContent = 'جارٍ تحميل القائمة…'; $('cancel-playlist').focus(); }
     playlistLoader.start(url).then(function (result) {
-      if (revision !== playlistRevision || setup.hidden || document.hidden) return;
+      if (revision !== playlistRevision || document.hidden || (!automatic && setup.hidden)) return;
       if (result.state !== 'complete' || result.truncated) {
         playlistControls(false);
         var messages = {
@@ -508,30 +539,32 @@
           unsupported: 'محرك التلفزيون لا يدعم طريقة تحميل القائمة.',
           invalid: 'رابط القائمة غير صالح.'
         };
-        $('playlist-status').textContent = result.truncated ? 'لم تكتمل القائمة، لذلك احتفظنا بالنسخة المحفوظة السابقة.' : (messages[result.state] || 'تعذر تحميل القائمة. احتفظنا بالنسخة المحفوظة السابقة.');
-        $('load-playlist').focus(); return;
+        var failure = result.truncated ? 'لم تكتمل القائمة، لذلك احتفظنا بالنسخة المحفوظة السابقة.' : (messages[result.state] || 'تعذر تحميل القائمة. احتفظنا بالنسخة المحفوظة السابقة.');
+        if (automatic) $('status').textContent = 'تعذر التحديث التلقائي — القائمة السابقة محفوظة'; else { $('playlist-status').textContent = failure; $('load-playlist').focus(); }
+        scheduleAutoUpdate(); return;
       }
-      $('playlist-status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة محليًا…';
+      if (automatic) $('status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة…'; else $('playlist-status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة محليًا…';
       playlistSaving = true;
       $('cancel-playlist').disabled = false;
       catalogStore.save(url, result.entries).then(function (saved) {
-        if (revision !== playlistRevision || setup.hidden || document.hidden) return;
+        if (revision !== playlistRevision || document.hidden || (!automatic && setup.hidden)) return;
         if (saved.state !== 'complete') {
-          playlistControls(false); $('playlist-status').textContent = saved.state === 'quota' ? 'مساحة التخزين لا تكفي. احتفظنا بالقائمة السابقة.' : 'تعذر حفظ القائمة. احتفظنا بالقائمة السابقة.'; $('load-playlist').focus(); return;
+          playlistControls(false); var saveFailure = saved.state === 'quota' ? 'مساحة التخزين لا تكفي. احتفظنا بالقائمة السابقة.' : 'تعذر حفظ القائمة. احتفظنا بالقائمة السابقة.';
+          if (automatic) $('status').textContent = saveFailure; else { $('playlist-status').textContent = saveFailure; $('load-playlist').focus(); } scheduleAutoUpdate(); return;
         }
-        stop(); applyCatalog(result.entries, url, saved.revision, false);
+        stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false); if (automatic) restoreRuntimeView(runtimeView);
         var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
-        $('status').textContent = 'تم حفظ ' + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;
-        closeSetup();
+        $('status').textContent = (automatic ? 'تم تحديث القائمة تلقائيًا: ' : 'تم حفظ ') + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;
+        playlistControls(false); autoAttemptedForSavedAt = 0; if (!automatic) closeSetup(); scheduleAutoUpdate();
       });
     });
   }
   $('load-playlist').addEventListener('click', function () {
     var url = api.validateSource($('playlist-url').value);
     if (!url) { $('playlist-status').textContent = 'أدخل رابط M3U كاملًا يبدأ بـ HTTP أو HTTPS.'; $('playlist-url').focus(); return; }
-    loadPlaylist(url);
+    loadPlaylist(url, false);
   });
-  $('refresh-saved').addEventListener('click', function () { if (activePlaylistUrl) loadPlaylist(activePlaylistUrl); });
+  $('refresh-saved').addEventListener('click', function () { if (activePlaylistUrl) loadPlaylist(activePlaylistUrl, false); });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
     if (playlistRunning) return;
@@ -540,7 +573,7 @@
       $('clear-sources').disabled = false;
       if (result.state !== 'complete') { $('playlist-status').textContent = 'تعذر مسح القائمة المحفوظة. لم نغيّرها.'; return; }
       try { localStorage.removeItem(VIEW_KEY); } catch (_) {}
-      catalogViewRevision += 1; favoritesRevision += 1; sources = []; activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
+      catalogViewRevision += 1; favoritesRevision += 1; sources = []; activePlaylistUrl = null; activeCatalogRevision = null; activeCatalogSavedAt = 0; clearTimeout(autoUpdateTimer); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
       $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
       $('saved-catalog-status').textContent = 'لا توجد قائمة محفوظة.'; $('refresh-saved').hidden = true; $('playlist-status').textContent = 'مُسحت القائمة المحفوظة.'; $('form-error').textContent = ''; inputs[0].focus();
     });
@@ -795,12 +828,13 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { cancelSpeed(); stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { cancelSpeed(); if (playlistAutomatic) cancelPlaylist(); stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
+    if (!document.hidden) scheduleAutoUpdate();
   });
-  window.addEventListener('pageshow', function () { unloading = false; });
+  window.addEventListener('pageshow', function () { unloading = false; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
     unloading = true; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
     catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
@@ -811,8 +845,9 @@
   catalogStore.load().then(function (saved) {
     if (restoreGeneration !== sourceGeneration) return;
     if (saved.state === 'complete') {
-      applyCatalog(saved.entries, saved.source, saved.revision, true);
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true);
       if (pendingViewState && pendingViewState.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
+      scheduleAutoUpdate();
     }
   });
 }());
