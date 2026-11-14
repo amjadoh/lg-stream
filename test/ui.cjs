@@ -81,7 +81,7 @@ async function main() {
           if (String(url).includes('/stall')) return new Promise(() => {});
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 120; index++) {
-            const group = index === 64 ? 'قنوات أفلام' : index > 106 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${index}`;
+            const group = index === 64 ? 'قنوات أفلام' : index > 106 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : index <= 8 ? `مجموعة ${Math.ceil(index / 4)}` : `مجموعة ${index}`;
             const metadata = index === 65 ? ' year="2024" rating="8.4" added="1731542400" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4"' : index === 66 ? ' year="2022" rating="7.1" added="1700000000"' : '';
             const details = metadata + (index > 64 && index <= 106 ? ` tvg-logo="https://images.example.test/${index}.png"` : '');
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
@@ -337,7 +337,7 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '40', 'Channel window advances while scrolling with the remote');
     assert.ok(await page.locator('#groups .group-button').count() <= 40, 'Large group lists keep a bounded DOM window');
     await page.locator('#groups .group-button').first().focus();
-    for (let index = 0; index < 64; index++) await page.keyboard.press('ArrowDown');
+    for (let index = 0; index < 58; index++) await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.group), 'قنوات أفلام', 'Remote navigation reaches groups beyond the DOM window');
     await page.evaluate(() => {
       const groups = document.getElementById('groups'); groups.scrollTop = 0;
