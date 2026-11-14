@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src https: http: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>LG Stream</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="core.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand" dir="ltr"><span class="brand-mark">L</span> LG Stream <span class="tag">تجربة البث</span></div>
+      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
+    </header>
+    <main>
+      <aside class="channels-panel" aria-label="القنوات">
+        <h1>القنوات</h1>
+        <p class="muted">اختر قناة ثم اضغط موافق</p>
+        <div id="channels" class="channel-list"></div>
+        <div class="remote-hint">CH + / − للتبديل المباشر<br>الأسهم للتنقل · موافق للاختيار</div>
+      </aside>
+      <section class="viewing-panel" aria-label="مشغّل البث">
+        <div id="video-host" class="video-host"></div>
+        <div id="empty-state" class="empty-state"><span class="play-symbol">▷</span><h2>لنبدأ بالبث</h2><p>أضف حتى ثلاثة مصادر لتجربة التشغيل والتنقل.</p><button id="start-button" type="button">إضافة مصدر</button></div>
+        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="status" role="status" aria-live="polite">جاهز</span></div>
+      </section>
+    </main>
+    <footer><div class="transport"><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">تشغيل مباشر على التلفزيون</span></footer>
+  </div>
+  <section id="setup-panel" class="modal" aria-labelledby="setup-title" hidden>
+    <form id="source-form" class="setup-card" autocomplete="off">
+      <h2 id="setup-title">مصادر تجربة البث</h2>
+      <p>أدخل رابط بث مباشر HTTP أو HTTPS، وليس رابط قائمة M3U كاملة. الروابط تبقى في الذاكرة خلال هذه الجلسة فقط.</p>
+      <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+      <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+      <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
+      <p id="form-error" class="form-error" role="alert"></p>
+      <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
+      <p class="small-note">بعد إغلاق لوحة المفاتيح، استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
+    </form>
+  </section>
+  <section id="diagnostics-panel" class="diagnostics" aria-labelledby="diagnostics-title" hidden>
+    <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
+    <dl><dt>إشارة بدء التشغيل</dt><dd id="playing-ms">—</dd><dt>إشارة إطار الفيديو</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd></dl>
+    <p>إشارة التشغيل وقياس الإطار ليسا إثباتًا لوقت ظهور الصورة على الشاشة. التأكيد بالمشاهدة.</p>
+    <p>Dolby Vision وAtmos: غير متحقق منهما. يتطلب التأكيد مؤشر التلفزيون أو الساوندبار ومصدرًا معروفًا.</p>
+    <button id="close-diagnostics" type="button">إغلاق القياسات</button>
+  </section>
+</body>
+</html>

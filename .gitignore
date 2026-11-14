@@ -1,0 +1,16 @@
+node_modules/
+dist/
+artifacts/
+private/
+*.local.*
+.env
+.env.*
+!.env.example
+*.ipk
+*.pem
+*.key
+*.log
+.webos/
+.ares/
+.DS_Store
+Thumbs.db

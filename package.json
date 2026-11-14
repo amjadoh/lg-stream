@@ -1,0 +1,14 @@
+{
+  "name": "lg-stream",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Native webOS playback probe: one stream, deliberate switching, private session-only sources.",
+  "scripts": {
+    "check": "node --check app/core.js && node --check app/app.js && node --check scripts/preview.cjs && node --test test/core.test.cjs",
+    "test": "node --test test/core.test.cjs",
+    "preview": "node scripts/preview.cjs",
+    "package:webos": "ares-package app --outdir dist"
+  },
+  "engines": { "node": ">=20" },
+  "devDependencies": { "@webos-tools/cli": "3.2.6" }
+}
