@@ -1,6 +1,6 @@
 {
   "name": "lg-stream",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "Native webOS IPTV app with one active player and a local last-good catalogue.",
   "scripts": {
