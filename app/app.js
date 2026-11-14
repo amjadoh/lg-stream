@@ -474,11 +474,13 @@
   }
   function cancelPlaylist() {
     if (playlistSaving && !catalogStore.cancel()) { $('playlist-status').textContent = 'جارٍ إتمام الحفظ المحلي…'; return false; }
+    var wasAutomatic = playlistAutomatic;
     playlistRevision += 1;
     playlistLoader.cancel();
     if (!playlistSaving) catalogStore.cancel();
     if (playlistRunning) $('playlist-status').textContent = 'أُلغي تحميل القائمة.';
     playlistControls(false);
+    if (wasAutomatic) { autoNextAttemptAt = Math.max(autoNextAttemptAt, Date.now() + 5 * 60 * 1000); setTimeout(scheduleAutoUpdate, 0); }
     return true;
   }
   function openSetup() {
@@ -505,6 +507,7 @@
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
     if (sources.length) focusSelected(); else $('start-button').focus();
+    setTimeout(scheduleAutoUpdate, 0);
   }
   function closeDiagnostics() {
     diagnostics.hidden = true;
