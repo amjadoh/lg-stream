@@ -59,8 +59,11 @@
   function isSeriesGroup(group) { return /series|show|مسلسل|مسلسلات/i.test(group || ''); }
   function entrySection(index) {
     var group = sourceGroups[index] || ''; var url = sources[index] || '';
-    if (isSeriesGroup(group) || /\/series\//i.test(url)) return 'series';
-    if (isMovieGroup(group) || /\/movie\//i.test(url)) return 'movies';
+    if (/\/series\//i.test(url)) return 'series';
+    if (/\/movie\//i.test(url)) return 'movies';
+    if (/\/live\//i.test(url)) return 'tv';
+    if (isSeriesGroup(group)) return 'series';
+    if (isMovieGroup(group)) return 'movies';
     return 'tv';
   }
   function visibleIndexes() {
@@ -420,6 +423,7 @@
     });
   });
   $('nav-settings').addEventListener('click', function () { setPrimary(false); openSetup(); });
+  ['groups', 'channels'].forEach(function (id) { $(id).addEventListener('focusin', function () { setPrimary(false); }); });
   $('setup-button').addEventListener('click', openSetup);
   $('start-button').addEventListener('click', openSetup);
   $('close-setup').addEventListener('click', closeSetup);
@@ -595,6 +599,10 @@
     if (code === 415) { scheduler.cancel(); player.resume(); event.preventDefault(); return; }
     if (code === 413) { stop(); focusChannel(selected); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { scheduler.cancel(); player.toggle(); event.preventDefault(); return; }
+    if (key === 'ArrowRight' && document.activeElement.closest && document.activeElement.closest('.primary-panel')) {
+      setPrimary(false); var activeGroupButton = $('groups').querySelector('.group-button.active') || $('groups button');
+      if (activeGroupButton) activeGroupButton.focus(); event.preventDefault(); return;
+    }
     if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.groups-panel') && !document.querySelector('.library-panel').classList.contains('primary-open')) {
       setPrimary(true); (document.querySelector('.primary-button.active') || $('nav-search')).focus(); event.preventDefault(); return;
     }

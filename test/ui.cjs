@@ -69,8 +69,9 @@ async function main() {
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 12; index++) {
-            lines.push(`#EXTINF:-1 group-title="${index > 8 ? 'أفلام' : `مجموعة ${Math.ceil(index / 4)}`}",قناة ${index}`);
-            lines.push(`https://media.example.test/live/${index}.m3u8?token=synthetic`);
+            const group = index === 8 ? 'قنوات أفلام' : index > 8 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
+            lines.push(`#EXTINF:-1 group-title="${group}",قناة ${index}`);
+            lines.push(`https://media.example.test/${index > 8 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
@@ -223,11 +224,16 @@ async function main() {
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
     assert.equal((await page.locator('body').innerText()).includes('password=secret'), false);
     assert.match(await page.locator('#channels').innerText(), /قناة 1/);
+    assert.equal(await page.locator('#groups [data-group="قنوات أفلام"]').count(), 1, 'Live movie channels must stay in TV groups');
     await page.locator('#channels .favorite-button').first().click();
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.locator('.library-panel').getAttribute('class'), 'library-panel primary-open');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('.library-panel').getAttribute('class'), 'library-panel');
+    assert.equal(await page.evaluate(() => document.activeElement.closest('.groups-panel') !== null), true);
+    await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="favorites"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
     await page.locator('#groups .group-button').first().focus();
@@ -246,7 +252,7 @@ async function main() {
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="movies"]').click();
-    await page.locator('#groups [data-group="أفلام"]').click();
+    await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#groups .group-button').first().focus();
