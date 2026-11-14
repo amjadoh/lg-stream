@@ -803,7 +803,7 @@
   window.addEventListener('pageshow', function () { unloading = false; });
   window.addEventListener('pagehide', function () {
     unloading = true; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
+    catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
   var restoreGeneration = sourceGeneration;
