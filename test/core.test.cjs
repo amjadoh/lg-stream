@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, uniqueGroups, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, automaticUpdateAllowed, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -20,9 +20,11 @@ test('labels decoded video dimensions without trusting channel names', () => {
 
 test('collects groups from a full-size catalogue in one pass and preserves provider order', () => {
   const entries = Array.from({ length: 331681 }, (_, index) => ({ group: `مجموعة ${index % 6000}`, name: `عنوان ${index}` }));
-  const groups = uniqueGroups(entries, (_, index) => index % 2 === 0);
-  assert.equal(groups.length, 3000);
-  assert.deepEqual(groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
+  const index = buildSectionIndex(entries, (_, itemIndex) => itemIndex % 2 === 0);
+  assert.equal(index.all.length, 165841);
+  assert.equal(index.groups.length, 3000);
+  assert.deepEqual(index.groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
+  assert.deepEqual(index.byGroup['مجموعة 2'].slice(0, 3), [2, 6002, 12002]);
   const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
   assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
   assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
@@ -34,6 +36,12 @@ test('builds a YouTube TV voice search with title and year exactly once', () => 
   assert.equal(target.searchParams.get('launch'), 'voice');
   assert.equal(target.searchParams.get('vq'), 'Search for فيلم تجريبي 2024 on YouTube');
   assert.equal(youtubeSearchTarget('', '2024'), null);
+});
+
+test('disables automatic refresh above the bounded-memory catalogue size', () => {
+  assert.equal(automaticUpdateAllowed(50000, 50000), true);
+  assert.equal(automaticUpdateAllowed(50001, 50000), false);
+  assert.equal(automaticUpdateAllowed(331681, 50000), false);
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {
