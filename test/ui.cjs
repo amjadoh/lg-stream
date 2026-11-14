@@ -308,10 +308,14 @@ async function main() {
     assert.equal(await page.locator('video').count(), 1, 'Pending channel request still starts normally');
     await page.locator('#stop-button').click();
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforePendingSwitch);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Automatic refresh releases the in-memory catalogue while keeping the saved copy');
     await page.locator('#speed-button').click();
     await page.locator('#speed-wired').click();
     await page.locator('#speed-start').click();
     assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Starting the speed test cancels a pending automatic catalogue download');
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+    assert.equal(await page.evaluate(() => window.__speedRequests.length), 0, 'The first action restores the saved catalogue before starting another download');
+    await page.locator('#speed-start').click();
     assert.equal(await page.evaluate(() => window.__speedRequests.length), 1);
     await page.locator('#speed-cancel').click();
     await page.locator('#close-speed').click();
@@ -330,6 +334,7 @@ async function main() {
     await page.locator('#cancel-playlist').click();
     assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Direct settings cancellation aborts the automatic catalogue download');
     await page.locator('#close-setup').click();
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     const requestsAfterDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
     await page.evaluate(() => { window.__advanceTime(4 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForTimeout(80);
