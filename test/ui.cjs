@@ -211,6 +211,8 @@ async function main() {
       assert.equal(await page.evaluate(() => window.__mediaStarts), count, `${action} must cancel the pending channel request`);
     }
     await pendingThen('diagnostics-button');
+    assert.equal(await page.locator('#diagnostics-panel .capability-list li').count(), 5, 'LG native readiness lists the five requested formats without probing media');
+    assert.match(await page.locator('#diagnostics-panel .capability-list').innerText(), /HDR10.*Dolby Vision.*HLG.*4K HEVC.*4K AV1/s);
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-diagnostics');
     await page.keyboard.press('Escape');

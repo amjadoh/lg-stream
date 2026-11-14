@@ -53,10 +53,12 @@
   var favoritesRevision = 0;
   var visibleCacheKey = '';
   var visibleCache = [];
-  var groupsCacheKey = '';
-  var groupsCache = [];
+  var sectionCacheKey = '';
+  var sectionCache = null;
+  var searchTimer = null;
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
+  var AUTO_UPDATE_MAX_ITEMS = 50000;
   var autoUpdateTimer = null;
   var autoNextAttemptAt = 0;
   var switchPending = false;
@@ -77,16 +79,21 @@
     if (/\/movie\//i.test(url)) return 'movies';
     return 'tv';
   }
+  function sectionIndex() {
+    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection].join('\u0001');
+    if (cacheKey === sectionCacheKey) return sectionCache;
+    sectionCache = api.buildSectionIndex(sources, function (_, index) {
+      return activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection;
+    });
+    sectionCacheKey = cacheKey; return sectionCache;
+  }
   function visibleIndexes() {
     var cacheKey = [catalogViewRevision, favoritesRevision, activeSection, activeGroup, contentSort].join('\u0001');
     if (cacheKey === visibleCacheKey) return visibleCache;
-    var group = activeGroup;
-    var indexes = sources.map(function (_, index) { return index; }).filter(function (index) {
-      if (activeSection === 'favorites' ? !favorites[index] : entrySection(index) !== activeSection) return false;
-      if (group && sources[index].group !== group) return false;
-      return true;
-    });
+    var ownSection = sectionIndex();
+    var indexes = activeGroup ? (ownSection.byGroup[activeGroup] || []) : ownSection.all;
     if ((activeSection === 'movies' || activeSection === 'series') && contentSort !== 'provider') {
+      indexes = indexes.slice();
       indexes.sort(function (left, right) {
         var a = sources[left] || {}; var b = sources[right] || {}; var av; var bv;
         if (contentSort === 'alpha') return (nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '')) || left - right;
@@ -105,6 +112,7 @@
     document.querySelector('.library-panel').classList.toggle('primary-open', open);
   }
   function closeSearch() {
+    clearTimeout(searchTimer); searchTimer = null;
     searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); $('search-status').textContent = 'اكتب حرفين على الأقل.';
     setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups button'); if (group) group.focus();
   }
@@ -175,12 +183,7 @@
     if (state.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
   }
   function sectionGroups() {
-    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection].join('\u0001');
-    if (cacheKey === groupsCacheKey) return groupsCache;
-    var groups = api.uniqueGroups(sources, function (_, index) {
-      return activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection;
-    });
-    groupsCacheKey = cacheKey; groupsCache = groups; return groups;
+    return sectionIndex().groups;
   }
   function renderGroups() {
     var groups = sectionGroups();
@@ -254,7 +257,7 @@
     $('details-year').textContent = details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر';
     $('details-description').textContent = details.description || 'الوصف غير متوفر في بيانات القائمة.';
     $('details-poster').hidden = !details.poster; if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
-    $('details-status').textContent = details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube باسم العمل فقط.';
+    $('details-status').textContent = details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.';
     $('details-trailer').textContent = details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube';
     detailsPanel.hidden = false; saveViewState(true); $('details-play').focus();
   }
@@ -470,7 +473,7 @@
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
-    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden) return;
+    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden || !api.automaticUpdateAllowed(sources.length, AUTO_UPDATE_MAX_ITEMS)) return;
     var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
     if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
     if (autoNextAttemptAt > Date.now()) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, autoNextAttemptAt - Date.now()); return; }
@@ -514,7 +517,7 @@
     $('playlist-url').value = '';
     inputs.forEach(function (input, index) { input.value = sourceMode === 'manual' && sources[index] ? sources[index].url : ''; });
     $('playlist-status').textContent = sourceMode === 'playlist' ? 'القائمة الحالية محفوظة محليًا. يمكنك تحديثها أو لصق رابط جديد.' : '';
-    $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' : 'لا توجد قائمة محفوظة.';
+    $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' + (!api.automaticUpdateAllowed(sources.length, AUTO_UPDATE_MAX_ITEMS) ? ' التحديث التلقائي متوقف لحماية الذاكرة؛ استخدم التحديث اليدوي.' : '') : 'لا توجد قائمة محفوظة.';
     $('refresh-saved').hidden = !activePlaylistUrl;
     $('form-error').textContent = '';
     playlistControls(playlistRunning);
@@ -615,7 +618,7 @@
       $('saved-catalog-status').textContent = 'لا توجد قائمة محفوظة.'; $('refresh-saved').hidden = true; $('playlist-status').textContent = 'مُسحت القائمة المحفوظة.'; $('form-error').textContent = ''; inputs[0].focus();
     });
   });
-  $('channel-search').addEventListener('input', renderSearch);
+  $('channel-search').addEventListener('input', function () { clearTimeout(searchTimer); searchTimer = setTimeout(renderSearch, 180); });
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
   $('nav-search').addEventListener('click', openSearch);
   $('close-search').addEventListener('click', closeSearch);

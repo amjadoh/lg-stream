@@ -132,6 +132,9 @@ input::placeholder { color: #7f90a7; }
 .diagnostics h2 { font-size: 28px; margin: 0 0 24px; }
 .diagnostics dl { display: grid; grid-template-columns: 1fr auto; gap: 16px 24px; font-size: 20px; }
 .diagnostics dd { margin: 0; color: #f6d28a; direction: ltr; font-family: Arial, sans-serif; }
+.diagnostics h3 { margin: 24px 0 12px; font-size: 21px; }
+.capability-list { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; direction: ltr; }
+.capability-list li { padding: 8px 12px; border: 1px solid #52657e; border-radius: 999px; color: #f6d28a; background: #0b131e; font: 17px/1.2 Arial, sans-serif; }
 @media (prefers-reduced-motion: reduce) { .launch-splash { animation-delay: .15s; animation-duration: .15s; } .launch-splash img { animation: none; opacity: 1; transform: none; } .launch-light { animation: none; transform: translate(-50%,-50%) scaleX(1); } }
 .diagnostics p { font-size: 18px; color: #b5c2d3; line-height: 1.8; }
 @media (max-width: 1400px), (max-height: 800px) {
