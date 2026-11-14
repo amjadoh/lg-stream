@@ -1,0 +1,38 @@
+name: webOS checks and package
+
+on:
+  push:
+    branches: [main, 'codex/**']
+    paths: ['app/**', 'test/**', 'scripts/**', 'package*.json', '.github/workflows/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check:ui
+      - run: npm run package:webos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lg-stream-${{ github.sha }}
+          path: |
+            dist/*.ipk
+            artifacts/ui-*.png
+          if-no-files-found: error
+          retention-days: 14

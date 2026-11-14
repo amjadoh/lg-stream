@@ -62,8 +62,56 @@ test('switch releases old media and ignores stale events and promise rejection w
   videos[1].error = { code: 3, message: 'https://example.test/private-password-token' };
   videos[1].fire('error');
   assert.equal(states.at(-1).errorCode, 3);
+  assert.equal(mounted.length, 0);
+  assert.equal(videos[1].src, undefined);
+  const failed = states.at(-1);
+  videos[1].historic.get('playing')(); videos[1].rejectPlay();
+  assert.equal(states.at(-1), failed);
   assert.equal(JSON.stringify(states).includes('private-password-token'), false);
   player.stop(); assert.equal(mounted.length, 0);
+});
+
+test('pause and newer play intents invalidate old rejections within the same media element', () => {
+  const timers = fakeTimers();
+  let video; let state; let mounted = 0;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => 100, onState: next => { state = next; }, timers
+  });
+  player.start('https://example.test/live', 1);
+  const initialRejection = video.rejectPlay;
+  player.pause();
+  initialRejection(); timers.entries[0].callback();
+  assert.equal(state.state, 'paused'); assert.equal(mounted, 1);
+  assert.equal(timers.entries[0].cancelled, true);
+
+  player.resume();
+  const firstResumeRejection = video.rejectPlay;
+  player.pause(); player.resume();
+  video.fire('pause'); // A delayed pause event must not cancel a newer resume deadline.
+  assert.equal(timers.entries.at(-1).cancelled, false);
+  video.fire('playing');
+  firstResumeRejection();
+  assert.equal(state.state, 'playing'); assert.equal(mounted, 1);
+  player.stop();
+});
+
+test('a current play rejection releases the source and ignores later events', () => {
+  const timers = fakeTimers();
+  let video; let state; let mounted = 0;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => 100, onState: next => { state = next; }, timers
+  });
+  player.start('https://example.test/private-token', 1);
+  video.rejectPlay();
+  assert.equal(state.state, 'play-rejected');
+  assert.equal(mounted, 0); assert.equal(video.src, undefined);
+  assert.equal(timers.entries[0].cancelled, true);
+  const rejected = state;
+  video.historic.get('playing')(); timers.entries[0].callback(); player.resume();
+  assert.equal(state, rejected);
+  assert.equal(JSON.stringify(state).includes('private-token'), false);
 });
 
 test('measures intent-to-start/progress including switch delay and aborts a stalled startup safely', () => {

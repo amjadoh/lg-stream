@@ -12,7 +12,7 @@
 <body>
   <div class="shell">
     <header>
-      <div class="brand" dir="ltr"><span class="brand-mark">L</span> LG Stream <span class="tag">تجربة البث</span></div>
+      <div class="brand" dir="ltr"><span class="brand-mark" aria-hidden="true">L</span> LG Stream <span class="tag">تجربة البث</span></div>
       <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
     </header>
     <main>
@@ -20,20 +20,22 @@
         <h1>القنوات</h1>
         <p class="muted">اختر قناة ثم اضغط موافق</p>
         <div id="channels" class="channel-list"></div>
-        <div class="remote-hint">CH + / − للتبديل المباشر<br>الأسهم للتنقل · موافق للاختيار</div>
+        <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
+        <div class="remote-hint"><span>↑ ↓</span> للتنقل بين القنوات<br><span>OK</span> للتشغيل · <span>CH + / −</span> للتبديل</div>
       </aside>
       <section class="viewing-panel" aria-label="مشغّل البث">
         <div id="video-host" class="video-host"></div>
-        <div id="empty-state" class="empty-state"><span class="play-symbol">▷</span><h2>لنبدأ بالبث</h2><p>أضف حتى ثلاثة مصادر لتجربة التشغيل والتنقل.</p><button id="start-button" type="button">إضافة مصدر</button></div>
+        <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
+        <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق أو رجوع لإظهار التحكم</p>
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">تشغيل مباشر على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>
   </div>
-  <section id="setup-panel" class="modal" aria-labelledby="setup-title" hidden>
+  <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off">
-      <h2 id="setup-title">مصادر تجربة البث</h2>
-      <p>أدخل رابط بث مباشر HTTP أو HTTPS، وليس رابط قائمة M3U كاملة. الروابط تبقى في الذاكرة خلال هذه الجلسة فقط.</p>
+      <h2 id="setup-title">أضف مصادر البث</h2>
+      <p>أدخل رابط بث مباشر HTTP أو HTTPS. قائمة M3U الكاملة غير مدعومة في هذه التجربة. تبقى الروابط لهذه الجلسة فقط.</p>
       <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
@@ -42,7 +44,7 @@
       <p class="small-note">بعد إغلاق لوحة المفاتيح، استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
     </form>
   </section>
-  <section id="diagnostics-panel" class="diagnostics" aria-labelledby="diagnostics-title" hidden>
+  <section id="diagnostics-panel" class="diagnostics" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
     <dl><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
     <p>الأزمنة تقديرية تبدأ من آخر طلب تبديل وتشمل تأخير تجميع أزرار CH. ليست إثباتًا لظهور الصورة؛ التأكيد بالمشاهدة.</p>
