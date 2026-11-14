@@ -44,6 +44,7 @@
   var playlistSaving = false;
   var playlistAutomatic = false;
   var automaticReleasedView = null;
+  var automaticRestoreMessage = '';
   var pendingViewState = null;
   var VIEW_KEY = 'lg-stream-view-v1';
   var sourceGeneration = 0;
@@ -179,13 +180,25 @@
     renderPrimary(); renderGroups(); renderChannels();
   }
   function restoreReleasedCatalog(message, shouldFocus) {
-    if (!automaticReleasedView) { if (message) $('status').textContent = message; return Promise.resolve(); }
+    if (message) automaticRestoreMessage = message;
+    if (!automaticReleasedView) {
+      if (automaticRestoreMessage) $('status').textContent = automaticRestoreMessage;
+      automaticRestoreMessage = '';
+      return Promise.resolve(true);
+    }
+    if (document.hidden || unloading) return Promise.resolve(false);
     var view = automaticReleasedView; var generation = sourceGeneration;
-    automaticReleasedView = null;
     return catalogStore.load().then(function (saved) {
-      if (generation !== sourceGeneration || saved.state !== 'complete') { $('status').textContent = message || 'تعذر استعادة القائمة المحفوظة.'; return; }
+      if (generation !== sourceGeneration) { automaticReleasedView = null; automaticRestoreMessage = ''; return false; }
+      if (saved.state !== 'complete') {
+        $('status').textContent = 'تعذر استعادة القائمة الآن — ستُعاد المحاولة عند الرجوع للتطبيق.';
+        return false;
+      }
       applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true); restoreRuntimeView(view, shouldFocus);
-      if (message) $('status').textContent = message;
+      automaticReleasedView = null;
+      if (automaticRestoreMessage) $('status').textContent = automaticRestoreMessage;
+      automaticRestoreMessage = '';
+      return true;
     });
   }
   function restoreRuntimeView(state, shouldFocus) {
@@ -489,6 +502,10 @@
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
+    if (automaticReleasedView) {
+      if (!document.hidden && !unloading) restoreReleasedCatalog('', true).then(function (restored) { if (restored) scheduleAutoUpdate(); });
+      return;
+    }
     if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden) return;
     var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
     if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
@@ -524,7 +541,7 @@
     playlistControls(false);
     if (wasAutomatic) {
       autoNextAttemptAt = Math.max(autoNextAttemptAt, Date.now() + 5 * 60 * 1000);
-      restoreReleasedCatalog('أُلغي التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(scheduleAutoUpdate);
+      restoreReleasedCatalog('أُلغي التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(function (restored) { if (restored) scheduleAutoUpdate(); });
     }
     return true;
   }
@@ -600,7 +617,7 @@
         var failure = result.truncated ? 'لم تكتمل القائمة، لذلك احتفظنا بالنسخة المحفوظة السابقة.' : (messages[result.state] || 'تعذر تحميل القائمة. احتفظنا بالنسخة المحفوظة السابقة.');
         if (automatic) {
           autoNextAttemptAt = Date.now() + 60 * 60 * 1000;
-          restoreReleasedCatalog('تعذر التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(scheduleAutoUpdate);
+          restoreReleasedCatalog('تعذر التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(function (restored) { if (restored) scheduleAutoUpdate(); });
         } else { $('playlist-status').textContent = failure; $('load-playlist').focus(); scheduleAutoUpdate(); }
         return;
       }
@@ -614,11 +631,12 @@
           if (automatic) {
             result.entries = [];
             autoNextAttemptAt = Date.now() + 60 * 60 * 1000;
-            restoreReleasedCatalog(saveFailure, !document.hidden).then(scheduleAutoUpdate);
+            restoreReleasedCatalog(saveFailure, !document.hidden).then(function (restored) { if (restored) scheduleAutoUpdate(); });
           } else { $('playlist-status').textContent = saveFailure; if (!document.hidden) $('load-playlist').focus(); scheduleAutoUpdate(); }
           return;
         }
         automaticReleasedView = null;
+        automaticRestoreMessage = '';
         stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false); if (automatic) restoreRuntimeView(runtimeView, !document.hidden);
         var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
         $('status').textContent = (automatic ? 'تم تحديث القائمة تلقائيًا: ' : 'تم حفظ ') + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;

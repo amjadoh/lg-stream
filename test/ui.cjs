@@ -343,6 +343,28 @@ async function main() {
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsAfterDirectCancel);
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('تم تحديث القائمة تلقائيًا'));
 
+    // If the app is backgrounded during an automatic refresh, keep the large
+    // saved catalogue on disk and restore it only after returning foreground.
+    const requestsBeforeBackgroundCancel = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true;
+      window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeBackgroundCancel);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Backgrounding aborts the automatic catalogue download');
+    await page.waitForTimeout(80);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'The saved catalogue is not reloaded into memory while hidden');
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
