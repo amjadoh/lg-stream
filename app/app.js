@@ -18,6 +18,8 @@
   var contentWindowSize = 24;
   var channelWindowStart = 0;
   var channelWindowSize = 40;
+  var groupWindowStart = 0;
+  var groupWindowSize = 40;
   var playingIndex = null;
   var lastState = 'idle';
   var keyboardVisible = false;
@@ -184,8 +186,14 @@
     var sectionLabels = { tv: 'كل قنوات البث', movies: 'كل الأفلام', series: 'كل المسلسلات', favorites: 'كل المفضلة' };
     var items = [['', sectionLabels[activeSection]]].concat(groups.map(function (group) { return [group, group]; }));
     if (!items.some(function (item) { return item[0] === activeGroup; })) activeGroup = '';
+    var activePosition = groups.indexOf(activeGroup) + 1;
+    if (!activeGroup) activePosition = 0;
+    groupWindowStart = Math.max(0, Math.min(groupWindowStart, Math.max(0, items.length - groupWindowSize)));
+    if (activePosition < groupWindowStart || activePosition >= groupWindowStart + groupWindowSize) {
+      groupWindowStart = Math.max(0, Math.min(activePosition - 4, Math.max(0, items.length - groupWindowSize)));
+    }
     $('groups').replaceChildren();
-    items.forEach(function (item) {
+    items.slice(groupWindowStart, groupWindowStart + groupWindowSize).forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'group-button' + (item[0] === activeGroup ? ' active' : '');
       button.dataset.group = item[0]; button.textContent = item[1];
       button.addEventListener('focus', function (event) {
@@ -375,6 +383,17 @@
     var current = document.activeElement;
     if (!current.classList.contains('group-button') || current.parentNode !== $('groups')) return false;
     var target = step > 0 ? current.nextElementSibling : current.previousElementSibling;
+    if (!target) {
+      var groups = [''].concat(sectionGroups());
+      var position = groups.indexOf(current.dataset.group); var next = position + step;
+      if (next < 0 || next >= groups.length) return false;
+      groupWindowStart = Math.max(0, Math.min(next - (step > 0 ? groupWindowSize - 1 : 0), Math.max(0, groups.length - groupWindowSize)));
+      renderGroups();
+      Array.prototype.some.call($('groups').querySelectorAll('.group-button'), function (button) {
+        if (button.dataset.group !== groups[next]) return false;
+        target = button; return true;
+      });
+    }
     if (!target) return false;
     target.focus(); return true;
   }
@@ -636,6 +655,22 @@
   $('movie-browser').addEventListener('scroll', function () { schedulePosterCheck(); scheduleViewSave(); });
   $('groups').addEventListener('scroll', scheduleViewSave);
   $('channels').addEventListener('scroll', scheduleViewSave);
+  $('groups').addEventListener('wheel', function (event) {
+    var list = $('groups'); var down = event.deltaY > 0;
+    if ((down && list.scrollTop + list.clientHeight < list.scrollHeight - 12) || (!down && list.scrollTop > 12)) return;
+    var groups = [''].concat(sectionGroups()); var position = groups.indexOf(activeGroup);
+    if (position < 0) position = 0;
+    var next = Math.max(0, Math.min(groups.length - 1, position + (down ? 12 : -12)));
+    if (next === position) return;
+    activeGroup = groups[next]; contentWindowStart = 0; channelWindowStart = 0;
+    groupWindowStart = Math.max(0, Math.min(next - (down ? 4 : groupWindowSize - 5), Math.max(0, groups.length - groupWindowSize)));
+    renderGroups(); renderChannels();
+    Array.prototype.some.call($('groups').querySelectorAll('.group-button'), function (button) {
+      if (button.dataset.group !== activeGroup) return false;
+      button.focus(); return true;
+    });
+    list.scrollTop = down ? 0 : list.scrollHeight; saveViewState(false); event.preventDefault();
+  }, { passive: false });
   $('movie-browser').addEventListener('wheel', function (event) {
     if (activeSection !== 'movies' && activeSection !== 'series') return;
     var browser = $('movie-browser'); var indexes = visibleIndexes(); var next = contentWindowStart;
