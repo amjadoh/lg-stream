@@ -76,6 +76,7 @@ async function main() {
           window.__playlistRequests.push(request);
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
           if (window.__failNextPlaylist) { window.__failNextPlaylist = false; return Promise.reject(new TypeError('Synthetic automatic refresh failure')); }
+          if (window.__stallNextPlaylist) { window.__stallNextPlaylist = false; return new Promise(() => {}); }
           if (String(url).includes('/fail')) return Promise.reject(new TypeError('Synthetic failure'));
           if (String(url).includes('/stall')) return new Promise(() => {});
           const lines = ['#EXTM3U'];
@@ -275,6 +276,35 @@ async function main() {
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeAutomatic);
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('القائمة السابقة'));
     assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeAutomaticFailure, 'Failed automatic refresh must not advance the last-success timestamp');
+    const requestsAfterAutomaticFailure = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => { window.__advanceTime(59 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsAfterAutomaticFailure, 'Automatic failure uses bounded backoff instead of a tight retry loop');
+    await page.evaluate(() => { window.__advanceTime(60 * 1000 + 1); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsAfterAutomaticFailure);
+    await page.waitForFunction(() => document.getElementById('status').textContent.includes('تم تحديث القائمة تلقائيًا'));
+    assert.ok(await page.evaluate(() => window.__catalogSavedAt()) > savedBeforeAutomaticFailure, 'Successful retry advances the last-success timestamp');
+
+    const requestsBeforePendingSwitch = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__advanceTime(24 * 60 * 60 * 1000 + 1); window.__stallNextPlaylist = true;
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', keyCode: 33, bubbles: true }));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforePendingSwitch, 'Pending 120ms channel switch blocks automatic refresh');
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('video').count(), 1, 'Pending channel request still starts normally');
+    await page.locator('#stop-button').click();
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforePendingSwitch);
+    await page.locator('#speed-button').click();
+    await page.locator('#speed-wired').click();
+    await page.locator('#speed-start').click();
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Starting the speed test cancels a pending automatic catalogue download');
+    assert.equal(await page.evaluate(() => window.__speedRequests.length), 1);
+    await page.locator('#speed-cancel').click();
+    await page.locator('#close-speed').click();
+    await page.evaluate(() => { window.__speedRequests = []; });
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
