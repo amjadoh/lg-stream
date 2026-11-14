@@ -103,6 +103,7 @@
   }
   function openSearch() { setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
   function renderPrimary() {
+    document.querySelector('.library-panel').classList.toggle('content-mode', activeSection === 'movies' || activeSection === 'series');
     Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
       button.classList.toggle('active', button.dataset.section === activeSection);
     });
@@ -121,7 +122,8 @@
       button.dataset.group = item[0]; button.textContent = item[1];
       button.addEventListener('click', function (event) {
         activeGroup = event.currentTarget.dataset.group; channelPage = 0; renderGroups(); renderChannels();
-        var first = $('channels').querySelector('.channel-button'); if (first) first.focus();
+        var first = (activeSection === 'movies' || activeSection === 'series') ? $('movie-grid').querySelector('.movie-card') : $('channels').querySelector('.channel-button');
+        if (first) first.focus();
       });
       $('groups').appendChild(button);
     });
@@ -258,7 +260,7 @@
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
     $('channel-title').textContent = sourceNames[index] || 'المصدر ' + (index + 1);
-    if (!watchMode) focusChannel(index);
+    if (!watchMode && activeSection === 'tv') focusChannel(index);
     player.start(sources[index], index + 1, intent.requestedAt);
   }
   var scheduler = api.createSwitchScheduler(playChannel);

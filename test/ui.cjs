@@ -254,6 +254,8 @@ async function main() {
     await page.locator('.primary-button[data-section="movies"]').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
+    assert.equal(await page.locator('.channels-panel').isVisible(), false, 'Movies use groups plus cards without a duplicate channel list');
+    assert.equal(await page.locator('.groups-panel').isVisible(), true);
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
