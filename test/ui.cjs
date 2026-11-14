@@ -69,7 +69,7 @@ async function main() {
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 12; index++) {
-            lines.push(`#EXTINF:-1 group-title="مجموعة ${Math.ceil(index / 4)}",قناة ${index}`);
+            lines.push(`#EXTINF:-1 group-title="${index > 8 ? 'أفلام' : `مجموعة ${Math.ceil(index / 4)}`}",قناة ${index}`);
             lines.push(`https://media.example.test/live/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
@@ -140,8 +140,15 @@ async function main() {
     assert.deepEqual(errors, [], 'Browser errors before the first playback request');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1);
     assert.equal(await page.locator('#quality-badge').innerText(), 'FHD');
+    const fitStarts = await page.evaluate(() => window.__mediaStarts);
+    await page.locator('#fit-button').click();
+    assert.equal(await page.locator('#video-host').getAttribute('data-fit'), 'cover');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), fitStarts, 'Changing picture fit must preserve the media element');
+    await page.locator('#channels .channel-button').nth(1).focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1, 'Selecting the current channel must not restart it');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Double OK must enter fullscreen without reconnecting');
+    await page.keyboard.press('Escape');
     await page.locator('#retry-button').click();
     assert.equal(await page.evaluate(() => window.__mediaStarts), 2, 'Explicit retry must restart media');
     assert.equal(await page.locator('video').count(), 1);
@@ -218,15 +225,18 @@ async function main() {
     assert.match(await page.locator('#channels').innerText(), /قناة 1/);
     await page.locator('#channels .favorite-button').first().click();
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
-    await page.locator('#group-filter').selectOption('__favorites');
+    await page.locator('#groups [data-group="__favorites"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
-    await page.locator('#group-filter').selectOption('مجموعة 2');
+    await page.locator('#groups [data-group="مجموعة 2"]').click();
     assert.match(await page.locator('#channels').innerText(), /قناة 5/);
     await page.locator('#channel-search').fill('قناة 6');
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
     assert.match(await page.locator('#channels').innerText(), /قناة 6/);
     await page.locator('#clear-search').click();
-    await page.locator('#group-filter').selectOption('');
+    await page.locator('#groups [data-group="أفلام"]').click();
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
+    await page.locator('#groups [data-group=""]').click();
     await page.screenshot({ path: path.join(root, 'artifacts/ui-playlist-1080.png') });
     await page.locator('#next-page').click();
     assert.equal(await page.locator('#channels .channel-button').first().getAttribute('data-index'), '4');

@@ -7,6 +7,7 @@
   var sourceNames = [];
   var sourceGroups = [];
   var favorites = {};
+  var activeGroup = '';
   var sourceMode = 'manual';
   var selected = 0;
   var channelPage = 0;
@@ -16,6 +17,8 @@
   var keyboardVisible = false;
   var watchMode = false;
   var hintTimer = null;
+  var fitIndex = 0;
+  var fitModes = [{ value: 'contain', label: 'ملائم' }, { value: 'cover', label: 'ملء' }, { value: 'fill', label: 'تمديد' }];
   var setup = $('setup-panel');
   var diagnostics = $('diagnostics-panel');
   var speedPanel = $('speed-panel');
@@ -34,8 +37,9 @@
     'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
     'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
   };
+  function isMovieGroup(group) { return /movie|film|cinema|vod|أفلام|افلام|سينما/i.test(group || ''); }
   function visibleIndexes() {
-    var group = $('group-filter').value;
+    var group = activeGroup;
     var query = $('channel-search').value.trim().toLocaleLowerCase();
     return sources.map(function (_, index) { return index; }).filter(function (index) {
       if (group === '__favorites' && !favorites[index]) return false;
@@ -44,14 +48,32 @@
     });
   }
   function renderGroups() {
-    var selectedGroup = $('group-filter').value;
     var groups = [];
     sourceGroups.forEach(function (group) { if (group && groups.indexOf(group) < 0) groups.push(group); });
-    $('group-filter').replaceChildren();
-    [['', 'كل القنوات'], ['__favorites', 'المفضلة']].concat(groups.map(function (group) { return [group, group]; })).forEach(function (item) {
-      var option = document.createElement('option'); option.value = item[0]; option.textContent = item[1]; $('group-filter').appendChild(option);
+    var items = [['', 'كل القنوات'], ['__favorites', '★ المفضلة']].concat(groups.map(function (group) { return [group, group]; }));
+    if (!items.some(function (item) { return item[0] === activeGroup; })) activeGroup = '';
+    $('groups').replaceChildren();
+    items.forEach(function (item) {
+      var button = document.createElement('button'); button.type = 'button'; button.className = 'group-button' + (item[0] === activeGroup ? ' active' : '');
+      button.dataset.group = item[0]; button.textContent = item[1];
+      button.addEventListener('click', function (event) {
+        activeGroup = event.currentTarget.dataset.group; channelPage = 0; renderGroups(); renderChannels();
+        var first = $('channels').querySelector('.channel-button'); if (first) first.focus();
+      });
+      $('groups').appendChild(button);
     });
-    $('group-filter').value = Array.prototype.some.call($('group-filter').options, function (option) { return option.value === selectedGroup; }) ? selectedGroup : '';
+  }
+  function renderMovies(indexes) {
+    var movies = isMovieGroup(activeGroup);
+    $('movie-browser').hidden = !movies;
+    if (!movies) return;
+    $('movie-title').textContent = activeGroup;
+    $('movie-grid').replaceChildren();
+    indexes.slice(0, 8).forEach(function (index) {
+      var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
+      var name = document.createElement('span'); name.textContent = sourceNames[index] || 'فيلم'; card.appendChild(name);
+      card.addEventListener('click', function () { activateChannel(index); }); $('movie-grid').appendChild(card);
+    });
   }
   var player = api.createPlayer({
     createVideo: function () {
@@ -73,6 +95,7 @@
       $('stop-button').disabled = state.state === 'idle';
       $('retry-button').disabled = playingIndex === null;
       $('fullscreen-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
+      $('fit-button').disabled = $('fullscreen-button').disabled;
       updateChannelStates();
       if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
         setWatchMode(false); $('retry-button').focus();
@@ -101,6 +124,7 @@
   }
   function renderChannels() {
     var indexes = visibleIndexes();
+    renderMovies(indexes);
     $('channels').replaceChildren();
     $('channel-empty').hidden = indexes.length > 0;
     $('channel-empty').innerHTML = sources.length ? 'لا توجد قنوات مطابقة<br><span>غيّر المجموعة أو البحث</span>' : 'قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span>';
@@ -127,7 +151,7 @@
       button.appendChild(number); button.appendChild(label); button.appendChild(state);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); });
-      button.addEventListener('click', function (event) { requestChannel(Number(event.currentTarget.dataset.index), false); });
+      button.addEventListener('click', function (event) { activateChannel(Number(event.currentTarget.dataset.index)); });
       var favorite = document.createElement('button');
       favorite.type = 'button'; favorite.className = 'favorite-button'; favorite.dataset.favoriteIndex = index;
       favorite.textContent = favorites[index] ? '★' : '☆'; favorite.setAttribute('aria-pressed', String(!!favorites[index]));
@@ -151,7 +175,7 @@
   function focusChannel(index) {
     var indexes = visibleIndexes();
     var position = indexes.indexOf(index);
-    if (position < 0) { if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); else $('group-filter').focus(); return; }
+    if (position < 0) { if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); else if ($('groups button')) $('groups button').focus(); return; }
     var targetPage = Math.floor(position / pageSize);
     if (targetPage !== channelPage) { channelPage = targetPage; renderChannels(); }
     var button = $('channels').querySelector('[data-index="' + index + '"]');
@@ -167,12 +191,22 @@
       return;
     }
     playingIndex = index;
+    $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
     $('channel-title').textContent = sourceNames[index] || 'المصدر ' + (index + 1);
     if (!watchMode) focusChannel(index);
     player.start(sources[index], index + 1, intent.requestedAt);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
+  var lastConfirmIndex = null;
+  var lastConfirmAt = 0;
+  function activateChannel(index) {
+    var now = performance.now();
+    if (playingIndex === index && lastConfirmIndex === index && now - lastConfirmAt <= 700) {
+      scheduler.cancel(); setWatchMode(true); lastConfirmIndex = null; lastConfirmAt = 0; return;
+    }
+    lastConfirmIndex = index; lastConfirmAt = now; requestChannel(index, false);
+  }
   function requestChannel(index, coalesce, retry) {
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
     if (coalesce) scheduler.request(intent); else scheduler.immediate(intent);
@@ -200,6 +234,11 @@
     }
   }
   $('fullscreen-button').addEventListener('click', function () { scheduler.cancel(); setWatchMode(true); });
+  $('fit-button').addEventListener('click', function () {
+    fitIndex = (fitIndex + 1) % fitModes.length;
+    $('video-host').dataset.fit = fitModes[fitIndex].value;
+    $('fit-button').textContent = 'الصورة: ' + fitModes[fitIndex].label;
+  });
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusChannel(selected); } });
   function playlistControls(running) {
     playlistRunning = running;
@@ -255,7 +294,7 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     stop(); sources = result; sourceNames = result.map(function (_, index) { return 'المصدر ' + (index + 1); });
-    sourceGroups = result.map(function () { return ''; }); favorites = {}; sourceMode = 'manual'; selected = 0; channelPage = 0;
+    sourceGroups = result.map(function () { return ''; }); favorites = {}; activeGroup = ''; sourceMode = 'manual'; selected = 0; channelPage = 0;
     renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
@@ -284,7 +323,7 @@
       sources = result.entries.map(function (entry) { return entry.url; });
       sourceNames = result.entries.map(function (entry) { return entry.name; });
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
-      favorites = {}; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
+      favorites = {}; activeGroup = ''; sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
       renderGroups(); renderChannels();
       $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
       closeSetup();
@@ -292,7 +331,7 @@
   });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
-    cancelPlaylist(); stop(); sources = []; sourceNames = []; sourceGroups = []; favorites = {}; sourceMode = 'manual'; selected = 0; channelPage = 0; renderGroups(); renderChannels();
+    cancelPlaylist(); stop(); sources = []; sourceNames = []; sourceGroups = []; favorites = {}; activeGroup = ''; sourceMode = 'manual'; selected = 0; channelPage = 0; renderGroups(); renderChannels();
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
     $('form-error').textContent = ''; inputs[0].focus();
@@ -305,7 +344,6 @@
     var indexes = visibleIndexes();
     if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
   });
-  $('group-filter').addEventListener('change', function () { channelPage = 0; renderChannels(); if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); });
   $('channel-search').addEventListener('input', function () { channelPage = 0; renderChannels(); });
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; channelPage = 0; renderChannels(); $('channel-search').focus(); });
   $('setup-button').addEventListener('click', openSetup);
@@ -494,7 +532,7 @@
   });
   window.addEventListener('pagehide', function () {
     cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; sourceNames = []; sourceGroups = []; favorites = {}; selected = 0; channelPage = 0; renderGroups(); renderChannels();
+    sources = []; sourceNames = []; sourceGroups = []; favorites = {}; activeGroup = ''; selected = 0; channelPage = 0; renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
   renderGroups(); renderChannels();
