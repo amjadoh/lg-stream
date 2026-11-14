@@ -16,8 +16,10 @@
   }
   function transactionDone(transaction) {
     return new Promise(function (resolve, reject) {
+      var failure = null;
       transaction.oncomplete = resolve;
-      transaction.onabort = transaction.onerror = function () { reject(transaction.error || new Error('storage transaction failed')); };
+      transaction.onerror = function (event) { failure = event.target && event.target.error || transaction.error || failure; };
+      transaction.onabort = function () { reject(failure || transaction.error || new Error('storage transaction failed')); };
     });
   }
   function createStore(options) {
@@ -89,7 +91,7 @@
         await transactionDone(transaction); activeWrite = null;
         cleanup(database, revision);
         return { state: 'complete', revision: revision, count: entries.length };
-      } catch (error) { activeWrite = null; return { state: error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
+      } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
     }
     async function clear() {
       try {
@@ -97,7 +99,10 @@
         transaction.objectStore('meta').clear(); transaction.objectStore('chunks').clear(); await transactionDone(transaction); return { state: 'complete' };
       } catch (_) { return { state: 'error' }; }
     }
-    function cancel() { writeGeneration += 1; if (activeWrite) { try { activeWrite.abort(); } catch (_) {} activeWrite = null; } }
+    function cancel() {
+      if (!activeWrite) { writeGeneration += 1; return true; }
+      try { activeWrite.abort(); writeGeneration += 1; activeWrite = null; return true; } catch (_) { return false; }
+    }
     return { load: load, save: save, clear: clear, cancel: cancel };
   }
   return { createStore: createStore, CHUNK_SIZE: CHUNK_SIZE };

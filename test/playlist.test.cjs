@@ -79,3 +79,12 @@ test('streams a catalogue beyond the former 5000-entry ceiling and keeps its las
   assert.equal(result.entries.at(-1).name, 'آخر حلقة');
   assert.equal(result.truncated, false);
 });
+
+test('parses a synthetic catalogue with 331666 declared entries through its final item', () => {
+  const lines = ['#EXTM3U'];
+  for (let index = 0; index < 331666; index++) lines.push(`#EXTINF:-1,عنصر ${index}\nhttps://stream.invalid/live/${index}`);
+  const parsed = parseM3U(lines.join('\n'), 'https://provider.invalid/list.m3u');
+  assert.equal(parsed.truncated, false);
+  assert.equal(parsed.entries.length, 331666);
+  assert.equal(parsed.entries.at(-1).name, 'عنصر 331665');
+});

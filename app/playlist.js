@@ -4,8 +4,8 @@
   else root.LGPlaylist = api;
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var MAX_BYTES = 64000000;
-  var MAX_ENTRIES = 50000;
+  var MAX_BYTES = 256000000;
+  var MAX_ENTRIES = 500000;
   var TIMEOUT_MS = 120000;
 
   function safeText(value, fallback, limit) {
