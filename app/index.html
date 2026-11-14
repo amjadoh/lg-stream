@@ -3,46 +3,88 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src https: http: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https: http:; media-src https: http: blob:; connect-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>LG Stream</title>
   <link rel="stylesheet" href="style.css">
   <script defer src="core.js"></script>
+  <script defer src="playlist.js"></script>
+  <script defer src="speed-test.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
+  <div id="launch-splash" class="launch-splash" aria-hidden="true"><img src="assets/launch-brand.png" alt=""><span class="launch-light"></span></div>
   <div class="shell">
     <header>
-      <div class="brand" dir="ltr"><span class="brand-mark">L</span> LG Stream <span class="tag">تجربة البث</span></div>
-      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
+      <div class="brand" dir="ltr"><img class="brand-mark" src="icon.png" alt=""> LG Stream <span class="tag">تجربة البث</span></div>
+      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="speed-button" type="button" aria-expanded="false">اختبار الاتصال</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
     </header>
     <main>
-      <aside class="channels-panel" aria-label="القنوات">
-        <h1>القنوات</h1>
-        <p class="muted">اختر قناة ثم اضغط موافق</p>
+      <aside class="library-panel" aria-label="المجموعات والقنوات">
+        <nav class="primary-panel" aria-label="القائمة الرئيسية">
+          <div class="primary-mark">LS</div>
+          <button id="nav-search" type="button">⌕<span>بحث</span></button>
+          <button class="primary-button active" data-section="tv" type="button">▣<span>البث</span></button>
+          <button class="primary-button" data-section="movies" type="button">▶<span>أفلام</span></button>
+          <button class="primary-button" data-section="series" type="button">▤<span>مسلسلات</span></button>
+          <button class="primary-button" data-section="favorites" type="button">★<span>المفضلة</span></button>
+          <button id="nav-settings" type="button" class="primary-settings">⚙<span>الإعدادات</span></button>
+        </nav>
+        <section class="groups-panel"><h1>المجموعات</h1><div id="groups" class="group-list"></div></section>
+        <section class="channels-panel"><h1>القنوات</h1>
         <div id="channels" class="channel-list"></div>
-        <div class="remote-hint">CH + / − للتبديل المباشر<br>الأسهم للتنقل · موافق للاختيار</div>
+        <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
+        <div class="remote-hint"><span>↑ ↓</span> للتنقل بين القنوات<br><span>OK</span> للتشغيل · <span>CH + / −</span> للتبديل</div>
+        </section>
       </aside>
       <section class="viewing-panel" aria-label="مشغّل البث">
         <div id="video-host" class="video-host"></div>
-        <div id="empty-state" class="empty-state"><span class="play-symbol">▷</span><h2>لنبدأ بالبث</h2><p>أضف حتى ثلاثة مصادر لتجربة التشغيل والتنقل.</p><button id="start-button" type="button">إضافة مصدر</button></div>
-        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="status" role="status" aria-live="polite">جاهز</span></div>
+        <section id="movie-browser" class="movie-browser" aria-label="الأفلام" hidden><h2 id="movie-title"></h2><div id="movie-grid" class="movie-grid"></div><div id="movie-paging" class="channel-paging" hidden><button id="previous-movie-page" type="button">السابق</button><span id="movie-page-label"></span><button id="next-movie-page" type="button">التالي</button></div></section>
+        <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
+        <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق أو رجوع لإظهار التحكم</p>
+        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">تشغيل مباشر على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="fit-button" type="button" disabled>الصورة: ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">مصادرك محفوظة لهذه الجلسة فقط</span></footer>
   </div>
-  <section id="setup-panel" class="modal" aria-labelledby="setup-title" hidden>
-    <form id="source-form" class="setup-card" autocomplete="off">
-      <h2 id="setup-title">مصادر تجربة البث</h2>
-      <p>أدخل رابط بث مباشر HTTP أو HTTPS، وليس رابط قائمة M3U كاملة. الروابط تبقى في الذاكرة خلال هذه الجلسة فقط.</p>
+  <section id="search-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="search-title" hidden>
+    <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
+  </section>
+  <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
+    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button" hidden>مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
+  </section>
+  <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
+    <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
+      <h2 id="setup-title">أضف مصادر البث</h2>
+      <p>ألصق رابط M3U الكامل لتحميل القنوات، أو أضف روابط مباشرة للاختبار. تبقى القائمة والروابط في ذاكرة هذه الجلسة فقط.</p>
+      <label for="playlist-url">رابط قائمة M3U الكامل</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+      <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
+      <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
+      <h3 class="setup-divider">أو روابط مباشرة</h3>
       <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
       <p id="form-error" class="form-error" role="alert"></p>
       <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
-      <p class="small-note">بعد إغلاق لوحة المفاتيح، استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
+      <p class="small-note">قد يمنع مزود القائمة التحميل من تطبيق التلفزيون؛ عندها تظهر رسالة واضحة ولا نرسل الرابط لأي وسيط. يبدأ التشغيل فقط عند اختيار قناة.</p>
     </form>
   </section>
-  <section id="diagnostics-panel" class="diagnostics" aria-labelledby="diagnostics-title" hidden>
+  <section id="speed-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title" hidden>
+    <div class="setup-card speed-card">
+      <h2 id="speed-title">اختبار الاتصال</h2>
+      <p>اختبار يدوي يوقف البث، ويقيس التنزيل لمدة لا تتجاوز 8 ثوانٍ وبحد أقصى 64 ميجابايت (MB). المزود: Cloudflare.</p>
+      <div class="speed-connection" role="group" aria-labelledby="speed-connection-title">
+        <h3 id="speed-connection-title">كيف يتصل التلفزيون الآن؟</h3>
+        <div class="form-actions"><button id="speed-wired" type="button" aria-pressed="false">كيبل</button><button id="speed-wifi" type="button" aria-pressed="false">واي فاي</button></div>
+        <p class="small-note">هذه تسمية تختارها بنفسك. للمقارنة، غيّر الاتصال من إعدادات التلفزيون ثم اختبره مرة أخرى.</p>
+      </div>
+      <p class="small-note">يرى خادم الاختبار اتصالك وعنوان الإنترنت. لا نرسل النتائج أو روابط البث؛ تبقى آخر نتيجتين في ذاكرة هذه الجلسة فقط.</p>
+      <p class="small-note">سرعة التنزيل واستجابة HTTP تقديران لهذا الخادم، وليسا ضمانًا لبث IPTV أو قياسًا لحد منفذ التلفزيون. استجابة HTTP ليست قياس ping.</p>
+      <p id="speed-status" class="speed-status" role="status" aria-live="polite">اختر نوع الاتصال لبدء الاختبار.</p>
+      <ol id="speed-results" class="speed-results" aria-label="آخر نتيجتين في هذه الجلسة"></ol>
+      <div class="form-actions"><button id="speed-start" class="primary" type="button" disabled>إيقاف البث وبدء الاختبار</button><button id="speed-cancel" type="button" disabled>إلغاء الاختبار</button><button id="close-speed" type="button">رجوع</button></div>
+    </div>
+  </section>
+  <section id="diagnostics-panel" class="diagnostics" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
     <dl><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
     <p>الأزمنة تقديرية تبدأ من آخر طلب تبديل وتشمل تأخير تجميع أزرار CH. ليست إثباتًا لظهور الصورة؛ التأكيد بالمشاهدة.</p>

@@ -1,11 +1,12 @@
 {
   "id": "com.amjadoh.lgstream",
-  "version": "0.1.0",
+  "version": "0.6.1",
   "vendor": "Amjed",
   "type": "web",
   "main": "index.html",
   "title": "LG Stream",
   "icon": "icon.png",
+  "largeIcon": "icon-large.png",
   "resolution": "1920x1080",
   "requiredACG": [],
   "disableBackHistoryAPI": true
