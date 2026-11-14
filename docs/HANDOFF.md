@@ -64,8 +64,8 @@ gh run download <run-id> --dir artifacts/github
 
 1. افتح فحص التطبيق من ويندوز: `ares-inspect.cmd --device lg-tv --app com.amjadoh.lgstream --open`.
 2. في Console، إذا منع Chrome اللصق، اكتب يدويًا `allow pasting` ثم Enter. لا تطلب من أمجد إعادة محاولات الحافظة أو قراءة `navigator.clipboard`؛ ثبت أنها تعطي `NotAllowedError`.
-3. الصق `document.getElementById('playlist-url').focus()` ثم Enter لتفعيل خانة M3U الحالية. المعرّف القديم `source-1` يخص المصدر المباشر وليس القائمة.
-4. أدخل رابط الاشتراك محليًا فقط عبر نافذة إدخال LG ThinQ عند ظهورها. لا تطلب الرابط أو بياناته في المحادثة ولا تضعها داخل أمر Console أو سجل الأوامر.
+3. الصق `document.getElementById('playlist-url').value=prompt('الصق رابط M3U')||''` ثم Enter. هذه هي الطريقة المجربة التي تفتح خانة إدخال فعلية في LG ThinQ وتضع نتيجتها في حقل القائمة؛ لا تستبدلها بمجرد `focus()` ولا بمحاولة `navigator.clipboard`.
+4. الصق رابط الاشتراك داخل نافذة LG ThinQ محليًا فقط، ثم اضغط زر تحميل القائمة من التلفزيون. لا تطلب الرابط أو بياناته في المحادثة ولا تضع الرابط نفسه داخل أمر Console أو سجل الأوامر.
 
 ## اختبار الاتصال وحدوده
 
