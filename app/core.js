@@ -27,6 +27,30 @@
     return 'SD';
   }
 
+  function uniqueGroups(entries, include) {
+    var groups = [];
+    var seen = Object.create(null);
+    entries.forEach(function (entry, index) {
+      var group = entry.group || '';
+      if (!group || seen[group] || !include(entry, index)) return;
+      seen[group] = true;
+      groups.push(group);
+    });
+    return groups;
+  }
+
+  function searchCatalog(entries, query, sectionForIndex, limit) {
+    var counts = { tv: 0, movies: 0, series: 0 };
+    var matches = { tv: [], movies: [], series: [] };
+    entries.forEach(function (entry, index) {
+      if ((entry.name || '').toLocaleLowerCase().indexOf(query) < 0) return;
+      var section = sectionForIndex(index);
+      counts[section] += 1;
+      if (matches[section].length < limit) matches[section].push(index);
+    });
+    return { counts: counts, matches: matches };
+  }
+
   function createSwitchScheduler(commit, timers, delay) {
     timers = timers || {
       setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
@@ -217,5 +241,5 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, qualityLabel: qualityLabel, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { validateSource: validateSource, qualityLabel: qualityLabel, uniqueGroups: uniqueGroups, searchCatalog: searchCatalog, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
