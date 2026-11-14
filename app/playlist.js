@@ -88,22 +88,28 @@
         if (!response.ok || !response.body || typeof response.body.getReader !== 'function') {
           finish(entry, { state: 'error' }); return;
         }
-        var declared = response.headers && Number(response.headers.get('content-length'));
-        if (declared > MAX_BYTES) { finish(entry, { state: 'too-large' }); return; }
         entry.reader = response.body.getReader();
         var decoder = new Decoder('utf-8');
         var text = '';
+        var reachedLimit = false;
         while (!entry.done) {
           var chunk = await entry.reader.read();
           if (entry.done) return;
           if (chunk.done) break;
+          var remaining = MAX_BYTES - entry.bytes;
+          if (chunk.value.byteLength > remaining) {
+            text += decoder.decode(chunk.value.slice(0, remaining), { stream: true });
+            entry.bytes = MAX_BYTES;
+            reachedLimit = true;
+            break;
+          }
           entry.bytes += chunk.value.byteLength;
-          if (entry.bytes > MAX_BYTES) { finish(entry, { state: 'too-large' }); return; }
           text += decoder.decode(chunk.value, { stream: true });
+          if (entry.bytes === MAX_BYTES) { reachedLimit = true; break; }
         }
         text += decoder.decode();
         var parsed = parseM3U(text, url);
-        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: parsed.truncated } : { state: 'empty' });
+        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: reachedLimit || parsed.truncated } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
 

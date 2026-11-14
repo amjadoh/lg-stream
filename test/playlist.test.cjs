@@ -41,7 +41,7 @@ test('loads one bounded private playlist request without exposing its URL in res
   assert.equal(JSON.stringify(result).includes('username=u'), false);
 });
 
-test('cancels pending loads and rejects oversized or timed-out playlists', async () => {
+test('cancels pending loads and times out stalled playlists', async () => {
   const callbacks = [];
   const timers = { setTimeout(fn, delay) { callbacks.push({ fn, delay }); return callbacks.length; }, clearTimeout() {} };
   let signal;
@@ -54,9 +54,28 @@ test('cancels pending loads and rejects oversized or timed-out playlists', async
   callbacks[0].fn();
   assert.deepEqual(await pending, { state: 'timeout' });
   assert.equal(signal.aborted, true);
+});
 
-  const large = createLoader({ fetch: async () => ({
-    ok: true, headers: { get: () => String(MAX_BYTES + 1) }, body: controlledStream([])
+test('reads a bounded prefix of a large playlist instead of rejecting it', async () => {
+  const first = new TextEncoder().encode('#EXTM3U\n#EXTINF:-1,قناة اختبار\nhttps://stream.example/live.ts\n');
+  const padding = new Uint8Array(MAX_BYTES - first.byteLength);
+  padding.fill(35);
+  const overflow = new Uint8Array(32);
+  let cancelled = false;
+  const body = { getReader: () => {
+    const chunks = [first, padding, overflow];
+    let index = 0;
+    return {
+      read: async () => index < chunks.length ? { done: false, value: chunks[index++] } : { done: true },
+      cancel: () => { cancelled = true; return Promise.resolve(); }
+    };
+  } };
+  const loader = createLoader({ fetch: async () => ({
+    ok: true, headers: { get: () => String(MAX_BYTES * 4) }, body
   }) });
-  assert.deepEqual(await large.start('https://provider.example/list.m3u'), { state: 'too-large' });
+  const result = await loader.start('https://provider.example/large.m3u');
+  assert.equal(result.state, 'complete');
+  assert.equal(result.entries[0].name, 'قناة اختبار');
+  assert.equal(result.truncated, true);
+  assert.equal(cancelled, true);
 });

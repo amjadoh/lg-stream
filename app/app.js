@@ -231,7 +231,6 @@
       playlistControls(false);
       if (result.state !== 'complete') {
         var messages = {
-          'too-large': 'القائمة أكبر من 8 MB ولا يمكن تحميلها في هذه النسخة.',
           timeout: 'انتهت مهلة تحميل القائمة. تحقق من الاتصال وحاول مرة أخرى.',
           empty: 'لم نجد روابط قنوات صالحة داخل القائمة.',
           unsupported: 'محرك التلفزيون لا يدعم طريقة تحميل القائمة.',
@@ -245,7 +244,7 @@
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
       sourceMode = 'playlist'; selected = 0; channelPage = 0; playingIndex = null;
       renderChannels();
-      $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — عُرض أول 5000' : '');
+      $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
       closeSetup();
     });
   });
