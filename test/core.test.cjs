@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, uniqueGroups, searchCatalog, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -16,6 +16,16 @@ test('labels decoded video dimensions without trusting channel names', () => {
   assert.equal(qualityLabel(1920, 1080), 'FHD');
   assert.equal(qualityLabel(2560, 1440), 'QHD');
   assert.equal(qualityLabel(3840, 2160), '4K');
+});
+
+test('collects groups from a full-size catalogue in one pass and preserves provider order', () => {
+  const entries = Array.from({ length: 331681 }, (_, index) => ({ group: `مجموعة ${index % 6000}`, name: `عنوان ${index}` }));
+  const groups = uniqueGroups(entries, (_, index) => index % 2 === 0);
+  assert.equal(groups.length, 3000);
+  assert.deepEqual(groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
+  const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
+  assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
+  assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {
