@@ -43,6 +43,7 @@
   var playlistRunning = false;
   var playlistSaving = false;
   var playlistAutomatic = false;
+  var automaticReleasedView = null;
   var pendingViewState = null;
   var VIEW_KEY = 'lg-stream-view-v1';
   var sourceGeneration = 0;
@@ -58,7 +59,6 @@
   var searchTimer = null;
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
-  var AUTO_UPDATE_MAX_ITEMS = 50000;
   var autoUpdateTimer = null;
   var autoNextAttemptAt = 0;
   var switchPending = false;
@@ -171,6 +171,22 @@
   }
   function captureRuntimeView() {
     return { section: activeSection, group: activeGroup, sort: contentSort, selectedUrl: sources[selected] && sources[selected].url, favoriteUrls: Object.keys(favorites).map(function (index) { return sources[index] && sources[index].url; }).filter(Boolean), contentWindowStart: contentWindowStart, channelWindowStart: channelWindowStart, detailsOpen: detailsIndex !== null };
+  }
+  function releaseCatalogForAutomaticUpdate(view) {
+    automaticReleasedView = view;
+    catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
+    visibleCacheKey = ''; visibleCache = []; sectionCacheKey = ''; sectionCache = null;
+    renderPrimary(); renderGroups(); renderChannels();
+  }
+  function restoreReleasedCatalog(message, shouldFocus) {
+    if (!automaticReleasedView) { if (message) $('status').textContent = message; return Promise.resolve(); }
+    var view = automaticReleasedView; var generation = sourceGeneration;
+    automaticReleasedView = null;
+    return catalogStore.load().then(function (saved) {
+      if (generation !== sourceGeneration || saved.state !== 'complete') { $('status').textContent = message || 'تعذر استعادة القائمة المحفوظة.'; return; }
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true); restoreRuntimeView(view, shouldFocus);
+      if (message) $('status').textContent = message;
+    });
   }
   function restoreRuntimeView(state, shouldFocus) {
     if (!state) return;
@@ -473,7 +489,7 @@
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
-    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden || !api.automaticUpdateAllowed(sources.length, AUTO_UPDATE_MAX_ITEMS)) return;
+    if (!activePlaylistUrl || !activeCatalogSavedAt || playlistRunning || document.hidden) return;
     var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
     if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
     if (autoNextAttemptAt > Date.now()) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, autoNextAttemptAt - Date.now()); return; }
@@ -484,7 +500,7 @@
   function prepareForegroundAction() {
     if (!playlistRunning || !playlistAutomatic) return true;
     autoNextAttemptAt = Date.now() + 5 * 60 * 1000;
-    if (cancelPlaylist()) { scheduleAutoUpdate(); return true; }
+    if (cancelPlaylist()) { $('status').textContent = 'جارٍ استعادة القائمة السابقة… أعد المحاولة بعد لحظة'; return false; }
     $('status').textContent = 'جارٍ إتمام حفظ القائمة… أعد المحاولة بعد لحظة'; return false;
   }
   function playlistControls(running) {
@@ -506,7 +522,10 @@
     if (!playlistSaving) catalogStore.cancel();
     if (playlistRunning) $('playlist-status').textContent = 'أُلغي تحميل القائمة.';
     playlistControls(false);
-    if (wasAutomatic) { autoNextAttemptAt = Math.max(autoNextAttemptAt, Date.now() + 5 * 60 * 1000); setTimeout(scheduleAutoUpdate, 0); }
+    if (wasAutomatic) {
+      autoNextAttemptAt = Math.max(autoNextAttemptAt, Date.now() + 5 * 60 * 1000);
+      restoreReleasedCatalog('أُلغي التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(scheduleAutoUpdate);
+    }
     return true;
   }
   function openSetup() {
@@ -517,7 +536,7 @@
     $('playlist-url').value = '';
     inputs.forEach(function (input, index) { input.value = sourceMode === 'manual' && sources[index] ? sources[index].url : ''; });
     $('playlist-status').textContent = sourceMode === 'playlist' ? 'القائمة الحالية محفوظة محليًا. يمكنك تحديثها أو لصق رابط جديد.' : '';
-    $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' + (!api.automaticUpdateAllowed(sources.length, AUTO_UPDATE_MAX_ITEMS) ? ' التحديث التلقائي متوقف لحماية الذاكرة؛ استخدم التحديث اليدوي.' : '') : 'لا توجد قائمة محفوظة.';
+    $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' : 'لا توجد قائمة محفوظة.';
     $('refresh-saved').hidden = !activePlaylistUrl;
     $('form-error').textContent = '';
     playlistControls(playlistRunning);
@@ -563,6 +582,7 @@
     if (playlistRunning) return;
     var runtimeView = automatic ? captureRuntimeView() : null;
     sourceGeneration += 1; stop();
+    if (automatic) releaseCatalogForAutomaticUpdate(runtimeView);
     var revision = ++playlistRevision;
     playlistAutomatic = !!automatic;
     playlistControls(true);
@@ -578,8 +598,11 @@
           invalid: 'رابط القائمة غير صالح.'
         };
         var failure = result.truncated ? 'لم تكتمل القائمة، لذلك احتفظنا بالنسخة المحفوظة السابقة.' : (messages[result.state] || 'تعذر تحميل القائمة. احتفظنا بالنسخة المحفوظة السابقة.');
-        if (automatic) { autoNextAttemptAt = Date.now() + 60 * 60 * 1000; $('status').textContent = 'تعذر التحديث التلقائي — القائمة السابقة محفوظة'; } else { $('playlist-status').textContent = failure; $('load-playlist').focus(); }
-        scheduleAutoUpdate(); return;
+        if (automatic) {
+          autoNextAttemptAt = Date.now() + 60 * 60 * 1000;
+          restoreReleasedCatalog('تعذر التحديث التلقائي — عادت القائمة السابقة', !document.hidden).then(scheduleAutoUpdate);
+        } else { $('playlist-status').textContent = failure; $('load-playlist').focus(); scheduleAutoUpdate(); }
+        return;
       }
       if (automatic) $('status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة…'; else $('playlist-status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة محليًا…';
       playlistSaving = true;
@@ -588,8 +611,14 @@
         if (revision !== playlistRevision) return;
         if (saved.state !== 'complete') {
           playlistControls(false); var saveFailure = saved.state === 'quota' ? 'مساحة التخزين لا تكفي. احتفظنا بالقائمة السابقة.' : 'تعذر حفظ القائمة. احتفظنا بالقائمة السابقة.';
-          if (automatic) { autoNextAttemptAt = Date.now() + 60 * 60 * 1000; $('status').textContent = saveFailure; } else { $('playlist-status').textContent = saveFailure; if (!document.hidden) $('load-playlist').focus(); } scheduleAutoUpdate(); return;
+          if (automatic) {
+            result.entries = [];
+            autoNextAttemptAt = Date.now() + 60 * 60 * 1000;
+            restoreReleasedCatalog(saveFailure, !document.hidden).then(scheduleAutoUpdate);
+          } else { $('playlist-status').textContent = saveFailure; if (!document.hidden) $('load-playlist').focus(); scheduleAutoUpdate(); }
+          return;
         }
+        automaticReleasedView = null;
         stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false); if (automatic) restoreRuntimeView(runtimeView, !document.hidden);
         var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
         $('status').textContent = (automatic ? 'تم تحديث القائمة تلقائيًا: ' : 'تم حفظ ') + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;

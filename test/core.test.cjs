@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, automaticUpdateAllowed, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -36,12 +36,6 @@ test('builds a YouTube TV voice search with title and year exactly once', () => 
   assert.equal(target.searchParams.get('launch'), 'voice');
   assert.equal(target.searchParams.get('vq'), 'Search for فيلم تجريبي 2024 on YouTube');
   assert.equal(youtubeSearchTarget('', '2024'), null);
-});
-
-test('disables automatic refresh above the bounded-memory catalogue size', () => {
-  assert.equal(automaticUpdateAllowed(50000, 50000), true);
-  assert.equal(automaticUpdateAllowed(50001, 50000), false);
-  assert.equal(automaticUpdateAllowed(331681, 50000), false);
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {

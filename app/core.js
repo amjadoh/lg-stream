@@ -63,10 +63,6 @@
     return 'https://www.youtube.com/tv?launch=voice&vq=' + encodeURIComponent('Search for ' + titleAndYear + ' on YouTube');
   }
 
-  function automaticUpdateAllowed(itemCount, maxItems) {
-    return Number(itemCount) <= Number(maxItems);
-  }
-
   function createSwitchScheduler(commit, timers, delay) {
     timers = timers || {
       setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
@@ -257,5 +253,5 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, automaticUpdateAllowed: automaticUpdateAllowed, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
