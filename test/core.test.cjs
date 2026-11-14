@@ -1,12 +1,21 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
   assert.equal(validateSource(source), source);
   for (const value of ['javascript:alert(1)', 'file:///etc/passwd', 'data:video/mp4;base64,', '/relative', 'https://good.test/\nsecret']) assert.equal(validateSource(value), null);
+});
+
+test('labels decoded video dimensions without trusting channel names', () => {
+  assert.equal(qualityLabel(0, 0), '');
+  assert.equal(qualityLabel(720, 576), 'SD');
+  assert.equal(qualityLabel(1280, 720), 'HD');
+  assert.equal(qualityLabel(1920, 1080), 'FHD');
+  assert.equal(qualityLabel(2560, 1440), 'QHD');
+  assert.equal(qualityLabel(3840, 2160), '4K');
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {
@@ -62,8 +71,56 @@ test('switch releases old media and ignores stale events and promise rejection w
   videos[1].error = { code: 3, message: 'https://example.test/private-password-token' };
   videos[1].fire('error');
   assert.equal(states.at(-1).errorCode, 3);
+  assert.equal(mounted.length, 0);
+  assert.equal(videos[1].src, undefined);
+  const failed = states.at(-1);
+  videos[1].historic.get('playing')(); videos[1].rejectPlay();
+  assert.equal(states.at(-1), failed);
   assert.equal(JSON.stringify(states).includes('private-password-token'), false);
   player.stop(); assert.equal(mounted.length, 0);
+});
+
+test('pause and newer play intents invalidate old rejections within the same media element', () => {
+  const timers = fakeTimers();
+  let video; let state; let mounted = 0;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => 100, onState: next => { state = next; }, timers
+  });
+  player.start('https://example.test/live', 1);
+  const initialRejection = video.rejectPlay;
+  player.pause();
+  initialRejection(); timers.entries[0].callback();
+  assert.equal(state.state, 'paused'); assert.equal(mounted, 1);
+  assert.equal(timers.entries[0].cancelled, true);
+
+  player.resume();
+  const firstResumeRejection = video.rejectPlay;
+  player.pause(); player.resume();
+  video.fire('pause'); // A delayed pause event must not cancel a newer resume deadline.
+  assert.equal(timers.entries.at(-1).cancelled, false);
+  video.fire('playing');
+  firstResumeRejection();
+  assert.equal(state.state, 'playing'); assert.equal(mounted, 1);
+  player.stop();
+});
+
+test('a current play rejection releases the source and ignores later events', () => {
+  const timers = fakeTimers();
+  let video; let state; let mounted = 0;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => 100, onState: next => { state = next; }, timers
+  });
+  player.start('https://example.test/private-token', 1);
+  video.rejectPlay();
+  assert.equal(state.state, 'play-rejected');
+  assert.equal(mounted, 0); assert.equal(video.src, undefined);
+  assert.equal(timers.entries[0].cancelled, true);
+  const rejected = state;
+  video.historic.get('playing')(); timers.entries[0].callback(); player.resume();
+  assert.equal(state, rejected);
+  assert.equal(JSON.stringify(state).includes('private-token'), false);
 });
 
 test('measures intent-to-start/progress including switch delay and aborts a stalled startup safely', () => {

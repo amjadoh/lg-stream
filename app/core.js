@@ -16,8 +16,22 @@
     } catch (_) { return null; }
   }
 
+  function qualityLabel(width, height) {
+    var edge = Math.max(Number(width) || 0, Number(height) || 0);
+    var shortEdge = Math.min(Number(width) || 0, Number(height) || 0);
+    if (!edge || !shortEdge) return '';
+    if (shortEdge >= 2160 || edge >= 3840) return '4K';
+    if (shortEdge >= 1440 || edge >= 2560) return 'QHD';
+    if (shortEdge >= 1080 || edge >= 1920) return 'FHD';
+    if (shortEdge >= 720 || edge >= 1280) return 'HD';
+    return 'SD';
+  }
+
   function createSwitchScheduler(commit, timers, delay) {
-    timers = timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    timers = timers || {
+      setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
+      clearTimeout: function (handle) { clearTimeout(handle); }
+    };
     delay = delay === undefined ? 120 : delay;
     var pending = null;
     var revision = 0;
@@ -46,7 +60,10 @@
     var active = null;
     var now = options.now || function () { return performance.now(); };
     var emit = options.onState || function () {};
-    var timers = options.timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    var timers = options.timers || {
+      setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
+      clearTimeout: function (handle) { clearTimeout(handle); }
+    };
     var startupTimeoutMs = options.startupTimeoutMs || 15000;
     function snapshot(entry) {
       return {
@@ -68,16 +85,34 @@
       if (entry.startupTimer !== null) timers.clearTimeout(entry.startupTimer);
       entry.startupTimer = null;
     }
+    function finishWait(entry) {
+      if (entry.waitingSince !== null) {
+        entry.stallMs += now() - entry.waitingSince;
+        entry.waitingSince = null;
+      }
+    }
+    function fail(entry, state) {
+      finishWait(entry);
+      entry.state = state;
+      var failed = snapshot(entry);
+      release();
+      emit(failed);
+    }
+    function play(entry) {
+      var revision = ++entry.playRevision;
+      var promise = entry.video.play();
+      if (promise && promise.catch) promise.catch(function () {
+        if (active !== entry || entry.playRevision !== revision) return;
+        fail(entry, 'play-rejected');
+      });
+    }
     function armStartup(entry) {
       clearStartup(entry);
       if (entry.progressMs !== null || entry.firstFrameMs !== null) return;
       var revision = ++entry.startupRevision;
       entry.startupTimer = timers.setTimeout(function () {
         if (active !== entry || entry.startupRevision !== revision || entry.startupTimer === null || entry.progressMs !== null || entry.firstFrameMs !== null) return;
-        entry.state = 'startup-timeout';
-        var timedOut = snapshot(entry);
-        release();
-        emit(timedOut);
+        fail(entry, 'startup-timeout');
       }, startupTimeoutMs);
     }
     function release() {
@@ -103,7 +138,7 @@
       var entry = {
         video: video, channel: channel, state: 'loading', started: started, playingMs: null,
         requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
-        progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0,
+        progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0, playRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
         frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, errorCode: 0
       };
@@ -114,18 +149,12 @@
         video.addEventListener(name, guarded);
         entry.listeners.push([name, guarded]);
       }
-      function finishWait() {
-        if (entry.waitingSince !== null) {
-          entry.stallMs += now() - entry.waitingSince;
-          entry.waitingSince = null;
-        }
-      }
       on('playing', function () {
         if (entry.playingMs === null) {
           entry.playingMs = Math.round(now() - entry.requested);
           entry.lastMediaTime = video.currentTime || 0;
         }
-        finishWait(); entry.state = 'playing'; notify(entry);
+        finishWait(entry); entry.state = 'playing'; notify(entry);
       });
       on('timeupdate', function () {
         var mediaTime = video.currentTime;
@@ -142,14 +171,17 @@
         }
         entry.state = 'waiting'; notify(entry);
       });
-      on('pause', function () { clearStartup(entry); finishWait(); entry.state = 'paused'; notify(entry); });
-      on('ended', function () { clearStartup(entry); finishWait(); entry.state = 'ended'; notify(entry); });
+      on('pause', function () {
+        if (!video.paused) return;
+        clearStartup(entry); finishWait(entry); entry.state = 'paused'; notify(entry);
+      });
+      on('ended', function () { clearStartup(entry); finishWait(entry); entry.state = 'ended'; notify(entry); });
       on('loadedmetadata', function () { notify(entry); });
+      on('resize', function () { notify(entry); });
       on('error', function () {
-        clearStartup(entry); finishWait(); entry.state = 'error';
         var code = video.error && video.error.code;
         entry.errorCode = typeof code === 'number' && code >= 1 && code <= 4 ? code : 0;
-        notify(entry);
+        fail(entry, 'error');
       });
       options.mountVideo(video);
       video.src = valid;
@@ -164,29 +196,26 @@
       notify(entry);
       armStartup(entry);
       video.load();
-      var promise = video.play();
-      if (promise && promise.catch) promise.catch(function () {
-        if (!validEntry() || entry.state === 'error') return;
-        clearStartup(entry); entry.state = 'play-rejected'; notify(entry);
-      });
+      play(entry);
       return true;
     }
     return {
       start: start,
       stop: function () { release(); emit({ state: 'idle' }); },
-      pause: function () { if (active) active.video.pause(); },
+      pause: function () {
+        if (!active) return;
+        active.playRevision += 1;
+        clearStartup(active);
+        active.video.pause();
+      },
       resume: function () {
         var entry = active;
         if (!entry) return;
         armStartup(entry);
-        var promise = entry.video.play();
-        if (promise && promise.catch) promise.catch(function () {
-          if (active !== entry) return;
-          clearStartup(entry); entry.state = 'play-rejected'; notify(entry);
-        });
+        play(entry);
       },
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { validateSource: validateSource, qualityLabel: qualityLabel, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
