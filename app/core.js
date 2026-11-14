@@ -51,6 +51,15 @@
     return { counts: counts, matches: matches };
   }
 
+  function youtubeSearchTarget(name, year) {
+    var title = String(name || '').trim().replace(/\s+/g, ' ');
+    var releaseYear = String(year || '').trim();
+    if (!title) return null;
+    var titleAndYear = title;
+    if (releaseYear && !(new RegExp('(^|\\D)' + releaseYear.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\D|$)')).test(title)) titleAndYear += ' ' + releaseYear;
+    return 'https://www.youtube.com/tv?launch=voice&vq=' + encodeURIComponent('Search for ' + titleAndYear + ' on YouTube');
+  }
+
   function createSwitchScheduler(commit, timers, delay) {
     timers = timers || {
       setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
@@ -241,5 +250,5 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, qualityLabel: qualityLabel, uniqueGroups: uniqueGroups, searchCatalog: searchCatalog, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { validateSource: validateSource, qualityLabel: qualityLabel, uniqueGroups: uniqueGroups, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
