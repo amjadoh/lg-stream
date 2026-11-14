@@ -49,6 +49,9 @@
     'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
     'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
   };
+  function finishLaunch() { var splash = $('launch-splash'); if (splash) splash.remove(); }
+  $('launch-splash').addEventListener('animationend', function (event) { if (event.animationName === 'launchExit') finishLaunch(); });
+  setTimeout(finishLaunch, 1900);
   function cancelEpg() { clearTimeout(epgTimer); epgTimer = null; epgLoader.cancel(); }
   function scheduleEpg() {
     cancelEpg();
@@ -143,17 +146,20 @@
     $('movie-grid').replaceChildren();
     indexes.slice(channelPage * pageSize, channelPage * pageSize + pageSize).forEach(function (index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
+      var details = sourceDetails[index] || {};
+      if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.loading = 'lazy'; poster.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
       var name = document.createElement('span'); name.textContent = sourceNames[index] || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       card.addEventListener('click', function () { openDetails(index); }); $('movie-grid').appendChild(card);
     });
   }
-  function closeDetails() { detailsPanel.hidden = true; detailsIndex = null; focusSelected(); }
+  function closeDetails() { detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; focusSelected(); }
   function openDetails(index) {
     detailsIndex = index; var details = sourceDetails[index] || {};
     $('details-title').textContent = sourceNames[index] || (activeSection === 'series' ? 'مسلسل' : 'فيلم');
     $('details-year').textContent = details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر';
     $('details-description').textContent = details.description || 'الوصف غير متوفر في بيانات القائمة.';
+    $('details-poster').hidden = !details.poster; if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
     $('details-status').textContent = details.trailer ? '' : 'الإعلان غير متوفر من المزود.';
     $('details-trailer').hidden = !details.trailer; detailsPanel.hidden = false; $('details-play').focus();
   }
@@ -422,10 +428,12 @@
       sources = result.entries.map(function (entry) { return entry.url; });
       sourceNames = result.entries.map(function (entry) { return entry.name; });
       sourceGroups = result.entries.map(function (entry) { return entry.group; });
-      sourceIds = result.entries.map(function (entry) { return entry.id || ''; }); sourceDetails = result.entries.map(function (entry) { return { year: entry.year || '', description: entry.description || '', trailer: entry.trailer || null }; }); sourcePrograms = {}; epgUrl = result.epgUrl || null;
+      sourceIds = result.entries.map(function (entry) { return entry.id || ''; }); sourceDetails = result.entries.map(function (entry) { return { poster: entry.poster || null, year: entry.year || '', description: entry.description || '', trailer: entry.trailer || null }; }); sourcePrograms = {}; epgUrl = result.epgUrl || null;
       favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'playlist'; selected = 0; channelPage = 0; channelWindowStart = 0; playingIndex = null;
       renderPrimary(); renderGroups(); renderChannels();
-      $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا للجلسة' + (result.truncated ? ' — اكتملت عينة القائمة' : '');
+      var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
+      var partialReasons = { timeout: 'انتهت مهلة دقيقتين', bytes: 'تجاوز الملف حد الأمان 256MB', entries: 'تجاوزت القائمة حد الأمان 100 ألف عنصر' };
+      $('status').textContent = 'تم تحميل ' + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series + (result.truncated ? ' — تحميل جزئي: ' + (partialReasons[result.truncatedReason] || 'تجاوز حد الأمان') : ' — القائمة كاملة');
       closeSetup();
       scheduleEpg();
     });
@@ -450,6 +458,7 @@
   $('nav-search').addEventListener('click', openSearch);
   $('close-search').addEventListener('click', closeSearch);
   $('close-details').addEventListener('click', closeDetails);
+  $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); });
   $('details-play').addEventListener('click', function () { var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
   $('details-trailer').addEventListener('click', function () {
     var details = sourceDetails[detailsIndex] || {}; if (!details.trailer) return;

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src https: http: blob:; connect-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https: http:; media-src https: http: blob:; connect-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>LG Stream</title>
   <link rel="stylesheet" href="style.css">
   <script defer src="core.js"></script>
@@ -12,9 +12,10 @@
   <script defer src="app.js"></script>
 </head>
 <body>
+  <div id="launch-splash" class="launch-splash" aria-hidden="true"><img src="assets/launch-brand.png" alt=""><span class="launch-light"></span></div>
   <div class="shell">
     <header>
-      <div class="brand" dir="ltr"><span class="brand-mark" aria-hidden="true">L</span> LG Stream <span class="tag">تجربة البث</span></div>
+      <div class="brand" dir="ltr"><img class="brand-mark" src="icon.png" alt=""> LG Stream <span class="tag">تجربة البث</span></div>
       <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="speed-button" type="button" aria-expanded="false">اختبار الاتصال</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
     </header>
     <main>
@@ -49,7 +50,7 @@
     <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
   </section>
   <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
-    <div class="setup-card details-card"><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button" hidden>مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div>
+    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button" hidden>مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">

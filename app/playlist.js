@@ -4,9 +4,9 @@
   else root.LGPlaylist = api;
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var MAX_BYTES = 64000000;
-  var MAX_ENTRIES = 5000;
-  var TIMEOUT_MS = 30000;
+  var MAX_BYTES = 256000000;
+  var MAX_ENTRIES = 100000;
+  var TIMEOUT_MS = 120000;
   var EPG_MAX_BYTES = 4000000;
 
   function safeText(value, fallback, limit) {
@@ -21,19 +21,12 @@
     } catch (_) { return null; }
   }
 
-  function sourceType(url) {
-    if (/\/series\//i.test(url)) return 'series';
-    if (/\/movie\//i.test(url)) return 'movies';
-    return 'tv';
-  }
-
   function createM3UParser(baseUrl) {
     var entries = [];
     var metadata = null;
     var truncated = false;
+    var truncatedReason = null;
     var epgUrl = null;
-    var counts = { tv: 0, movies: 0, series: 0 };
-    var limits = { tv: 3000, movies: 1000, series: 1000 };
     function push(rawLine) {
       var line = String(rawLine || '').trim();
       if (!line) return;
@@ -47,6 +40,7 @@
         var group = /group-title="([^"]*)"/i.exec(line);
         var tvgName = /tvg-name="([^"]*)"/i.exec(line);
         var tvgId = /tvg-id="([^"]*)"/i.exec(line);
+        var poster = /(?:tvg-logo|poster)="([^"]*)"/i.exec(line);
         var year = /(?:year|release-date|releasedate)="([^"]*)"/i.exec(line);
         var description = /(?:description|plot)="([^"]*)"/i.exec(line);
         var trailer = /(?:trailer|trailer-url)="([^"]*)"/i.exec(line);
@@ -54,6 +48,7 @@
           name: safeText(comma >= 0 ? line.slice(comma + 1) : (tvgName && tvgName[1]), 'قناة', 120),
           group: safeText(group && group[1], '', 80),
           id: safeText(tvgId && tvgId[1], '', 160),
+          poster: resolveHttpUrl(poster && poster[1]),
           year: safeText(year && year[1], '', 24),
           description: safeText(description && description[1], '', 1200),
           trailer: resolveHttpUrl(trailer && trailer[1])
@@ -63,13 +58,11 @@
       if (line.charAt(0) === '#') return;
       var url = resolveHttpUrl(line, baseUrl);
       if (!url) { metadata = null; return; }
-      var type = sourceType(url);
-      if (entries.length >= MAX_ENTRIES || counts[type] >= limits[type]) { truncated = true; metadata = null; return; }
-      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', year: metadata ? metadata.year : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
-      counts[type] += 1;
+      if (entries.length >= MAX_ENTRIES) { truncated = true; truncatedReason = 'entries'; metadata = null; return; }
+      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', poster: metadata ? metadata.poster : null, year: metadata ? metadata.year : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
       metadata = null;
     }
-    return { push: push, truncate: function () { truncated = true; }, result: function () { return { entries: entries, truncated: truncated, epgUrl: epgUrl }; } };
+    return { push: push, truncate: function (reason) { truncated = true; truncatedReason = reason; }, result: function () { return { entries: entries, truncated: truncated, truncatedReason: truncatedReason, epgUrl: epgUrl }; } };
   }
 
   function parseM3U(text, baseUrl) {
@@ -146,7 +139,6 @@
         var decoder = new Decoder('utf-8');
         var parser = createM3UParser(url); entry.parser = parser;
         var pending = '';
-        var reachedLimit = false;
         while (!entry.done) {
           var chunk = await entry.reader.read();
           if (entry.done) return;
@@ -157,12 +149,11 @@
           var lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/);
           pending = lines.pop() || '';
           lines.forEach(parser.push);
-          if (value.byteLength < chunk.value.byteLength || entry.bytes === MAX_BYTES) { reachedLimit = true; break; }
+          if (value.byteLength < chunk.value.byteLength || entry.bytes >= MAX_BYTES) { parser.truncate('bytes'); break; }
         }
         pending += decoder.decode(); if (pending) parser.push(pending);
-        if (reachedLimit) parser.truncate();
         var parsed = parser.result();
-        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: reachedLimit || parsed.truncated, epgUrl: parsed.epgUrl } : { state: 'empty' });
+        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: parsed.truncated, truncatedReason: parsed.truncatedReason, epgUrl: parsed.epgUrl } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
 
@@ -179,7 +170,7 @@
           active = entry;
           entry.timer = timers.setTimeout(function () {
             var partial = entry.parser && entry.parser.result();
-            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, epgUrl: partial.epgUrl } : { state: 'timeout' });
+            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout', epgUrl: partial.epgUrl } : { state: 'timeout' });
           }, TIMEOUT_MS);
           load(entry, url);
         });

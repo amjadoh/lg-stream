@@ -25,7 +25,9 @@ async function main() {
     let externalRequests = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
-      if (new URL(route.request().url()).origin === 'http://127.0.0.1:4173' && route.request().resourceType() !== 'media') return route.continue();
+      const requestUrl = new URL(route.request().url());
+      if (requestUrl.origin === 'http://127.0.0.1:4173' && route.request().resourceType() !== 'media') return route.continue();
+      if (requestUrl.hostname === 'images.example.test' && route.request().resourceType() === 'image') return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') });
       externalRequests++;
       return route.abort();
     });
@@ -70,7 +72,7 @@ async function main() {
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 80; index++) {
             const group = index === 64 ? 'قنوات أفلام' : index > 72 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
-            const details = index === 65 ? ' year="2024" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4"' : '';
+            const details = index === 65 ? ' year="2024" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4" tvg-logo="https://images.example.test/65.png"' : '';
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
             lines.push(`https://media.example.test/${index > 72 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
@@ -96,6 +98,13 @@ async function main() {
     });
     await page.goto('http://127.0.0.1:4173');
     await mkdir(path.join(root, 'artifacts'), { recursive: true });
+    assert.equal(await page.locator('#launch-splash').isVisible(), true, 'Launch identity appears once on initial application load');
+    await page.waitForTimeout(650);
+    assert.ok(await page.locator('#launch-splash img').evaluate(image => image.complete && image.naturalWidth > 0), 'Launch identity asset must load');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-launch-1080.png') });
+    await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.equal(await page.locator('#launch-splash').count(), 0, 'Returning inside the same session must not replay the launch identity');
     async function insideViewport(selector) {
       const box = await page.locator(selector).boundingBox();
       const viewport = page.viewportSize();
@@ -266,6 +275,7 @@ async function main() {
     await page.locator('.primary-button[data-section="movies"]').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
+    assert.equal(await page.locator('#movie-grid .movie-poster').count(), 1, 'Only visible content posters are requested');
     await page.locator('#next-movie-page').click();
     assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '68');
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true);
@@ -276,6 +286,7 @@ async function main() {
     assert.match(await page.locator('#details-year').innerText(), /2024/);
     assert.match(await page.locator('#details-description').innerText(), /وصف تجريبي/);
     assert.equal(await page.locator('#details-trailer').isVisible(), true);
+    assert.equal(await page.locator('#details-poster').isVisible(), true);
     await page.locator('#details-play').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
     await page.keyboard.press('Escape');

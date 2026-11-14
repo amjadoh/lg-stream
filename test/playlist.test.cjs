@@ -12,18 +12,18 @@ https://media.example/movie.m3u8?token=private
 #EXTINF:-1,Bad
 file:///private`, 'https://provider.example/get.php?token=private');
   assert.deepEqual(parsed, { entries: [
-    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts', year: '', description: '', trailer: null },
-    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private', year: '', description: '', trailer: null }
-  ], truncated: false, epgUrl: 'https://provider.example/epg.xml' });
+    { name: 'Arabic News', group: 'News', id: 'news.1', url: 'https://provider.example/live/101.ts', poster: null, year: '', description: '', trailer: null },
+    { name: 'Movie One', group: 'Movies', id: '', url: 'https://media.example/movie.m3u8?token=private', poster: null, year: '', description: '', trailer: null }
+  ], truncated: false, truncatedReason: null, epgUrl: 'https://provider.example/epg.xml' });
 });
 
-test('keeps scanning after the live quota to find real movie and series paths', () => {
+test('keeps every live item and finds real movie and series paths afterward', () => {
   const lines = ['#EXTM3U'];
   for (let index = 0; index < 3001; index++) lines.push(`#EXTINF:-1 group-title="أفلام مباشرة",بث ${index}\nhttps://media.example/live/${index}.ts`);
   lines.push('#EXTINF:-1 group-title="أفلام VOD",فيلم حقيقي\nhttps://media.example/movie/u/p/1.mp4');
   lines.push('#EXTINF:-1 group-title="مسلسلات VOD",حلقة حقيقية\nhttps://media.example/series/u/p/2.mp4');
   const parsed = parseM3U(lines.join('\n'), 'https://provider.example/list.m3u');
-  assert.equal(parsed.entries.filter(entry => entry.url.includes('/live/')).length, 3000);
+  assert.equal(parsed.entries.filter(entry => entry.url.includes('/live/')).length, 3001);
   assert.equal(parsed.entries.some(entry => entry.url.includes('/movie/') && entry.name === 'فيلم حقيقي'), true);
   assert.equal(parsed.entries.some(entry => entry.url.includes('/series/') && entry.name === 'حلقة حقيقية'), true);
 });
@@ -72,26 +72,15 @@ test('cancels pending loads and times out stalled playlists', async () => {
   assert.equal(signal.aborted, true);
 });
 
-test('reads a bounded prefix of a large playlist instead of rejecting it', async () => {
-  const first = new TextEncoder().encode('#EXTM3U\n#EXTINF:-1,قناة اختبار\nhttps://stream.example/live.ts\n');
-  const padding = new Uint8Array(MAX_BYTES - first.byteLength);
-  padding.fill(35);
-  const overflow = new Uint8Array(32);
-  let cancelled = false;
-  const body = { getReader: () => {
-    const chunks = [first, padding, overflow];
-    let index = 0;
-    return {
-      read: async () => index < chunks.length ? { done: false, value: chunks[index++] } : { done: true },
-      cancel: () => { cancelled = true; return Promise.resolve(); }
-    };
-  } };
-  const loader = createLoader({ fetch: async () => ({
-    ok: true, headers: { get: () => String(MAX_BYTES * 4) }, body
-  }) });
+test('streams a catalogue beyond the former 5000-entry ceiling and keeps its last item', async () => {
+  const lines = ['#EXTM3U'];
+  for (let index = 0; index < 6001; index++) lines.push(`#EXTINF:-1 group-title="مجموعة ${Math.floor(index / 100)}",قناة ${index}\nhttps://stream.example/live/${index}.ts`);
+  lines.push('#EXTINF:-1 group-title="آخر المسلسلات",آخر حلقة\nhttps://stream.example/series/u/p/999.mp4');
+  const body = new TextEncoder().encode(lines.join('\n'));
+  const loader = createLoader({ fetch: async () => ({ ok: true, headers: { get: () => String(body.byteLength) }, body: controlledStream([body]) }) });
   const result = await loader.start('https://provider.example/large.m3u');
   assert.equal(result.state, 'complete');
-  assert.equal(result.entries[0].name, 'قناة اختبار');
-  assert.equal(result.truncated, true);
-  assert.equal(cancelled, true);
+  assert.equal(result.entries.length, 6002);
+  assert.equal(result.entries.at(-1).name, 'آخر حلقة');
+  assert.equal(result.truncated, false);
 });
