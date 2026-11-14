@@ -4,9 +4,7 @@
   else root.LGPlaylist = api;
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var MAX_BYTES = 256000000;
-  var MAX_ENTRIES = 500000;
-  var TIMEOUT_MS = 120000;
+  var TIMEOUT_MS = 30000;
 
   function safeText(value, fallback, limit) {
     var text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
@@ -57,7 +55,6 @@
       if (line.charAt(0) === '#') return;
       var url = resolveHttpUrl(line, baseUrl);
       if (!url) { metadata = null; return; }
-      if (entries.length >= MAX_ENTRIES) { truncated = true; truncatedReason = 'entries'; metadata = null; return; }
       entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', poster: metadata ? metadata.poster : null, year: metadata ? metadata.year : '', rating: metadata ? metadata.rating : '', added: metadata ? metadata.added : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
       metadata = null;
     }
@@ -94,6 +91,13 @@
     }
 
     function cancel() { if (active) finish(active, { state: 'cancelled' }); }
+    function armTimeout(entry) {
+      timers.clearTimeout(entry.timer);
+      entry.timer = timers.setTimeout(function () {
+        var partial = entry.parser && entry.parser.result();
+        finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout' } : { state: 'timeout' });
+      }, TIMEOUT_MS);
+    }
 
     async function load(entry, url) {
       try {
@@ -118,13 +122,12 @@
           var chunk = await entry.reader.read();
           if (entry.done) return;
           if (chunk.done) break;
-          var remaining = MAX_BYTES - entry.bytes;
-          var value = chunk.value.byteLength > remaining ? chunk.value.slice(0, remaining) : chunk.value;
+          var value = chunk.value;
           entry.bytes += value.byteLength;
+          armTimeout(entry);
           var lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/);
           pending = lines.pop() || '';
           lines.forEach(parser.push);
-          if (value.byteLength < chunk.value.byteLength || entry.bytes >= MAX_BYTES) { parser.truncate('bytes'); break; }
         }
         pending += decoder.decode(); if (pending) parser.push(pending);
         var parsed = parser.result();
@@ -143,10 +146,7 @@
         return new Promise(function (resolve) {
           var entry = { controller: controller, reader: null, parser: null, timer: null, bytes: 0, done: false, resolve: resolve };
           active = entry;
-          entry.timer = timers.setTimeout(function () {
-            var partial = entry.parser && entry.parser.result();
-            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout' } : { state: 'timeout' });
-          }, TIMEOUT_MS);
+          armTimeout(entry);
           load(entry, url);
         });
       },
@@ -154,5 +154,5 @@
     };
   }
 
-  return { createLoader: createLoader, parseM3U: parseM3U, MAX_BYTES: MAX_BYTES, MAX_ENTRIES: MAX_ENTRIES, TIMEOUT_MS: TIMEOUT_MS };
+  return { createLoader: createLoader, parseM3U: parseM3U, TIMEOUT_MS: TIMEOUT_MS };
 }));
