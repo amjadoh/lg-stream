@@ -23,12 +23,11 @@ async function main() {
     page.setDefaultTimeout(5000);
     const errors = [];
     let externalRequests = 0;
-    let posterRequests = 0;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
       const requestUrl = new URL(route.request().url());
       if (requestUrl.origin === 'http://127.0.0.1:4173' && route.request().resourceType() !== 'media') return route.continue();
-      if (requestUrl.hostname === 'images.example.test' && route.request().resourceType() === 'image') { posterRequests++; return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }); }
+      if (requestUrl.hostname === 'images.example.test' && route.request().resourceType() === 'image') return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') });
       externalRequests++;
       return route.abort();
     });
@@ -76,11 +75,11 @@ async function main() {
           if (String(url).includes('/stall')) return new Promise(() => {});
           const lines = ['#EXTM3U'];
           for (let index = 1; index <= 120; index++) {
-            const group = index === 64 ? 'قنوات أفلام' : index > 104 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
+            const group = index === 64 ? 'قنوات أفلام' : index > 106 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
             const metadata = index === 65 ? ' year="2024" rating="8.4" added="1731542400" description="وصف تجريبي من المزود" trailer="https://media.example.test/trailer/65.mp4"' : index === 66 ? ' year="2022" rating="7.1" added="1700000000"' : '';
-            const details = metadata + (index > 64 && index <= 104 ? ` tvg-logo="https://images.example.test/${index}.png"` : '');
+            const details = metadata + (index > 64 && index <= 106 ? ` tvg-logo="https://images.example.test/${index}.png"` : '');
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
-            lines.push(`https://media.example.test/${index > 104 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
+            lines.push(`https://media.example.test/${index > 106 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
@@ -300,8 +299,9 @@ async function main() {
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 24);
     assert.equal(await page.locator('#movie-grid .movie-poster').count(), 24);
-    await page.waitForTimeout(50);
-    assert.ok(posterRequests > 0 && posterRequests < 24, 'Only posters inside the visible viewport are requested');
+    await page.waitForFunction(() => document.querySelectorAll('#movie-grid .movie-poster[src]').length > 0);
+    const assignedPosters = await page.locator('#movie-grid .movie-poster[src]').count();
+    assert.ok(assignedPosters > 0 && assignedPosters < 24, 'Only posters inside the visible viewport receive a source');
     assert.equal(await page.locator('#movie-paging').count(), 0, 'VOD scrolls without previous/next controls');
     await page.locator('#movie-grid .movie-card').last().focus();
     await page.keyboard.press('ArrowDown');
@@ -310,6 +310,10 @@ async function main() {
     await page.locator('#movie-browser').evaluate(browser => { browser.scrollTop = browser.scrollHeight; browser.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })); });
     assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '76', 'Magic Remote wheel advances the virtual VOD window');
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Wheel keeps focus inside the VOD cards');
+    await page.locator('#movie-browser').evaluate(browser => { browser.scrollTop = browser.scrollHeight; browser.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, bubbles: true, cancelable: true })); });
+    await page.locator('#movie-grid [data-index="102"]').focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '105', 'ArrowDown reaches the final partial VOD row');
     await page.locator('#sort-button').click();
     assert.equal(await page.locator('#sort-menu [data-sort="year"]').isDisabled(), false);
     await page.locator('#sort-menu [data-sort="year"]').click();
@@ -352,7 +356,7 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="series"]').click();
     await page.locator('#groups [data-group="مسلسلات VOD"]').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 16);
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 14);
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');

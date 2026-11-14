@@ -5,9 +5,6 @@
   var catalogStore = window.LGCatalogStore.createStore();
   var $ = function (id) { return document.getElementById(id); };
   var sources = [];
-  var sourceNames = [];
-  var sourceGroups = [];
-  var sourceDetails = [];
   var activePlaylistUrl = null;
   var activeCatalogRevision = null;
   var favorites = {};
@@ -41,12 +38,20 @@
   var playlistLoader = playlistApi.createLoader();
   var playlistRevision = 0;
   var playlistRunning = false;
+  var playlistSaving = false;
   var pendingViewState = null;
   var VIEW_KEY = 'lg-stream-view-v1';
   var sourceGeneration = 0;
   var posterFrame = null;
   var viewTimer = null;
   var unloading = false;
+  var catalogViewRevision = 0;
+  var favoritesRevision = 0;
+  var visibleCacheKey = '';
+  var visibleCache = [];
+  var groupsCacheKey = '';
+  var groupsCache = [];
+  var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var inputs = [$('source-1'), $('source-2'), $('source-3')];
   var labels = {
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
@@ -58,22 +63,24 @@
   $('launch-splash').addEventListener('animationend', function (event) { if (event.animationName === 'launchExit') finishLaunch(); });
   setTimeout(finishLaunch, 1900);
   function entrySection(index) {
-    var url = sources[index] || '';
+    var url = sources[index] && sources[index].url || '';
     if (/\/series\//i.test(url)) return 'series';
     if (/\/movie\//i.test(url)) return 'movies';
     return 'tv';
   }
   function visibleIndexes() {
+    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection, activeGroup, contentSort].join('\u0001');
+    if (cacheKey === visibleCacheKey) return visibleCache;
     var group = activeGroup;
     var indexes = sources.map(function (_, index) { return index; }).filter(function (index) {
       if (activeSection === 'favorites' ? !favorites[index] : entrySection(index) !== activeSection) return false;
-      if (group && sourceGroups[index] !== group) return false;
+      if (group && sources[index].group !== group) return false;
       return true;
     });
     if ((activeSection === 'movies' || activeSection === 'series') && contentSort !== 'provider') {
       indexes.sort(function (left, right) {
-        var a = sourceDetails[left] || {}; var b = sourceDetails[right] || {}; var av; var bv;
-        if (contentSort === 'alpha') return (sourceNames[left] || '').localeCompare(sourceNames[right] || '', 'ar') || left - right;
+        var a = sources[left] || {}; var b = sources[right] || {}; var av; var bv;
+        if (contentSort === 'alpha') return (nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '')) || left - right;
         if (contentSort === 'year') { av = Number(a.year) || null; bv = Number(b.year) || null; }
         if (contentSort === 'rating') { av = Number(a.rating) || null; bv = Number(b.rating) || null; }
         if (contentSort === 'added') { av = Number(a.added) || Date.parse(a.added) || null; bv = Number(b.added) || Date.parse(b.added) || null; }
@@ -82,8 +89,9 @@
         return bv - av || left - right;
       });
     }
-    return indexes;
+    visibleCacheKey = cacheKey; visibleCache = indexes; return indexes;
   }
+  function contentMaxStart(length) { return Math.max(0, Math.ceil(Math.max(0, length - contentWindowSize) / 4) * 4); }
   function setPrimary(open) {
     document.querySelector('.library-panel').classList.toggle('primary-open', open);
   }
@@ -96,15 +104,17 @@
     if (query.length < 2) { $('search-status').textContent = 'اكتب حرفين على الأقل.'; return; }
     var sections = [['tv', 'البث المباشر'], ['movies', 'الأفلام'], ['series', 'المسلسلات']]; var total = 0;
     sections.forEach(function (section) {
-      var matches = sources.map(function (_, index) { return index; }).filter(function (index) {
-        return entrySection(index) === section[0] && (sourceNames[index] || '').toLocaleLowerCase().indexOf(query) >= 0;
+      var matches = []; var count = 0;
+      sources.forEach(function (entry, index) {
+        if (entrySection(index) !== section[0] || (entry.name || '').toLocaleLowerCase().indexOf(query) < 0) return;
+        count += 1; if (matches.length < 12) matches.push(index);
       });
-      total += matches.length;
+      total += count;
       var box = document.createElement('section'); box.className = 'search-section';
-      var title = document.createElement('h3'); title.textContent = section[1] + ' (' + matches.length + ')'; box.appendChild(title);
-      matches.slice(0, 12).forEach(function (index) {
-        var button = document.createElement('button'); button.type = 'button'; button.textContent = sourceNames[index] || 'عنصر';
-        button.addEventListener('click', function () { closeSearch(); activeSection = section[0]; activeGroup = sourceGroups[index] || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
+      var title = document.createElement('h3'); title.textContent = section[1] + ' (' + count + ')'; box.appendChild(title);
+      matches.forEach(function (index) {
+        var button = document.createElement('button'); button.type = 'button'; button.textContent = sources[index].name || 'عنصر';
+        button.addEventListener('click', function () { closeSearch(); activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
       $('search-results').appendChild(box);
@@ -132,11 +142,8 @@
     } catch (_) { return null; }
   }
   function applyCatalog(entries, source, revision, restored) {
-    sources = entries.map(function (entry) { return entry.url; });
-    sourceNames = entries.map(function (entry) { return entry.name; });
-    sourceGroups = entries.map(function (entry) { return entry.group || ''; });
-    sourceDetails = entries.map(function (entry) { return { poster: entry.poster || null, year: entry.year || '', rating: entry.rating || '', added: entry.added || '', description: entry.description || '', trailer: entry.trailer || null }; });
-    activePlaylistUrl = source; activeCatalogRevision = revision; sourceMode = 'playlist'; favorites = {}; playingIndex = null;
+    sources = entries;
+    catalogViewRevision += 1; favoritesRevision += 1; activePlaylistUrl = source; activeCatalogRevision = revision; sourceMode = 'playlist'; favorites = {}; playingIndex = null;
     var state = readViewState(revision);
     activeSection = state && ['tv', 'movies', 'series', 'favorites'].indexOf(state.section) >= 0 ? state.section : 'tv';
     if (state && Array.isArray(state.favorites)) state.favorites.forEach(function (index) { if (sources[index]) favorites[index] = true; });
@@ -149,11 +156,13 @@
     if (restored) $('status').textContent = 'استُعيدت القائمة المحفوظة — اختر ما تريد تشغيله';
   }
   function sectionGroups() {
+    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection].join('\u0001');
+    if (cacheKey === groupsCacheKey) return groupsCache;
     var groups = [];
-    sourceGroups.forEach(function (group, index) {
+    sources.forEach(function (entry, index) { var group = entry.group || '';
       if (group && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection) && groups.indexOf(group) < 0) groups.push(group);
     });
-    return groups;
+    groupsCacheKey = cacheKey; groupsCache = groups; return groups;
   }
   function renderGroups() {
     var groups = sectionGroups();
@@ -195,12 +204,12 @@
     if (!cards) return;
     $('movie-title').textContent = activeGroup || (activeSection === 'movies' ? 'الأفلام' : 'المسلسلات');
     $('movie-grid').replaceChildren();
-    contentWindowStart = Math.max(0, Math.min(contentWindowStart, Math.max(0, indexes.length - contentWindowSize)));
+    contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
     indexes.slice(contentWindowStart, contentWindowStart + contentWindowSize).forEach(function (index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
-      var details = sourceDetails[index] || {};
+      var details = sources[index] || {};
       if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
-      var name = document.createElement('span'); name.textContent = sourceNames[index] || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
+      var name = document.createElement('span'); name.textContent = sources[index].name || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); saveViewState(false); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       card.addEventListener('click', function () { openDetails(index); }); $('movie-grid').appendChild(card);
     });
@@ -209,15 +218,15 @@
   function renderSortMenu(indexes) {
     Array.prototype.forEach.call($('sort-menu').querySelectorAll('button'), function (button) {
       var sort = button.dataset.sort; var field = sort === 'year' ? 'year' : sort === 'rating' ? 'rating' : sort === 'added' ? 'added' : null;
-      button.disabled = !!field && !indexes.some(function (index) { return sourceDetails[index] && sourceDetails[index][field]; });
+      button.disabled = !!field && !indexes.some(function (index) { return sources[index] && sources[index][field]; });
       button.classList.toggle('active', sort === contentSort); button.setAttribute('aria-pressed', String(sort === contentSort));
     });
     $('sort-button').textContent = 'ترتيب: ' + ({ provider: 'المزوّد', alpha: 'أبجدي', year: 'السنة', rating: 'التقييم', added: 'تاريخ الإضافة' }[contentSort] || 'المزوّد');
   }
   function closeDetails() { detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
   function openDetails(index) {
-    selected = index; detailsIndex = index; var details = sourceDetails[index] || {};
-    $('details-title').textContent = sourceNames[index] || (activeSection === 'series' ? 'مسلسل' : 'فيلم');
+    selected = index; detailsIndex = index; var details = sources[index] || {};
+    $('details-title').textContent = details.name || (activeSection === 'series' ? 'مسلسل' : 'فيلم');
     $('details-year').textContent = details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر';
     $('details-description').textContent = details.description || 'الوصف غير متوفر في بيانات القائمة.';
     $('details-poster').hidden = !details.poster; if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
@@ -294,7 +303,7 @@
       var number = document.createElement('span');
       number.className = 'channel-number'; number.textContent = String(index + 1);
       var label = document.createElement('span');
-      label.className = 'channel-label'; label.textContent = sourceNames[index] || 'المصدر ' + (index + 1);
+      label.className = 'channel-label'; label.textContent = sources[index].name || 'المصدر ' + (index + 1);
       button.appendChild(number); button.appendChild(label);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest' }); });
@@ -302,11 +311,12 @@
       var favorite = document.createElement('button');
       favorite.type = 'button'; favorite.className = 'favorite-button'; favorite.dataset.favoriteIndex = index;
       favorite.textContent = favorites[index] ? '★' : '☆'; favorite.setAttribute('aria-pressed', String(!!favorites[index]));
-      favorite.setAttribute('aria-label', (favorites[index] ? 'إزالة من المفضلة: ' : 'إضافة إلى المفضلة: ') + (sourceNames[index] || 'القناة'));
+      favorite.setAttribute('aria-label', (favorites[index] ? 'إزالة من المفضلة: ' : 'إضافة إلى المفضلة: ') + (sources[index].name || 'القناة'));
       favorite.addEventListener('click', function (event) {
         var ownIndex = Number(event.currentTarget.dataset.favoriteIndex);
         favorites[ownIndex] = !favorites[ownIndex];
         if (!favorites[ownIndex]) delete favorites[ownIndex];
+        favoritesRevision += 1;
         saveViewState(false);
         renderGroups(); renderChannels();
         var target = $('channels').querySelector('[data-favorite-index="' + ownIndex + '"]');
@@ -328,17 +338,19 @@
   function focusSelected() {
     if (activeSection !== 'movies' && activeSection !== 'series') { focusChannel(selected); return; }
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected);
-    if (position >= 0 && (position < contentWindowStart || position >= contentWindowStart + contentWindowSize)) contentWindowStart = Math.max(0, position - 4);
+    if (position >= 0 && (position < contentWindowStart || position >= contentWindowStart + contentWindowSize)) contentWindowStart = Math.floor(Math.max(0, position - 4) / 4) * 4;
     renderChannels();
     var card = $('movie-grid').querySelector('[data-index="' + selected + '"]') || $('movie-grid').querySelector('.movie-card');
     if (card) card.focus(); else if ($('groups button')) $('groups button').focus();
   }
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
-    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = position + step;
+    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = step > 0 ? Math.min(indexes.length - 1, position + step) : Math.max(0, position + step);
     if (next < 0 || next >= indexes.length) return false;
+    if (next === position) return false;
     if (next >= contentWindowStart && next < contentWindowStart + contentWindowSize) return false;
-    contentWindowStart = Math.max(0, next - (step > 0 ? 4 : contentWindowSize - 8)); renderChannels();
+    contentWindowStart = step > 0 ? Math.floor(Math.max(0, next - (contentWindowSize - 4)) / 4) * 4 : Math.floor(next / 4) * 4;
+    contentWindowStart = Math.min(contentMaxStart(indexes.length), contentWindowStart); renderChannels();
     var card = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (card) card.focus(); return true;
   }
   function moveChannelWindow(step) {
@@ -359,9 +371,9 @@
     playingIndex = index;
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
-    $('channel-title').textContent = sourceNames[index] || 'المصدر ' + (index + 1);
+    $('channel-title').textContent = sources[index].name || 'المصدر ' + (index + 1);
     if (!watchMode && activeSection === 'tv') focusChannel(index);
-    player.start(sources[index], index + 1, intent.requestedAt);
+    player.start(sources[index].url, index + 1, intent.requestedAt);
     if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
@@ -409,17 +421,23 @@
   $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function playlistControls(running) {
     playlistRunning = running;
+    if (!running) playlistSaving = false;
     $('load-playlist').disabled = running;
     $('cancel-playlist').disabled = !running;
     $('playlist-url').disabled = running;
     $('refresh-saved').disabled = running;
+    inputs.forEach(function (input) { input.disabled = running; });
+    $('source-form').querySelector('button[type="submit"]').disabled = running;
+    $('clear-sources').disabled = running;
   }
   function cancelPlaylist() {
+    if (playlistSaving && !catalogStore.cancel()) { $('playlist-status').textContent = 'جارٍ إتمام الحفظ المحلي…'; return false; }
     playlistRevision += 1;
     playlistLoader.cancel();
-    catalogStore.cancel();
+    if (!playlistSaving) catalogStore.cancel();
     if (playlistRunning) $('playlist-status').textContent = 'أُلغي تحميل القائمة.';
     playlistControls(false);
+    return true;
   }
   function openSetup() {
     scheduler.cancel();
@@ -427,7 +445,7 @@
     diagnostics.hidden = true;
     $('diagnostics-button').setAttribute('aria-expanded', 'false');
     $('playlist-url').value = '';
-    inputs.forEach(function (input, index) { input.value = sourceMode === 'manual' ? (sources[index] || '') : ''; });
+    inputs.forEach(function (input, index) { input.value = sourceMode === 'manual' && sources[index] ? sources[index].url : ''; });
     $('playlist-status').textContent = sourceMode === 'playlist' ? 'القائمة الحالية محفوظة محليًا. يمكنك تحديثها أو لصق رابط جديد.' : '';
     $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' : 'لا توجد قائمة محفوظة.';
     $('refresh-saved').hidden = !activePlaylistUrl;
@@ -440,7 +458,7 @@
     $('source-form').focus();
   }
   function closeSetup() {
-    cancelPlaylist();
+    if (!cancelPlaylist()) return;
     setup.hidden = true;
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
@@ -453,6 +471,7 @@
   }
   $('source-form').addEventListener('submit', function (event) {
     event.preventDefault();
+    if (playlistRunning) return;
     var result = [];
     for (var index = 0; index < inputs.length; index += 1) {
       if (!inputs[index].value.trim()) continue;
@@ -464,8 +483,8 @@
       result.push(url);
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
-    sourceGeneration += 1; stop(); sources = result; sourceNames = result.map(function (_, index) { return 'المصدر ' + (index + 1); });
-    sourceGroups = result.map(function () { return ''; }); sourceDetails = result.map(function () { return {}; }); activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
+    sourceGeneration += 1; catalogViewRevision += 1; favoritesRevision += 1; stop(); sources = result.map(function (url, index) { return { url: url, name: 'المصدر ' + (index + 1), group: '' }; });
+    activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
     renderPrimary(); renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
@@ -490,6 +509,7 @@
         $('load-playlist').focus(); return;
       }
       $('playlist-status').textContent = 'اكتمل التنزيل، جارٍ حفظ القائمة محليًا…';
+      playlistSaving = true;
       $('cancel-playlist').disabled = false;
       catalogStore.save(url, result.entries).then(function (saved) {
         if (revision !== playlistRevision || setup.hidden || document.hidden) return;
@@ -511,12 +531,13 @@
   $('refresh-saved').addEventListener('click', function () { if (activePlaylistUrl) loadPlaylist(activePlaylistUrl); });
   $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
-    sourceGeneration += 1; cancelPlaylist(); stop(); $('clear-sources').disabled = true; $('playlist-status').textContent = 'جارٍ مسح القائمة المحفوظة…';
+    if (playlistRunning) return;
+    sourceGeneration += 1; if (!cancelPlaylist()) return; stop(); $('clear-sources').disabled = true; $('playlist-status').textContent = 'جارٍ مسح القائمة المحفوظة…';
     catalogStore.clear().then(function (result) {
       $('clear-sources').disabled = false;
       if (result.state !== 'complete') { $('playlist-status').textContent = 'تعذر مسح القائمة المحفوظة. لم نغيّرها.'; return; }
       try { localStorage.removeItem(VIEW_KEY); } catch (_) {}
-      sources = []; sourceNames = []; sourceGroups = []; sourceDetails = []; activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
+      catalogViewRevision += 1; favoritesRevision += 1; sources = []; activePlaylistUrl = null; activeCatalogRevision = null; favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
       $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
       $('saved-catalog-status').textContent = 'لا توجد قائمة محفوظة.'; $('refresh-saved').hidden = true; $('playlist-status').textContent = 'مُسحت القائمة المحفوظة.'; $('form-error').textContent = ''; inputs[0].focus();
     });
@@ -529,14 +550,14 @@
   $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); });
   $('details-play').addEventListener('click', function () { var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
   $('details-trailer').addEventListener('click', function () {
-    var index = detailsIndex; var details = sourceDetails[index] || {};
+    var index = detailsIndex; var details = sources[index] || {};
     saveViewState(true);
     if (details.trailer) {
       detailsPanel.hidden = true; detailsIndex = null; playingIndex = null; $('movie-browser').hidden = true; $('empty-state').hidden = true;
       $('channel-title').textContent = 'الإعلان'; player.start(details.trailer, 'trailer', performance.now()); setWatchMode(true); return;
     }
     stop();
-    var query = (sourceNames[index] || '') + (details.year ? ' ' + details.year : '') + ' trailer';
+    var query = (details.name || '') + (details.year ? ' ' + details.year : '') + ' trailer';
     var target = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query.trim());
     if (typeof window.PalmServiceBridge === 'function') {
       try {
@@ -564,7 +585,7 @@
   $('movie-browser').addEventListener('wheel', function (event) {
     if (activeSection !== 'movies' && activeSection !== 'series') return;
     var browser = $('movie-browser'); var indexes = visibleIndexes(); var next = contentWindowStart;
-    if (event.deltaY > 0 && browser.scrollTop + browser.clientHeight >= browser.scrollHeight - 12) next = Math.min(Math.max(0, indexes.length - contentWindowSize), contentWindowStart + 12);
+    if (event.deltaY > 0 && browser.scrollTop + browser.clientHeight >= browser.scrollHeight - 12) next = Math.min(contentMaxStart(indexes.length), contentWindowStart + 12);
     if (event.deltaY < 0 && browser.scrollTop <= 12) next = Math.max(0, contentWindowStart - 12);
     if (next === contentWindowStart) return;
     contentWindowStart = next; selected = indexes[event.deltaY > 0 ? next : Math.min(indexes.length - 1, next + contentWindowSize - 1)] || selected; renderChannels(); browser.scrollTop = event.deltaY > 0 ? 0 : browser.scrollHeight;
@@ -727,7 +748,7 @@
       else window.close();
       return;
     }
-    var dialog = !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
+    var dialog = !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
       if (key === 'Tab') {
         var controls = visibleControls(dialog);
@@ -779,7 +800,7 @@
   window.addEventListener('pageshow', function () { unloading = false; });
   window.addEventListener('pagehide', function () {
     unloading = true; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
-    sources = []; sourceNames = []; sourceGroups = []; sourceDetails = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
+    sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
   var restoreGeneration = sourceGeneration;
