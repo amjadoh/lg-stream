@@ -4,9 +4,9 @@
   else root.LGPlaylist = api;
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
-  var MAX_BYTES = 8000000;
+  var MAX_BYTES = 64000000;
   var MAX_ENTRIES = 5000;
-  var TIMEOUT_MS = 20000;
+  var TIMEOUT_MS = 30000;
   var EPG_MAX_BYTES = 4000000;
 
   function safeText(value, fallback, limit) {
@@ -21,19 +21,26 @@
     } catch (_) { return null; }
   }
 
-  function parseM3U(text, baseUrl) {
-    var lines = String(text || '').split(/\r?\n/);
+  function sourceType(url) {
+    if (/\/series\//i.test(url)) return 'series';
+    if (/\/movie\//i.test(url)) return 'movies';
+    return 'tv';
+  }
+
+  function createM3UParser(baseUrl) {
     var entries = [];
     var metadata = null;
     var truncated = false;
     var epgUrl = null;
-    for (var index = 0; index < lines.length; index += 1) {
-      var line = lines[index].trim();
-      if (!line) continue;
+    var counts = { tv: 0, movies: 0, series: 0 };
+    var limits = { tv: 3000, movies: 1000, series: 1000 };
+    function push(rawLine) {
+      var line = String(rawLine || '').trim();
+      if (!line) return;
       if (line.indexOf('#EXTM3U') === 0) {
         var epg = /(?:x-tvg-url|url-tvg)=["']([^"']+)["']/i.exec(line);
         epgUrl = epg ? resolveHttpUrl(epg[1], baseUrl) : null;
-        continue;
+        return;
       }
       if (line.indexOf('#EXTINF:') === 0) {
         var comma = line.indexOf(',');
@@ -45,16 +52,24 @@
           group: safeText(group && group[1], '', 80),
           id: safeText(tvgId && tvgId[1], '', 160)
         };
-        continue;
+        return;
       }
-      if (line.charAt(0) === '#') continue;
+      if (line.charAt(0) === '#') return;
       var url = resolveHttpUrl(line, baseUrl);
-      if (!url) { metadata = null; continue; }
-      if (entries.length >= MAX_ENTRIES) { truncated = true; break; }
+      if (!url) { metadata = null; return; }
+      var type = sourceType(url);
+      if (entries.length >= MAX_ENTRIES || counts[type] >= limits[type]) { truncated = true; metadata = null; return; }
       entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '' });
+      counts[type] += 1;
       metadata = null;
     }
-    return { entries: entries, truncated: truncated, epgUrl: epgUrl };
+    return { push: push, truncate: function () { truncated = true; }, result: function () { return { entries: entries, truncated: truncated, epgUrl: epgUrl }; } };
+  }
+
+  function parseM3U(text, baseUrl) {
+    var parser = createM3UParser(baseUrl);
+    String(text || '').split(/\r?\n/).forEach(parser.push);
+    return parser.result();
   }
 
   function decodeXml(value) {
@@ -123,25 +138,24 @@
         }
         entry.reader = response.body.getReader();
         var decoder = new Decoder('utf-8');
-        var text = '';
+        var parser = createM3UParser(url); entry.parser = parser;
+        var pending = '';
         var reachedLimit = false;
         while (!entry.done) {
           var chunk = await entry.reader.read();
           if (entry.done) return;
           if (chunk.done) break;
           var remaining = MAX_BYTES - entry.bytes;
-          if (chunk.value.byteLength > remaining) {
-            text += decoder.decode(chunk.value.slice(0, remaining), { stream: true });
-            entry.bytes = MAX_BYTES;
-            reachedLimit = true;
-            break;
-          }
-          entry.bytes += chunk.value.byteLength;
-          text += decoder.decode(chunk.value, { stream: true });
-          if (entry.bytes === MAX_BYTES) { reachedLimit = true; break; }
+          var value = chunk.value.byteLength > remaining ? chunk.value.slice(0, remaining) : chunk.value;
+          entry.bytes += value.byteLength;
+          var lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/);
+          pending = lines.pop() || '';
+          lines.forEach(parser.push);
+          if (value.byteLength < chunk.value.byteLength || entry.bytes === MAX_BYTES) { reachedLimit = true; break; }
         }
-        text += decoder.decode();
-        var parsed = parseM3U(text, url);
+        pending += decoder.decode(); if (pending) parser.push(pending);
+        if (reachedLimit) parser.truncate();
+        var parsed = parser.result();
         finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: reachedLimit || parsed.truncated, epgUrl: parsed.epgUrl } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
@@ -155,9 +169,12 @@
         var controller;
         try { controller = new Abort(); } catch (_) { return Promise.resolve({ state: 'unsupported' }); }
         return new Promise(function (resolve) {
-          var entry = { controller: controller, reader: null, timer: null, bytes: 0, done: false, resolve: resolve };
+          var entry = { controller: controller, reader: null, parser: null, timer: null, bytes: 0, done: false, resolve: resolve };
           active = entry;
-          entry.timer = timers.setTimeout(function () { finish(entry, { state: 'timeout' }); }, TIMEOUT_MS);
+          entry.timer = timers.setTimeout(function () {
+            var partial = entry.parser && entry.parser.result();
+            finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, epgUrl: partial.epgUrl } : { state: 'timeout' });
+          }, TIMEOUT_MS);
           load(entry, url);
         });
       },

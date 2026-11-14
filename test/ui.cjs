@@ -68,10 +68,10 @@ async function main() {
           window.__playlistRequests.push(request);
           options.signal.addEventListener('abort', () => { request.aborted = true; }, { once: true });
           const lines = ['#EXTM3U'];
-          for (let index = 1; index <= 12; index++) {
-            const group = index === 8 ? 'قنوات أفلام' : index > 8 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
+          for (let index = 1; index <= 80; index++) {
+            const group = index === 64 ? 'قنوات أفلام' : index > 72 ? 'مسلسلات VOD' : index > 64 ? 'أفلام VOD' : `مجموعة ${Math.ceil(index / 4)}`;
             lines.push(`#EXTINF:-1 group-title="${group}",قناة ${index}`);
-            lines.push(`https://media.example.test/${index > 8 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
+            lines.push(`https://media.example.test/${index > 72 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
           const bytes = new TextEncoder().encode(lines.join('\n'));
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
@@ -220,11 +220,19 @@ async function main() {
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 1);
     assert.equal(await page.locator('#channels .channel-button').count(), 4);
-    assert.match(await page.locator('#page-label').innerText(), /1 من 2/);
+    assert.match(await page.locator('#page-label').innerText(), /1 من 16/);
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
     assert.equal((await page.locator('body').innerText()).includes('password=secret'), false);
     assert.match(await page.locator('#channels').innerText(), /قناة 1/);
     assert.equal(await page.locator('#groups [data-group="قنوات أفلام"]').count(), 1, 'Live movie channels must stay in TV groups');
+    await page.locator('#groups [data-group="قنوات أفلام"]').focus();
+    const groupBounds = await page.evaluate(() => {
+      const item = document.querySelector('#groups [data-group="قنوات أفلام"]').getBoundingClientRect();
+      const list = document.getElementById('groups').getBoundingClientRect();
+      return { visible: item.top >= list.top - 1 && item.bottom <= list.bottom + 1, scrollTop: document.getElementById('groups').scrollTop };
+    });
+    assert.equal(groupBounds.visible, true, 'Focused group must remain visible inside the scrolling list');
+    assert.ok(groupBounds.scrollTop > 0, 'A long group list must actually scroll');
     await page.locator('#channels .favorite-button').first().click();
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
     await page.locator('#groups .group-button').first().focus();
@@ -239,14 +247,14 @@ async function main() {
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="tv"]').click();
-    await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.locator('#groups [data-group="مجموعة 2"]').focus();
     assert.match(await page.locator('#channels').innerText(), /قناة 5/);
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
-    await page.locator('#channel-search').fill('قناة 6');
+    await page.locator('#channel-search').fill('قناة 17');
     assert.match(await page.locator('#search-results').innerText(), /البث المباشر \(1\)/);
-    assert.match(await page.locator('#search-results').innerText(), /قناة 6/);
+    assert.match(await page.locator('#search-results').innerText(), /قناة 17/);
     await page.locator('#clear-search').click();
     await page.locator('#close-search').click();
     await page.locator('#groups .group-button').first().focus();
@@ -254,8 +262,21 @@ async function main() {
     await page.locator('.primary-button[data-section="movies"]').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
+    await page.locator('#next-movie-page').click();
+    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '68');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true);
+    await page.locator('#previous-movie-page').click();
+    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '64');
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.locator('#stop-button').click();
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Stopping content must restore its visible card');
     assert.equal(await page.locator('.channels-panel').isVisible(), false, 'Movies use groups plus cards without a duplicate channel list');
     assert.equal(await page.locator('.groups-panel').isVisible(), true);
+    await page.locator('#groups .group-button').first().focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.locator('.primary-button[data-section="series"]').click();
+    await page.locator('#groups [data-group="مسلسلات VOD"]').click();
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 4);
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');

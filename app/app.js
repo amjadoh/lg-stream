@@ -55,15 +55,10 @@
       });
     }, 2000);
   }
-  function isMovieGroup(group) { return /movie|film|cinema|vod|أفلام|افلام|سينما/i.test(group || ''); }
-  function isSeriesGroup(group) { return /series|show|مسلسل|مسلسلات/i.test(group || ''); }
   function entrySection(index) {
-    var group = sourceGroups[index] || ''; var url = sources[index] || '';
+    var url = sources[index] || '';
     if (/\/series\//i.test(url)) return 'series';
     if (/\/movie\//i.test(url)) return 'movies';
-    if (/\/live\//i.test(url)) return 'tv';
-    if (isSeriesGroup(group)) return 'series';
-    if (isMovieGroup(group)) return 'movies';
     return 'tv';
   }
   function visibleIndexes() {
@@ -120,6 +115,13 @@
     items.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'group-button' + (item[0] === activeGroup ? ' active' : '');
       button.dataset.group = item[0]; button.textContent = item[1];
+      button.addEventListener('focus', function (event) {
+        event.currentTarget.scrollIntoView({ block: 'nearest' });
+        if (activeGroup === event.currentTarget.dataset.group) return;
+        activeGroup = event.currentTarget.dataset.group; channelPage = 0;
+        Array.prototype.forEach.call($('groups').querySelectorAll('.group-button'), function (own) { own.classList.toggle('active', own === event.currentTarget); });
+        renderChannels();
+      });
       button.addEventListener('click', function (event) {
         activeGroup = event.currentTarget.dataset.group; channelPage = 0; renderGroups(); renderChannels();
         var first = (activeSection === 'movies' || activeSection === 'series') ? $('movie-grid').querySelector('.movie-card') : $('channels').querySelector('.channel-button');
@@ -137,6 +139,7 @@
     indexes.slice(channelPage * pageSize, channelPage * pageSize + pageSize).forEach(function (index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var name = document.createElement('span'); name.textContent = sourceNames[index] || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
+      card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       card.addEventListener('click', function () { activateChannel(index); }); $('movie-grid').appendChild(card);
     });
   }
@@ -215,7 +218,7 @@
       state.textContent = sourceGroups[index] || 'اضغط موافق';
       button.appendChild(number); button.appendChild(label); button.appendChild(state);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
-      button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); });
+      button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest' }); });
       button.addEventListener('click', function (event) { activateChannel(Number(event.currentTarget.dataset.index)); });
       var favorite = document.createElement('button');
       favorite.type = 'button'; favorite.className = 'favorite-button'; favorite.dataset.favoriteIndex = index;
@@ -232,9 +235,13 @@
       row.appendChild(button); row.appendChild(favorite); $('channels').appendChild(row);
     }
     $('channel-paging').hidden = indexes.length <= pageSize;
+    $('movie-paging').hidden = !(activeSection === 'movies' || activeSection === 'series') || indexes.length <= pageSize;
     $('page-label').textContent = (channelPage + 1) + ' من ' + pageCount;
+    $('movie-page-label').textContent = (channelPage + 1) + ' من ' + pageCount;
     $('previous-page').disabled = channelPage === 0;
     $('next-page').disabled = channelPage >= pageCount - 1;
+    $('previous-movie-page').disabled = channelPage === 0;
+    $('next-movie-page').disabled = channelPage >= pageCount - 1;
     updateChannelStates();
   }
   function focusChannel(index) {
@@ -246,6 +253,12 @@
     var button = $('channels').querySelector('[data-index="' + index + '"]');
     if (button) button.focus();
     else $('start-button').focus();
+  }
+  function focusSelected() {
+    if (activeSection !== 'movies' && activeSection !== 'series') { focusChannel(selected); return; }
+    renderChannels();
+    var card = $('movie-grid').querySelector('[data-index="' + selected + '"]') || $('movie-grid').querySelector('.movie-card');
+    if (card) card.focus(); else if ($('groups button')) $('groups button').focus();
   }
   function playChannel(intent) {
     var index = intent.index;
@@ -306,7 +319,7 @@
     $('video-host').dataset.fit = fitModes[fitIndex].value;
     $('fit-button').textContent = 'الصورة: ' + fitModes[fitIndex].label;
   });
-  $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusChannel(selected); } });
+  $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
   function playlistControls(running) {
     playlistRunning = running;
     $('load-playlist').disabled = running;
@@ -340,7 +353,7 @@
     setup.hidden = true;
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
-    if (sources.length) focusChannel(selected); else $('start-button').focus();
+    if (sources.length) focusSelected(); else $('start-button').focus();
   }
   function closeDiagnostics() {
     diagnostics.hidden = true;
@@ -413,6 +426,14 @@
     var indexes = visibleIndexes();
     if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); focusChannel(indexes[channelPage * pageSize]); }
   });
+  $('previous-movie-page').addEventListener('click', function () {
+    var indexes = visibleIndexes();
+    if (channelPage > 0) { channelPage -= 1; renderChannels(); var card = $('movie-grid').querySelector('.movie-card'); if (card) card.focus(); }
+  });
+  $('next-movie-page').addEventListener('click', function () {
+    var indexes = visibleIndexes();
+    if ((channelPage + 1) * pageSize < indexes.length) { channelPage += 1; renderChannels(); var card = $('movie-grid').querySelector('.movie-card'); if (card) card.focus(); }
+  });
   $('channel-search').addEventListener('input', renderSearch);
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
   $('nav-search').addEventListener('click', openSearch);
@@ -438,7 +459,7 @@
   $('close-diagnostics').addEventListener('click', closeDiagnostics);
   $('toggle-button').addEventListener('click', function () { scheduler.cancel(); player.toggle(); });
   $('retry-button').addEventListener('click', function () { if (playingIndex !== null) requestChannel(playingIndex, false, true); });
-  $('stop-button').addEventListener('click', function () { stop(); if (sources.length) focusChannel(selected); else $('start-button').focus(); });
+  $('stop-button').addEventListener('click', function () { stop(); if (sources.length) focusSelected(); else $('start-button').focus(); });
 
   function speedControls(running) {
     speedRunning = running;
@@ -565,8 +586,8 @@
       else if (!searchPanel.hidden) closeSearch();
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
-      else if (watchMode) { setWatchMode(false); focusChannel(selected); }
-      else if (lastState !== 'idle') { stop(); if (sources.length) focusChannel(selected); }
+      else if (watchMode) { setWatchMode(false); focusSelected(); }
+      else if (lastState !== 'idle') { stop(); if (sources.length) focusSelected(); }
       else if (typeof window.webOS !== 'undefined' && window.webOS.platformBack) window.webOS.platformBack();
       else window.close();
       return;
@@ -586,7 +607,7 @@
     }
     if (isSelect || (isInput && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
     if (watchMode && (key === 'Enter' || key === 'Tab' || /^Arrow/.test(key))) {
-      setWatchMode(false); focusChannel(selected); event.preventDefault(); return;
+      setWatchMode(false); focusSelected(); event.preventDefault(); return;
     }
     if ((code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
       var indexes = visibleIndexes();
@@ -594,12 +615,12 @@
       var position = indexes.indexOf(selected);
       if (position < 0) position = 0;
       selected = indexes[(position + (code === 33 || code === 427 || key === 'PageUp' ? 1 : -1) + indexes.length) % indexes.length];
-      if (!watchMode) focusChannel(selected);
+      if (!watchMode) focusSelected();
       requestChannel(selected, true); event.preventDefault(); return;
     }
     if (code === 19) { scheduler.cancel(); player.pause(); event.preventDefault(); return; }
     if (code === 415) { scheduler.cancel(); player.resume(); event.preventDefault(); return; }
-    if (code === 413) { stop(); focusChannel(selected); event.preventDefault(); return; }
+    if (code === 413) { stop(); focusSelected(); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { scheduler.cancel(); player.toggle(); event.preventDefault(); return; }
     if (key === 'ArrowRight' && document.activeElement.closest && document.activeElement.closest('.primary-panel')) {
       setPrimary(false); var activeGroupButton = $('groups').querySelector('.group-button.active') || $('groups button');
@@ -616,7 +637,7 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { cancelSpeed(); stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
-    else if (setup.hidden && diagnostics.hidden) focusChannel(selected);
+    else if (setup.hidden && diagnostics.hidden) focusSelected();
   });
   window.addEventListener('pagehide', function () {
     cancelPlaylist(); cancelEpg(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();

@@ -17,6 +17,17 @@ file:///private`, 'https://provider.example/get.php?token=private');
   ], truncated: false, epgUrl: 'https://provider.example/epg.xml' });
 });
 
+test('keeps scanning after the live quota to find real movie and series paths', () => {
+  const lines = ['#EXTM3U'];
+  for (let index = 0; index < 3001; index++) lines.push(`#EXTINF:-1 group-title="أفلام مباشرة",بث ${index}\nhttps://media.example/live/${index}.ts`);
+  lines.push('#EXTINF:-1 group-title="أفلام VOD",فيلم حقيقي\nhttps://media.example/movie/u/p/1.mp4');
+  lines.push('#EXTINF:-1 group-title="مسلسلات VOD",حلقة حقيقية\nhttps://media.example/series/u/p/2.mp4');
+  const parsed = parseM3U(lines.join('\n'), 'https://provider.example/list.m3u');
+  assert.equal(parsed.entries.filter(entry => entry.url.includes('/live/')).length, 3000);
+  assert.equal(parsed.entries.some(entry => entry.url.includes('/movie/') && entry.name === 'فيلم حقيقي'), true);
+  assert.equal(parsed.entries.some(entry => entry.url.includes('/series/') && entry.name === 'حلقة حقيقية'), true);
+});
+
 test('extracts only current EPG titles for requested channel ids', () => {
   const xml = `<tv><programme start="20261114160000 +0300" stop="20261114180000 +0300" channel="news.1"><title>نشرة &amp; أخبار</title></programme><programme start="20261114180000 +0300" stop="20261114190000 +0300" channel="news.1"><title>لاحقًا</title></programme><programme start="20261114160000 +0300" stop="20261114180000 +0300" channel="other"><title>خاص</title></programme></tv>`;
   assert.deepEqual(parseEpg(xml, ['news.1'], Date.UTC(2026, 10, 14, 14)), { 'news.1': 'نشرة & أخبار' });
