@@ -3,17 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src https: http: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src https: http: blob:; connect-src https://speed.cloudflare.com/__down; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>LG Stream</title>
   <link rel="stylesheet" href="style.css">
   <script defer src="core.js"></script>
+  <script defer src="speed-test.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
   <div class="shell">
     <header>
       <div class="brand" dir="ltr"><span class="brand-mark" aria-hidden="true">L</span> LG Stream <span class="tag">تجربة البث</span></div>
-      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
+      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="speed-button" type="button" aria-expanded="false">اختبار الاتصال</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
     </header>
     <main>
       <aside class="channels-panel" aria-label="القنوات">
@@ -43,6 +44,22 @@
       <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
       <p class="small-note">بعد إغلاق لوحة المفاتيح، استخدم ↑ و↓ للتنقل بين الحقول والأزرار. يبدأ التشغيل فقط عند اختيار قناة.</p>
     </form>
+  </section>
+  <section id="speed-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title" hidden>
+    <div class="setup-card speed-card">
+      <h2 id="speed-title">اختبار الاتصال</h2>
+      <p>اختبار يدوي يوقف البث، ويقيس التنزيل لمدة لا تتجاوز 8 ثوانٍ وبحد أقصى 64 ميجابايت (MB). المزود: Cloudflare.</p>
+      <div class="speed-connection" role="group" aria-labelledby="speed-connection-title">
+        <h3 id="speed-connection-title">كيف يتصل التلفزيون الآن؟</h3>
+        <div class="form-actions"><button id="speed-wired" type="button" aria-pressed="false">كيبل</button><button id="speed-wifi" type="button" aria-pressed="false">واي فاي</button></div>
+        <p class="small-note">هذه تسمية تختارها بنفسك. للمقارنة، غيّر الاتصال من إعدادات التلفزيون ثم اختبره مرة أخرى.</p>
+      </div>
+      <p class="small-note">يرى خادم الاختبار اتصالك وعنوان الإنترنت. لا نرسل النتائج أو روابط البث؛ تبقى آخر نتيجتين في ذاكرة هذه الجلسة فقط.</p>
+      <p class="small-note">سرعة التنزيل واستجابة HTTP تقديران لهذا الخادم، وليسا ضمانًا لبث IPTV أو قياسًا لحد منفذ التلفزيون. استجابة HTTP ليست قياس ping.</p>
+      <p id="speed-status" class="speed-status" role="status" aria-live="polite">اختر نوع الاتصال لبدء الاختبار.</p>
+      <ol id="speed-results" class="speed-results" aria-label="آخر نتيجتين في هذه الجلسة"></ol>
+      <div class="form-actions"><button id="speed-start" class="primary" type="button" disabled>إيقاف البث وبدء الاختبار</button><button id="speed-cancel" type="button" disabled>إلغاء الاختبار</button><button id="close-speed" type="button">رجوع</button></div>
+    </div>
   </section>
   <section id="diagnostics-panel" class="diagnostics" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>

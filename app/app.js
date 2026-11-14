@@ -11,6 +11,12 @@
   var hintTimer = null;
   var setup = $('setup-panel');
   var diagnostics = $('diagnostics-panel');
+  var speedPanel = $('speed-panel');
+  var speedTest = window.LGSpeedTest.createTest();
+  var speedConnection = null;
+  var speedRunning = false;
+  var speedRevision = 0;
+  var speedResults = [];
   var inputs = [$('source-1'), $('source-2'), $('source-3')];
   var labels = {
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
@@ -42,7 +48,7 @@
       if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
         setWatchMode(false); $('retry-button').focus();
       }
-      if (!watchMode && setup.hidden && diagnostics.hidden && document.activeElement.disabled) focusChannel(selected);
+      if (!watchMode && setup.hidden && diagnostics.hidden && speedPanel.hidden && document.activeElement.disabled) focusChannel(selected);
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
       $('progress-ms').textContent = state.progressMs === null || state.progressMs === undefined ? '—' : state.progressMs + ' ms';
       $('frame-ms').textContent = state.firstFrameMs === null || state.firstFrameMs === undefined ? (state.frameApi ? 'بانتظار الإشارة' : 'غير متاح') : state.firstFrameMs + ' ms';
@@ -91,7 +97,7 @@
   }
   function playChannel(intent) {
     var index = intent.index;
-    if (!sources[index]) return;
+    if (!sources[index] || !speedPanel.hidden || speedRunning) return;
     selected = index;
     if (!intent.retry && playingIndex === index && ['loading', 'playing', 'waiting', 'paused'].indexOf(lastState) >= 0) {
       if (lastState === 'paused') player.resume();
@@ -188,6 +194,84 @@
   $('retry-button').addEventListener('click', function () { if (playingIndex !== null) requestChannel(playingIndex, false, true); });
   $('stop-button').addEventListener('click', function () { stop(); if (sources.length) focusChannel(selected); else $('start-button').focus(); });
 
+  function speedControls(running) {
+    speedRunning = running;
+    $('speed-start').disabled = running || !speedConnection;
+    $('speed-cancel').disabled = !running;
+    $('speed-wired').disabled = running;
+    $('speed-wifi').disabled = running;
+  }
+  function cancelSpeed() {
+    speedRevision += 1;
+    speedTest.cancel();
+    if (speedRunning) $('speed-status').textContent = 'أُلغي الاختبار. البث متوقف؛ اختر قناة لتشغيله.';
+    speedControls(false);
+  }
+  function closeSpeed() {
+    cancelSpeed();
+    speedPanel.hidden = true;
+    $('speed-button').setAttribute('aria-expanded', 'false');
+    $('speed-button').focus();
+  }
+  $('speed-button').addEventListener('click', function () {
+    scheduler.cancel(); setWatchMode(false);
+    if (!setup.hidden) closeSetup();
+    diagnostics.hidden = true;
+    $('diagnostics-button').setAttribute('aria-expanded', 'false');
+    speedConnection = null;
+    $('speed-wired').setAttribute('aria-pressed', 'false');
+    $('speed-wifi').setAttribute('aria-pressed', 'false');
+    speedControls(false);
+    $('speed-status').textContent = 'اختر نوع الاتصال لبدء الاختبار.';
+    speedPanel.hidden = false;
+    $('speed-button').setAttribute('aria-expanded', 'true');
+    $('speed-wired').focus();
+  });
+  ['wired', 'wifi'].forEach(function (connection) {
+    $('speed-' + connection).addEventListener('click', function () {
+      if (speedRunning) return;
+      speedConnection = connection;
+      $('speed-wired').setAttribute('aria-pressed', String(connection === 'wired'));
+      $('speed-wifi').setAttribute('aria-pressed', String(connection === 'wifi'));
+      speedControls(false);
+    });
+  });
+  $('close-speed').addEventListener('click', closeSpeed);
+  $('speed-cancel').addEventListener('click', function () { cancelSpeed(); $('speed-start').focus(); });
+  $('speed-start').addEventListener('click', function () {
+    if (!speedConnection || speedRunning || document.hidden) return;
+    stop();
+    var revision = ++speedRevision;
+    var connection = speedConnection;
+    speedControls(true);
+    $('speed-status').textContent = 'جارٍ قياس التنزيل… حتى 8 ثوانٍ. البث متوقف.';
+    $('speed-cancel').focus();
+    speedTest.start().then(function (result) {
+      if (revision !== speedRevision || document.hidden || speedPanel.hidden) return;
+      speedControls(false);
+      if (result.state === 'complete') {
+        speedResults.unshift({ connection: connection, result: result });
+        speedResults = speedResults.slice(0, 2);
+        $('speed-results').replaceChildren();
+        speedResults.forEach(function (item) {
+          var row = document.createElement('li');
+          var speed = document.createElement('strong');
+          speed.textContent = (item.connection === 'wired' ? 'كيبل' : 'واي فاي') + ' — ' + item.result.mbps.toFixed(1) + ' Mbps';
+          var details = document.createElement('p');
+          details.textContent = 'استجابة HTTP: ' + Math.round(item.result.httpMs) + ' ms · ' +
+            (item.result.bytes / 1000000).toFixed(1) + ' MB خلال ' + (item.result.durationMs / 1000).toFixed(1) + ' ثانية';
+          row.appendChild(speed); row.appendChild(details); $('speed-results').appendChild(row);
+        });
+        $('speed-status').textContent = 'اكتمل التقدير. آخر نتيجتين أدناه؛ البث يبقى متوقفًا.';
+      } else {
+        $('speed-status').textContent = result.state === 'unsupported' ?
+          'هذا النظام لا يتيح طريقة القياس المطلوبة.' : result.state === 'cancelled' ? 'أُلغي الاختبار.' :
+          'تعذر القياس. قد يكون خادم الاختبار أو الاتصال غير متاح؛ لا توجد نتيجة جديدة.';
+      }
+      $('speed-start').focus();
+    });
+  });
+
   function visibleControls(container) {
     return Array.prototype.filter.call(container.querySelectorAll('button,input'), function (item) {
       return !item.disabled && item.offsetParent !== null;
@@ -232,13 +316,14 @@
       event.preventDefault();
       if (!setup.hidden) closeSetup();
       else if (!diagnostics.hidden) closeDiagnostics();
+      else if (!speedPanel.hidden) closeSpeed();
       else if (watchMode) { setWatchMode(false); focusChannel(selected); }
       else if (lastState !== 'idle') { stop(); if (sources.length) focusChannel(selected); }
       else if (typeof window.webOS !== 'undefined' && window.webOS.platformBack) window.webOS.platformBack();
       else window.close();
       return;
     }
-    var dialog = !setup.hidden ? setup : !diagnostics.hidden ? diagnostics : null;
+    var dialog = !setup.hidden ? setup : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
       if (key === 'Tab') {
         var controls = visibleControls(dialog);
@@ -269,10 +354,11 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { cancelSpeed(); stop(); if (!setup.hidden) closeSetup(); }
+    else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (setup.hidden && diagnostics.hidden) focusChannel(selected);
   });
-  window.addEventListener('pagehide', function () { stop(); sources = []; selected = 0; renderChannels(); inputs.forEach(function (input) { input.value = ''; }); });
+  window.addEventListener('pagehide', function () { cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop(); sources = []; selected = 0; renderChannels(); inputs.forEach(function (input) { input.value = ''; }); });
   renderChannels();
   $('start-button').focus();
 }());

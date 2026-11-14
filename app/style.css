@@ -60,6 +60,18 @@ input::placeholder { color: #7f90a7; }
 .form-error { color: #ffc6b5 !important; min-height: 28px; margin: 12px 0; }
 .setup-card .small-note { font-size: 18px; margin: 20px 0 0; }
 #clear-sources { color: #ffc6b5; }
+.speed-card { width: 1060px; }
+.speed-connection { margin: 24px 0; padding: 22px 24px; border: 1px solid #3b4d64; border-radius: 14px; background: #0e1722; }
+.speed-connection h3 { font-size: 22px; margin: 0 0 14px; }
+.speed-connection button { min-width: 160px; }
+.speed-connection button[aria-pressed="true"] { background: #18372f; border-color: #81cdb0; color: #b4f0d8; }
+.speed-connection button[aria-pressed="true"]:focus { background: #275347; }
+.speed-card .speed-status { color: #b4f0d8; padding: 14px 18px; background: #0b131e; border-radius: 10px; margin: 20px 0; }
+.speed-results { list-style: none; padding: 0; margin: 0 0 22px; }
+.speed-results:empty { margin: 0; }
+.speed-results li { margin: 12px 0; padding: 18px 22px; border: 1px solid #3b4d64; border-radius: 12px; font-size: 20px; line-height: 1.8; overflow-wrap: break-word; }
+.speed-results li p { margin: 6px 0; }
+.speed-results strong { color: #b4f0d8; }
 .diagnostics { position: fixed; z-index: 9; left: 48px; top: 138px; width: 660px; max-width: calc(100vw - 56px); max-height: calc(100vh - 166px); overflow: auto; padding: 30px; border: 1px solid #52657e; border-radius: 20px; background: #131e2b; box-shadow: 0 12px 50px #000; }
 .diagnostics h2 { font-size: 28px; margin: 0 0 24px; }
 .diagnostics dl { display: grid; grid-template-columns: 1fr auto; gap: 16px 24px; font-size: 20px; }
@@ -95,6 +107,9 @@ input::placeholder { color: #7f90a7; }
   input { padding: 10px 14px; font-size: 20px; }
   .setup-card .small-note { font-size: 16px; margin-top: 14px; }
   .form-error { min-height: 24px; }
+  .speed-connection { margin: 18px 0; padding: 16px 20px; }
+  .speed-connection h3 { font-size: 20px; }
+  .speed-results li { font-size: 18px; padding: 14px 18px; }
   .diagnostics { top: 28px; left: 28px; max-height: calc(100vh - 56px); }
   .diagnostics h2 { font-size: 26px; }
   .diagnostics dl { gap: 12px 20px; font-size: 18px; }

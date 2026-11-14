@@ -17,7 +17,10 @@
   }
 
   function createSwitchScheduler(commit, timers, delay) {
-    timers = timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    timers = timers || {
+      setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
+      clearTimeout: function (handle) { clearTimeout(handle); }
+    };
     delay = delay === undefined ? 120 : delay;
     var pending = null;
     var revision = 0;
@@ -46,7 +49,10 @@
     var active = null;
     var now = options.now || function () { return performance.now(); };
     var emit = options.onState || function () {};
-    var timers = options.timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    var timers = options.timers || {
+      setTimeout: function (callback, delay) { return setTimeout(callback, delay); },
+      clearTimeout: function (handle) { clearTimeout(handle); }
+    };
     var startupTimeoutMs = options.startupTimeoutMs || 15000;
     function snapshot(entry) {
       return {
