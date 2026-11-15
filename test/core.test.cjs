@@ -205,3 +205,21 @@ test('seeking and its refill do not inflate playback stall measurements', () => 
   assert.equal(state.stallMs, 150);
   player.stop();
 });
+
+test('buffered seeking ends on media progress even without another playing event', () => {
+  let video; let state;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo() {}, unmountVideo() {},
+    onState: next => { state = next; }, timers: fakeTimers()
+  });
+  player.start('https://example.test/movie', 1);
+  video.fire('playing'); video.currentTime = 10; video.fire('timeupdate');
+  video.seeking = true; video.fire('seeking'); video.currentTime = 30;
+  video.seeking = false; video.fire('seeked'); video.fire('timeupdate');
+  video.fire('waiting');
+  assert.equal(state.stalls, 0, 'The seek jump and a stationary update do not end refill');
+  video.currentTime = 30.1; video.fire('timeupdate');
+  video.fire('waiting');
+  assert.equal(state.stalls, 1, 'Actual progress ends seeking even without playing');
+  player.stop();
+});

@@ -90,13 +90,16 @@
         var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
         activeWrite = transaction;
         var chunks = transaction.objectStore('chunks');
+        var metaStore = transaction.objectStore('meta');
+        var preferencesRequest = requestResult(metaStore.get('group-visibility'));
         for (var index = 0; index < chunkCount; index += 1) {
           chunks.put({ key: revision + ':' + index, revision: revision, index: index, entries: entries.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE) });
         }
-        transaction.objectStore('meta').put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
-        await transactionDone(transaction); activeWrite = null;
+        metaStore.put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
+        var completed = await Promise.all([preferencesRequest, transactionDone(transaction)]); activeWrite = null;
+        var preferences = completed[0];
         cleanup(database, revision);
-        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt };
+        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null };
       } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
     }
     function copyHiddenGroups(hiddenGroups) {

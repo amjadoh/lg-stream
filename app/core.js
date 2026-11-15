@@ -177,7 +177,7 @@
         requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
         progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0, playRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
-        frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, seekInProgress: false, errorCode: 0
+        frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, seekInProgress: false, seekMediaTime: null, errorCode: 0
       };
       active = entry;
       function validEntry() { return active === entry && generation === ownGeneration; }
@@ -187,7 +187,7 @@
         entry.listeners.push([name, guarded]);
       }
       on('playing', function () {
-        entry.seekInProgress = false;
+        entry.seekInProgress = false; entry.seekMediaTime = null;
         if (entry.playingMs === null) {
           entry.playingMs = Math.round(now() - entry.requested);
           entry.lastMediaTime = video.currentTime || 0;
@@ -196,6 +196,9 @@
       });
       on('timeupdate', function () {
         var mediaTime = video.currentTime;
+        if (entry.seekInProgress && entry.seekMediaTime !== null && !video.paused && !video.seeking && isFinite(mediaTime) && mediaTime > entry.seekMediaTime) {
+          entry.seekInProgress = false; entry.seekMediaTime = null;
+        }
         if (entry.playingMs === null || entry.progressMs !== null || video.paused || video.seeking || !isFinite(mediaTime)) return;
         if (mediaTime > entry.lastMediaTime) {
           entry.progressMs = Math.round(now() - entry.requested);
@@ -205,8 +208,9 @@
       });
       on('seeking', function () {
         // Seeking and its refill are user-requested work, not playback stalls.
-        finishWait(entry); entry.seekInProgress = true;
+        finishWait(entry); entry.seekInProgress = true; entry.seekMediaTime = null;
       });
+      on('seeked', function () { if (entry.seekInProgress) entry.seekMediaTime = video.currentTime; });
       on('waiting', function () {
         if (!entry.seekInProgress && !video.seeking && entry.playingMs !== null && entry.waitingSince === null) {
           entry.waitingSince = now(); entry.stalls += 1;

@@ -53,8 +53,8 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40 && document.getElementById('setup-panel').hidden);
 
     async function focusedIndex(expected, kind = 'channel-button') {
-      const focused = await page.evaluate(() => ({ index: document.activeElement.dataset.index, classes: document.activeElement.className }));
-      assert.equal(focused.index, String(expected), `Remote selection must reach item ${expected} without leaving its list`);
+      const focused = await page.evaluate(() => ({ index: document.activeElement.dataset.index, id: document.activeElement.id, classes: document.activeElement.className }));
+      assert.equal(focused.index, String(expected), `Remote selection must reach item ${expected} without leaving its list; focused ${focused.id || focused.classes}`);
       assert.ok(focused.classes.split(' ').includes(kind), `Focus must stay on ${kind}`);
     }
     async function wheelAtBoundary(selector, down) {
@@ -89,9 +89,27 @@ async function main() {
     await focusedIndex(0);
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.className), 'favorite-button');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.favoriteIndex), '1');
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.group), 'بث الاختبار');
     await page.keyboard.press('ArrowRight');
+    await focusedIndex(1);
+
+    // Moving through the adjacent star column updates the same selected channel;
+    // removing its last favorite must leave focus on a visible group control.
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#channels [data-favorite-index="1"]').getAttribute('aria-pressed'), 'true');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.locator('.primary-button[data-section="favorites"]').click();
+    assert.equal(await page.locator('#channels .channel-button').count(), 1);
+    await page.locator('#channels .favorite-button').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#channels .channel-button').count(), 0);
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button') && document.activeElement.classList.contains('active')), true, 'Removing the last favorite restores visible group focus');
+    await chooseSection('tv', 'بث الاختبار');
     await focusedIndex(0);
 
     // Wheel users must reach every window too; a visible scrollbar alone only
