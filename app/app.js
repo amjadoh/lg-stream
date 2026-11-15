@@ -1430,9 +1430,13 @@
       if (isOnDemand() || activeSection === 'movies' || activeSection === 'series') { event.preventDefault(); return; }
       var indexes = visibleIndexes();
       if (!indexes.length) return;
-      var position = indexes.indexOf(selected);
+      var position = indexes.indexOf(watchMode && !switchPending ? playingIndex : selected);
       if (position < 0) position = 0;
-      selected = indexes[(position + (code === 33 || code === 427 || key === 'PageUp' ? 1 : -1) + indexes.length) % indexes.length];
+      var step = code === 33 || code === 427 || key === 'PageUp' ? 1 : -1;
+      var next = (position + step + indexes.length) % indexes.length;
+      while (next !== position && entrySection(indexes[next]) !== 'tv') next = (next + step + indexes.length) % indexes.length;
+      if (entrySection(indexes[next]) !== 'tv') { event.preventDefault(); return; }
+      selected = indexes[next];
       if (!watchMode) focusSelected();
       requestChannel(selected, true); event.preventDefault(); return;
     }
