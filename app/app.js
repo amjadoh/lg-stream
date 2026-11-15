@@ -437,7 +437,11 @@
       $('display-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
       updateChannelStates();
       if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
-        setWatchMode(false); $('retry-button').focus();
+        if (playingIndex !== null && entrySection(playingIndex) === 'tv') {
+          setWatchMode(true);
+          $('fullscreen-hint').hidden = true;
+          $('status').textContent = 'البث مقطوع — أكمل بالسهم فوق أو تحت، أو اضغط رجوع';
+        } else { setWatchMode(false); $('retry-button').focus(); }
       }
       if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && !extraDialog() && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
@@ -642,6 +646,7 @@
   function cancelSeek() { clearTimeout(seekTimer); seekTimer = null; pendingSeek = null; }
   function isOnDemand() { return playingIndex !== null && /^(movies|series)$/.test(entrySection(playingIndex)); }
   function exitPlayback() {
+    cancelSwitch();
     if (isOnDemand() || (playingIndex === null && lastState !== 'idle')) stop(); else setWatchMode(false);
     focusSelected();
   }
@@ -1351,6 +1356,16 @@
       if (isInput && key !== 'ArrowUp' && key !== 'ArrowDown') return;
       if (/^Arrow/.test(key)) { moveFocus(dialog, key); event.preventDefault(); }
       return;
+    }
+    if (watchMode && $('media-controls').hidden && playingIndex !== null && entrySection(playingIndex) === 'tv' && (key === 'ArrowUp' || key === 'ArrowDown')) {
+      var liveIndexes = visibleIndexes();
+      var livePosition = liveIndexes.indexOf(selected);
+      var nextPosition = livePosition + (key === 'ArrowDown' ? 1 : -1);
+      if (livePosition >= 0 && nextPosition >= 0 && nextPosition < liveIndexes.length) {
+        selected = liveIndexes[nextPosition];
+        requestChannel(selected, true);
+      }
+      event.preventDefault(); return;
     }
     if (watchMode && !$('media-controls').hidden && /^Arrow/.test(key)) {
       var media = $('media-controls'); var current = document.activeElement;
