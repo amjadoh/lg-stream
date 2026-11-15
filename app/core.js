@@ -263,5 +263,12 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  return { validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  function groupCategory(name) {
+    var text = String(name || '').toLowerCase();
+    // Conservative group-name hints only; provider brands/countries are not genres.
+    var rules = [['sports', /(?:^|[\s|:_-])(?:ال)?رياض(?:ة|ية)(?=$|[\s|:_-])|\bsports?\b/], ['movies', /أفلام|افلام|سينما|\bmovies?\b|\bcinema\b/], ['news', /أخبار|اخبار|\bnews\b/], ['kids', /أطفال|اطفال|كرتون|\bkids?\b|\bchildren\b/], ['documentary', /وثائق|\bdocumentar(?:y|ies)\b/]];
+    var matches = rules.filter(function (rule) { return rule[1].test(text); });
+    return matches.length === 1 ? matches[0][0] : 'other';
+  }
+  return { groupCategory: groupCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

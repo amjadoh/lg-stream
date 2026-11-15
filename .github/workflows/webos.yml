@@ -29,6 +29,8 @@ jobs:
       - run: npm run check:ui
       - run: npm run package:webos
       - uses: actions/upload-artifact@v4
+        id: upload
+        continue-on-error: true
         if: always()
         with:
           name: lg-stream-${{ github.sha }}
@@ -37,3 +39,24 @@ jobs:
             artifacts/ui-*.png
           if-no-files-found: error
           retention-days: 14
+      # Recover only generated IPK/synthetic screenshots if the artifact quota is full.
+      # Logs stay inside this private repository; no runtime/user files are included.
+      - name: Preserve build output when artifact upload fails
+        if: always() && steps.upload.outcome == 'failure'
+        run: |
+          python3 - <<'PYCODE'
+          import base64, hashlib, io, pathlib, tarfile
+          paths = sorted(pathlib.Path('dist').glob('*.ipk')) + sorted(pathlib.Path('artifacts').glob('ui-*.png'))
+          if not paths:
+              raise SystemExit('No generated output to preserve')
+          output = io.BytesIO()
+          with tarfile.open(fileobj=output, mode='w:gz') as archive:
+              for path in paths:
+                  archive.add(path, arcname=str(path))
+          data = output.getvalue()
+          print('LG_OUTPUT_SHA256 ' + hashlib.sha256(data).hexdigest())
+          encoded = base64.b64encode(data).decode('ascii')
+          for offset in range(0, len(encoded), 4000):
+              print('LG_OUTPUT_CHUNK ' + encoded[offset:offset + 4000])
+          print('LG_OUTPUT_END')
+          PYCODE
