@@ -99,7 +99,9 @@ async function main() {
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
             lines.push(`https://media.example.test/${index > 106 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
-          const bytes = new TextEncoder().encode(lines.join('\n'));
+          const payload = window.__customPlaylist === undefined ? lines.join('\n') : window.__customPlaylist;
+          delete window.__customPlaylist;
+          const bytes = new TextEncoder().encode(payload);
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
           return Promise.resolve({ ok: true, status: 200, headers: { get: name => name === 'content-length' ? String(bytes.byteLength) : null }, body });
         }
@@ -228,6 +230,15 @@ async function main() {
     assert.equal(await page.evaluate(() => document.getElementById('setup-panel').contains(document.activeElement)), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#source-1').inputValue(), '');
+    await pendingThen('nav-search');
+    assert.equal(await page.locator('#search-panel').isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.locator('#fullscreen-button').click();
+    await page.keyboard.press('Enter');
+    await pendingThen('media-toggle');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Fullscreen pause cancels the pending channel too');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await pendingThen('pause');
     assert.equal(await page.evaluate(() => document.querySelector('video').paused), true);
     await pendingThen('stop-button');
@@ -249,6 +260,17 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false, 'Failure must reveal retry controls');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
+    const startsBeforeQuickFailure = await page.evaluate(() => window.__mediaStarts);
+    await page.evaluate(() => {
+      const channel = document.querySelector('#channels .channel-button');
+      // Run synchronously so the second OK is deterministically within 700ms.
+      channel.click();
+      document.querySelector('video').dispatchEvent(new Event('error'));
+      channel.click();
+    });
+    assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeQuickFailure + 2, 'Second OK after a rapid failure retries media instead of entering empty fullscreen');
+    assert.equal(await page.locator('video').count(), 1);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false);
 
     // The single-source case must not reconnect when channel keys wrap around.
     await page.locator('#setup-button').click();
@@ -275,6 +297,14 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('playlist-status').textContent.includes('السابقة'));
     await page.locator('#close-setup').click();
+    const savedBeforeInvalidResponse = await page.evaluate(() => window.__catalogSavedAt());
+    await page.locator('#setup-button').click();
+    await page.evaluate(() => { window.__customPlaylist = '<html>Provider error</html>\nhttps://media.example.test/error-ad.mp4'; });
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => !document.getElementById('refresh-saved').disabled);
+    assert.equal(await page.locator('#setup-panel').isVisible(), true, 'A non-M3U download must be rejected');
+    assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeInvalidResponse, 'A provider error page cannot replace the saved catalogue');
+    await page.locator('#close-setup').click();
     await page.locator('#setup-button').click();
     await page.locator('#playlist-url').fill('https://provider.example.test/stall');
     await page.locator('#load-playlist').click();
@@ -285,6 +315,17 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 0, 'Startup restores the last complete catalogue without a network request');
     assert.match(await page.locator('#status').innerText(), /استُعيدت القائمة المحفوظة/);
+    await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.locator('#channels .favorite-button').first().click();
+    await page.locator('#channels .channel-button').nth(2).focus();
+    await page.locator('#setup-button').click();
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Manual refresh of the same source preserves the active group');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Manual refresh restores the selected channel');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Manual refresh preserves favorites');
+    await page.locator('#channels .favorite-button').first().click();
+    await page.locator('#groups [data-group=""]').click();
     const savedBeforeAutomaticFailure = await page.evaluate(() => window.__catalogSavedAt());
     await page.locator('#channels .channel-button').first().click();
     const requestsBeforeAutomatic = await page.evaluate(() => window.__playlistRequests.length);
@@ -292,6 +333,22 @@ async function main() {
     await page.waitForTimeout(80);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Due automatic refresh must not start while media is active');
     await page.locator('#stop-button').click();
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Stopping media is user activity, not permission to immediately refresh');
+    await page.evaluate(() => {
+      window.__advanceTime(30000);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Automatic refresh requires a complete minute without user input');
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+      window.__advanceTime(2000);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Navigating resets the inactivity window');
+    await page.evaluate(() => { window.__advanceTime(60001); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeAutomatic);
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('القائمة السابقة'));
     assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeAutomaticFailure, 'Failed automatic refresh must not advance the last-success timestamp');
@@ -315,21 +372,22 @@ async function main() {
     await page.waitForTimeout(100);
     assert.equal(await page.locator('video').count(), 1, 'Pending channel request still starts normally');
     await page.locator('#stop-button').click();
+    await page.evaluate(() => { window.__advanceTime(60001); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforePendingSwitch);
     assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Automatic refresh releases the in-memory catalogue while keeping the saved copy');
     await page.locator('#speed-button').click();
-    await page.locator('#speed-wired').click();
-    await page.locator('#speed-start').click();
-    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Starting the speed test cancels a pending automatic catalogue download');
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'A foreground click cancels a pending automatic catalogue download immediately');
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
-    assert.equal(await page.evaluate(() => window.__speedRequests.length), 0, 'The first action restores the saved catalogue before starting another download');
+    assert.equal(await page.evaluate(() => document.getElementById('speed-panel').contains(document.activeElement)), true, 'Catalogue restoration must not steal focus from the newly opened dialog');
+    assert.equal(await page.evaluate(() => window.__speedRequests.length), 0, 'Opening controls restores the saved catalogue without starting another download');
+    await page.locator('#speed-wired').click();
     await page.locator('#speed-start').click();
     assert.equal(await page.evaluate(() => window.__speedRequests.length), 1);
     await page.locator('#speed-cancel').click();
     await page.locator('#close-speed').click();
     await page.evaluate(() => { window.__speedRequests = []; });
 
-    // Cancelling an automatic refresh directly from settings must reschedule it
+    // Opening settings during an automatic refresh must cancel and reschedule it
     // with the short foreground-action backoff instead of losing it forever.
     const requestsBeforeDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
     await page.evaluate(() => {
@@ -339,8 +397,7 @@ async function main() {
     });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeDirectCancel);
     await page.locator('#setup-button').click();
-    await page.locator('#cancel-playlist').click();
-    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Direct settings cancellation aborts the automatic catalogue download');
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Opening settings aborts the automatic catalogue download');
     await page.locator('#close-setup').click();
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     const requestsAfterDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
@@ -451,7 +508,18 @@ async function main() {
     await page.locator('#close-search').click();
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
-    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#channels .channel-button').first().click();
+    const startsBeforeDetails = await page.evaluate(() => window.__mediaStarts);
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', keyCode: 33, bubbles: true }));
+      document.querySelector('.primary-button[data-section="movies"]').click();
+      document.querySelector('#movie-grid .movie-card').click();
+    });
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeDetails, 'Opening content details cancels a previously queued live-channel request');
+    assert.equal(await page.locator('video').count(), 0, 'Entering the content library stops live audio hidden behind its cards');
+    assert.equal(await page.locator('#details-panel').isVisible(), true);
+    await page.locator('#close-details').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 24);
     assert.equal(await page.locator('#movie-grid .movie-poster').count(), 24);
@@ -510,6 +578,10 @@ async function main() {
     await page.locator('#movie-grid [data-index="64"]').click();
     await page.locator('#details-play').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
+    const movieStarts = await page.evaluate(() => window.__mediaStarts);
+    await page.keyboard.press('PageUp');
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), movieStarts, 'Channel keys cannot replace an actively watched movie');
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('video').count(), 0, 'Back from movie releases its source');
     await page.locator('#movie-grid [data-index="64"]').click();

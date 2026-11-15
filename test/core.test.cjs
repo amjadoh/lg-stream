@@ -38,6 +38,13 @@ test('builds a YouTube TV voice search with title and year exactly once', () => 
   assert.equal(youtubeSearchTarget('', '2024'), null);
 });
 
+test('search omits hidden entries from both results and totals', () => {
+  const entries = [{ name: 'عنوان مخفي' }, { name: 'عنوان ظاهر' }];
+  const result = searchCatalog(entries, 'عنوان', index => index === 0 ? null : 'tv', 12);
+  assert.deepEqual(result.matches, { tv: [1], movies: [], series: [] });
+  assert.deepEqual(result.counts, { tv: 1, movies: 0, series: 0 });
+});
+
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {
   const callbacks = []; const selected = [];
   const scheduler = createSwitchScheduler(value => selected.push(value), {
@@ -170,4 +177,31 @@ test('measures intent-to-start/progress including switch delay and aborts a stal
   const timedOut = state;
   video.historic.get('playing')(); video.rejectPlay();
   assert.equal(state, timedOut);
+});
+
+test('seeking and its refill do not inflate playback stall measurements', () => {
+  let time = 0; let video; let state;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo() {}, unmountVideo() {},
+    now: () => time, onState: next => { state = next; }, timers: fakeTimers()
+  });
+  player.start('https://example.test/movie', 1);
+  video.fire('playing');
+  time = 100; video.fire('waiting');
+  assert.equal(state.stalls, 1);
+  time = 150; video.seeking = true; video.fire('seeking');
+  time = 200; video.fire('waiting');
+  assert.equal(state.state, 'waiting', 'Seeking still exposes the waiting state');
+  assert.equal(state.stalls, 1);
+  assert.equal(state.stallMs, 50, 'Only the wait before seeking counts');
+  video.seeking = false; video.fire('seeked');
+  time = 300; video.fire('waiting');
+  assert.equal(state.stalls, 1, 'Refill after seeked still belongs to the seek');
+  time = 500; video.fire('playing');
+  assert.equal(state.stallMs, 50);
+  time = 600; video.fire('waiting');
+  assert.equal(state.stalls, 2, 'A new stall after playback resumes still counts');
+  time = 700; video.fire('playing');
+  assert.equal(state.stallMs, 150);
+  player.stop();
 });
