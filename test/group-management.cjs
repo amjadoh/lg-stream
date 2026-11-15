@@ -31,6 +31,31 @@ async function main() {
       return route.abort();
     });
     await page.addInitScript(() => {
+      // Keep the real IndexedDB write, but optionally delay its completion
+      // callback so pagehide can race the UI without replacing storage.
+      let catalogApi;
+      Object.defineProperty(window, 'LGCatalogStore', {
+        configurable: true,
+        get() { return catalogApi; },
+        set(api) {
+          catalogApi = api;
+          const create = api.createStore;
+          api.createStore = function (options) {
+            const store = create(options);
+            const save = store.saveHiddenGroups.bind(store);
+            store.saveHiddenGroups = function (source, groups) {
+              const pending = save(source, groups);
+              if (!window.__delayGroupSave) return pending;
+              window.__delayGroupSave = false;
+              return pending.then(result => new Promise(resolve => {
+                window.__groupSaveCommitted = true;
+                window.__releaseGroupSave = () => resolve(result);
+              }));
+            };
+            return store;
+          };
+        }
+      });
       const state = new WeakMap();
       const own = video => { if (!state.has(video)) state.set(video, { source: '', paused: true, time: 0 }); return state.get(video); };
       const proto = HTMLMediaElement.prototype;
@@ -124,6 +149,8 @@ async function main() {
     for (let i = 0; i < 44; i++) await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.position), '44', 'Remote reaches the last group beyond the DOM window');
     await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'close-group-manager', 'The last group leads to the manager return button');
+    await page.keyboard.press('ArrowUp');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.position), '44');
     await toggleCommon('tv', false);
     await mkdir(path.join(root, 'artifacts'), { recursive: true });
@@ -187,6 +214,36 @@ async function main() {
     assert.equal(await (await groupSwitch('tv')).getAttribute('aria-checked'), 'true');
     assert.equal(await (await groupSwitch('movies')).getAttribute('aria-checked'), 'false');
     assert.equal(await (await groupSwitch('series')).getAttribute('aria-checked'), 'true');
+    assert.equal(await storedCount(), 119);
+
+    // A completed preference write must not rewrite the view after pagehide
+    // has released its in-memory sources and favorites.
+    const seriesSwitch = await groupSwitch('series');
+    const previousView = await page.evaluate(() => JSON.parse(localStorage.getItem('lg-stream-view-v1')));
+    assert.ok(previousView.favorites.length > 0);
+    assert.notEqual(previousView.selected, 0);
+    await page.evaluate(() => { window.__delayGroupSave = true; });
+    await seriesSwitch.click();
+    await page.waitForFunction(() => window.__groupSaveCommitted);
+    const savedOnExit = await page.evaluate(() => {
+      window.dispatchEvent(new Event('pagehide'));
+      return localStorage.getItem('lg-stream-view-v1');
+    });
+    assert.equal(JSON.parse(savedOnExit).selected, previousView.selected);
+    assert.deepEqual(JSON.parse(savedOnExit).favorites, previousView.favorites);
+    await page.evaluate(async () => { window.__releaseGroupSave(); await Promise.resolve(); await Promise.resolve(); });
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-view-v1')), savedOnExit, 'Late preference completion must not overwrite the saved selection or favorites with the cleared view');
+    // We already dispatched pagehide: suppress only the duplicate emitted by
+    // reload so this test models one departure, as on the television.
+    await page.evaluate(() => window.addEventListener('pagehide', event => event.stopImmediatePropagation(), { capture: true, once: true }));
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.getElementById('status').textContent.includes('استُعيدت'));
+    await openManager();
+    assert.equal(await (await groupSwitch('series')).getAttribute('aria-checked'), 'false', 'The preference itself was saved even though its UI completion arrived after exit');
+    const restoredView = await page.evaluate(() => JSON.parse(localStorage.getItem('lg-stream-view-v1')));
+    assert.equal(restoredView.selected, previousView.selected);
+    assert.deepEqual(restoredView.favorites, previousView.favorites);
     assert.equal(await storedCount(), 119);
     assert.equal(externalRequests, 0);
     assert.deepEqual(errors, []);

@@ -69,6 +69,22 @@ async function main() {
       let dateOffset = 0;
       Date.now = () => realDateNow() + dateOffset;
       window.__advanceTime = milliseconds => { dateOffset += milliseconds; };
+      Object.defineProperty(window, 'LGCatalogStore', {
+        configurable: true,
+        set(api) {
+          const createStore = api.createStore;
+          api.createStore = (...args) => {
+            const store = createStore(...args); const load = store.load;
+            store.load = () => {
+              if (!window.__holdNextCatalogLoad) return load();
+              window.__holdNextCatalogLoad = false;
+              return new Promise(resolve => { window.__resumeCatalogLoad = () => load().then(resolve); });
+            };
+            return store;
+          };
+          Object.defineProperty(window, 'LGCatalogStore', { configurable: true, writable: true, value: api });
+        }
+      });
       window.__speedRequests = [];
       window.__playlistRequests = [];
       window.__openedUrls = [];
@@ -324,6 +340,66 @@ async function main() {
     assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Manual refresh of the same source preserves the active group');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Manual refresh restores the selected channel');
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Manual refresh preserves favorites');
+    const beforeRestoreRace = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true;
+      window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeRestoreRace);
+    await page.evaluate(() => { window.__holdNextCatalogLoad = true; });
+    await page.locator('#setup-button').click();
+    await page.waitForFunction(() => typeof window.__resumeCatalogLoad === 'function');
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Keep restoration pending while the settings remain usable');
+    assert.equal(await page.locator('#manage-groups-button').isDisabled(), true, 'Group management waits for the released catalogue to return');
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    await page.evaluate(async () => { await window.__resumeCatalogLoad(); delete window.__resumeCatalogLoad; });
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Refreshing before cancelled-download restoration completes preserves the original group');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'The old restoration cannot overwrite the refreshed selection');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Refresh during restoration retains the original favorites');
+    const beforeFailedRestoreRace = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true; window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeFailedRestoreRace);
+    await page.evaluate(() => { window.__holdNextCatalogLoad = true; });
+    await page.locator('#setup-button').click();
+    await page.waitForFunction(() => typeof window.__resumeCatalogLoad === 'function');
+    await page.evaluate(() => { window.__failNextPlaylist = true; });
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => !document.getElementById('refresh-saved').disabled);
+    await page.evaluate(async () => { await window.__resumeCatalogLoad(); delete window.__resumeCatalogLoad; });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'A failed manual refresh does not discard the pending original view');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Retry after a failed refresh restores the original selection');
+
+    await page.waitForTimeout(180); // Finish any legitimate scroll-position save before releasing the catalogue.
+    const viewBeforeReleasedUnload = await page.evaluate(() => localStorage.getItem('lg-stream-view-v1'));
+    const beforeReleasedUnload = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true; window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeReleasedUnload);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0);
+    await page.evaluate(() => document.getElementById('channels').dispatchEvent(new Event('scroll')));
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-view-v1')), viewBeforeReleasedUnload, 'A delayed view-save timer cannot save the temporarily empty catalogue');
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-view-v1')), viewBeforeReleasedUnload, 'Closing during automatic refresh preserves the last complete view and favorites');
+    const fakeTimeBeforeReload = await page.evaluate(() => Date.now());
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Favorites survive reloading after the catalogue was temporarily released');
+    await page.evaluate(time => window.__advanceTime(time - Date.now()), fakeTimeBeforeReload);
     await page.locator('#channels .favorite-button').first().click();
     await page.locator('#groups [data-group=""]').click();
     const savedBeforeAutomaticFailure = await page.evaluate(() => window.__catalogSavedAt());
