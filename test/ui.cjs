@@ -308,6 +308,7 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Live failure must preserve watching mode');
     assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
+    assert.equal(await page.locator('#status').isVisible(), true, 'Live failure message is visible over the video');
     assert.equal(await page.locator('#media-controls').isVisible(), false);
     const failedStarts = await page.evaluate(() => window.__mediaStarts);
     await page.keyboard.press('ArrowUp');
@@ -320,10 +321,17 @@ async function main() {
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true);
     await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('ended')));
     assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
+    assert.equal(await page.locator('#status').isVisible(), true, 'Live failure message is visible over the video');
     await page.keyboard.press('ArrowUp');
     await page.waitForTimeout(180);
     assert.equal(await page.evaluate(() => window.__mediaStarts), failedStarts + 2, 'Up works after live stream ends');
-    await page.keyboard.press('Escape');
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), failedStarts + 2, 'Back cancels a queued channel switch');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '0');
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false, 'Only explicit Back exits live watching');
     const startsBeforeQuickFailure = await page.evaluate(() => window.__mediaStarts);
     await page.evaluate(() => {
