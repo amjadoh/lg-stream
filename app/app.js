@@ -333,7 +333,7 @@
       if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
         setWatchMode(false); $('retry-button').focus();
       }
-      if (!watchMode && setup.hidden && diagnostics.hidden && speedPanel.hidden && document.activeElement.disabled) focusChannel(selected);
+      if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
       $('progress-ms').textContent = state.progressMs === null || state.progressMs === undefined ? '—' : state.progressMs + ' ms';
       $('frame-ms').textContent = state.firstFrameMs === null || state.firstFrameMs === undefined ? (state.frameApi ? 'بانتظار الإشارة' : 'غير متاح') : state.firstFrameMs + ' ms';
@@ -545,8 +545,9 @@
     $('seek-position').max = video && isFinite(video.duration) ? video.duration : 0;
     $('seek-position').step = video && isFinite(video.duration) ? Math.max(30, Math.ceil(video.duration / 100 / 10) * 10) : 30;
     if (pendingSeek === null && document.activeElement !== $('seek-position')) $('seek-position').value = video ? video.currentTime : 0;
-    $('playback-time').textContent = video ? timeLabel(video.currentTime) + ' / ' + timeLabel(video.duration) : '—';
-    $('seek-status').textContent = seekable ? '' : 'التقديم غير متاح حاليًا لهذا المصدر.';
+    $('playback-time').textContent = video ? timeLabel(pendingSeek === null ? video.currentTime : pendingSeek) + ' / ' + timeLabel(video.duration) : '—';
+    if (!seekable) $('seek-status').textContent = 'التقديم غير متاح حاليًا لهذا المصدر.';
+    else if ($('seek-status').textContent === 'التقديم غير متاح حاليًا لهذا المصدر.') $('seek-status').textContent = '';
   }
   function seekTo(seconds) {
     var video = $('video-host').querySelector('video');
@@ -556,7 +557,7 @@
     for (var i = 0; i < video.seekable.length; i += 1) {
       if (seconds < video.seekable.start(i) || seconds > video.seekable.end(i)) continue;
       try { video.currentTime = seconds; } catch (_) { $('seek-status').textContent = 'تعذر الانتقال في هذا المصدر.'; return; }
-      updatePlaybackControls(); return;
+      $('seek-status').textContent = ''; updatePlaybackControls(); return;
     }
     $('seek-status').textContent = 'هذا الموضع غير متاح في المصدر حاليًا.';
   }
@@ -581,6 +582,7 @@
     });
   }
   function showPlaybackControls() {
+    $('seek-status').textContent = ''; $('track-status').textContent = 'تظهر المسارات التي يتيحها المصدر ومشغل التلفزيون فقط.';
     $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
     $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
     $('media-toggle').focus();
