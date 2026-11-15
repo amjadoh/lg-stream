@@ -436,12 +436,13 @@
       $('retry-button').disabled = playingIndex === null;
       $('display-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
       updateChannelStates();
-      if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
-        if (playingIndex !== null && entrySection(playingIndex) === 'tv') {
+      if (['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
+        if (playingIndex === null) { stop(); focusSelected(); $('status').textContent = labels[state.state]; return; }
+        if (watchMode && entrySection(playingIndex) === 'tv') {
           setWatchMode(true);
           $('fullscreen-hint').hidden = true;
           $('status').textContent = 'البث مقطوع — أكمل بالسهم فوق أو تحت، أو اضغط رجوع';
-        } else { setWatchMode(false); $('retry-button').focus(); }
+        } else if (watchMode || isOnDemand()) { setWatchMode(false); if (isOnDemand()) renderChannels(); $('retry-button').focus(); }
       }
       if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && !extraDialog() && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';

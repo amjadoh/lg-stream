@@ -67,9 +67,10 @@ async function main() {
 
       window.fetch = async () => {
         const lines = ['#EXTM3U'];
-        for (const [i, kind] of ['live', 'movie', 'live', 'series', 'live', 'live'].entries()) {
-          lines.push(`#EXTINF:-1 group-title="${i === 5 ? 'مجموعة أخرى' : 'مجموعة الاختبار'}",عنصر ${i}`);
-          lines.push(`https://media.example.test/${kind}/${i}.m3u8`);
+        for (const [i, kind] of ['live', 'movie', 'live', 'series', 'live', 'live', 'movie'].entries()) {
+          const trailer = i === 1 ? 'https://media.example.test/trailer.mp4' : i === 6 ? 'https://media.example.test/' + 'x'.repeat(5000) : '';
+          lines.push(`#EXTINF:-1 trailer="${trailer}" group-title="${i === 5 ? 'مجموعة أخرى' : 'مجموعة الاختبار'}",عنصر ${i}`);
+          lines.push(`https://media.example.test/${kind}/${i}.m3u8` + (i === 6 ? '?x=' + 'x'.repeat(5000) : ''));
         }
         return new Response(lines.join('\n'));
       };
@@ -180,6 +181,27 @@ async function main() {
     await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
     assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), false);
     assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
+    await page.locator('#groups-filter').focus(); await page.keyboard.press('ArrowLeft');
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#groups [data-group=""]').click();
+    await page.locator('#movie-grid [data-index="6"]').click();
+    await page.locator('#details-play').click();
+    assert.equal(await page.locator('video').count(), 0);
+    assert.equal(await page.locator('#movie-browser').isVisible(), true, 'Rejected VOD source restores the grid');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
+    for (const kind of ['ended', 'error']) {
+      await page.locator('#movie-grid [data-index="1"]').click();
+      await page.locator('#details-trailer').click();
+      await page.evaluate(kind => document.querySelector('video').dispatchEvent(new Event(kind)), kind);
+      assert.equal(await page.locator('video').count(), 0, 'Trailer completion/failure releases media');
+      assert.equal(await page.locator('#movie-browser').isVisible(), true);
+      assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '1');
+    }
+    await page.locator('#movie-grid [data-index="6"]').click();
+    await page.locator('#details-trailer').click();
+    assert.equal(await page.locator('video').count(), 0);
+    assert.equal(await page.locator('#movie-browser').isVisible(), true, 'Invalid trailer restores the grid');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
     assert.deepEqual(errors, []);
     assert.equal(unexpectedRequests, 0);
     console.log('Live failures: errors/end/rejection/timeout, burst/bounds, actual playing anchor, mixed favorites, held OK, retry, search-to-VOD and VOD isolation passed. Synthetic only.');
