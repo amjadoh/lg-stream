@@ -223,3 +223,11 @@ test('buffered seeking ends on media progress even without another playing event
   assert.equal(state.stalls, 1, 'Actual progress ends seeking even without playing');
   player.stop();
 });
+
+// Unknown and mixed groups must not silently acquire an incorrect genre.
+assert.equal(require('../app/core.js').groupCategory('beIN'), 'other');
+assert.equal(require('../app/core.js').groupCategory('RU 4K'), 'other');
+assert.equal(require('../app/core.js').groupCategory('رياضة HD'), 'sports');
+assert.equal(require('../app/core.js').groupCategory('Sports / News'), 'other');
+assert.equal(require('../app/core.js').groupCategory('قنوات أفلام'), 'movies');
+assert.equal(require('../app/core.js').groupCategory('الرياض'), 'other');
