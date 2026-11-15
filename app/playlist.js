@@ -5,6 +5,12 @@
 }(typeof window !== 'undefined' ? window : this, function () {
   'use strict';
   var TIMEOUT_MS = 30000;
+  // Fail the whole import above these limits; never save a clipped catalogue.
+  // The accepted 331,681-item catalogue fits well below the item ceiling.
+  var MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024;
+  var MAX_LINE_LENGTH = 64 * 1024;
+  var MAX_ENTRIES = 1000000;
+  var TOTAL_TIMEOUT_MS = 10 * 60 * 1000;
 
   function safeText(value, fallback, limit) {
     var text = String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
@@ -22,26 +28,42 @@
   function createM3UParser(baseUrl) {
     var entries = [];
     var metadata = null;
-    var truncated = false;
-    var truncatedReason = null;
+    var header = false;
+    var failure = null;
+    function reject(reason) { failure = reason; entries = []; metadata = null; return false; }
     function push(rawLine) {
+      if (failure) return false;
+      if (rawLine.length > MAX_LINE_LENGTH) return reject('line-limit');
       var line = String(rawLine || '').trim();
-      if (!line) return;
-      if (line.indexOf('#EXTM3U') === 0) return;
+      if (!line) return true;
+      if (!header) {
+        if (!/^#EXTM3U(?:\s|$)/.test(line)) return reject('invalid-format');
+        header = true; return true;
+      }
+      if (/^#EXT-X-/.test(line)) return reject('hls-manifest');
+      if (/^#EXTM3U(?:\s|$)/.test(line)) return reject('invalid-format');
+      if (line.indexOf('#EXTINF') === 0 && line.indexOf('#EXTINF:') !== 0) return reject('invalid-metadata');
       if (line.indexOf('#EXTINF:') === 0) {
-        var comma = line.indexOf(',');
-        var group = /group-title="([^"]*)"/i.exec(line);
-        var tvgName = /tvg-name="([^"]*)"/i.exec(line);
-        var tvgId = /tvg-id="([^"]*)"/i.exec(line);
-        var poster = /(?:tvg-logo|poster)="([^"]*)"/i.exec(line);
-        var year = /(?:year|release[-_]?date)="([^"]*)"/i.exec(line);
-        var rating = /(?:rating|tvg-rating)="([^"]*)"/i.exec(line);
-        var added = /(?:added|added[-_]at|date[-_]added)="([^"]*)"/i.exec(line);
-        var description = /(?:description|plot)="([^"]*)"/i.exec(line);
-        var trailer = /(?:trailer|trailer-url)="([^"]*)"/i.exec(line);
+        if (metadata) return reject('missing-uri');
+        var comma = -1; var quoted = false;
+        for (var at = 8; at < line.length; at += 1) {
+          if (line.charAt(at) === '"') quoted = !quoted;
+          if (line.charAt(at) === ',' && !quoted) { comma = at; break; }
+        }
+        if (comma < 0 || !/^#EXTINF:\s*-?\d+(?:\.\d+)?(?:\s|,)/.test(line)) return reject('invalid-metadata');
+        var attributes = line.slice(0, comma);
+        var group = /(?:^|\s)group-title="([^"]*)"/i.exec(attributes);
+        var tvgName = /(?:^|\s)tvg-name="([^"]*)"/i.exec(attributes);
+        var tvgId = /(?:^|\s)tvg-id="([^"]*)"/i.exec(attributes);
+        var poster = /(?:^|\s)(?:tvg-logo|poster)="([^"]*)"/i.exec(attributes);
+        var year = /(?:^|\s)(?:year|release[-_]?date)="([^"]*)"/i.exec(attributes);
+        var rating = /(?:^|\s)(?:rating|tvg-rating)="([^"]*)"/i.exec(attributes);
+        var added = /(?:^|\s)(?:added|added[-_]at|date[-_]added)="([^"]*)"/i.exec(attributes);
+        var description = /(?:^|\s)(?:description|plot)="([^"]*)"/i.exec(attributes);
+        var trailer = /(?:^|\s)(?:trailer|trailer-url)="([^"]*)"/i.exec(attributes);
         metadata = {
-          name: safeText(comma >= 0 ? line.slice(comma + 1) : (tvgName && tvgName[1]), 'قناة', 120),
-          group: safeText(group && group[1], '', 80),
+          name: safeText(line.slice(comma + 1) || (tvgName && tvgName[1]), 'قناة', MAX_LINE_LENGTH),
+          group: safeText(group && group[1], '', MAX_LINE_LENGTH),
           id: safeText(tvgId && tvgId[1], '', 160),
           poster: resolveHttpUrl(poster && poster[1]),
           year: safeYear(year && year[1]),
@@ -50,20 +72,29 @@
           description: safeText(description && description[1], '', 600),
           trailer: resolveHttpUrl(trailer && trailer[1])
         };
-        return;
+        return true;
       }
-      if (line.charAt(0) === '#') return;
+      if (line.charAt(0) === '#') return true;
+      if (!metadata || /[\s<>"{}\u0000-\u001f\u007f]/.test(line)) return reject('invalid-uri');
       var url = resolveHttpUrl(line, baseUrl);
-      if (!url) { metadata = null; return; }
-      entries.push({ url: url, name: metadata ? metadata.name : 'قناة ' + (entries.length + 1), group: metadata ? metadata.group : '', id: metadata ? metadata.id : '', poster: metadata ? metadata.poster : null, year: metadata ? metadata.year : '', rating: metadata ? metadata.rating : '', added: metadata ? metadata.added : '', description: metadata ? metadata.description : '', trailer: metadata ? metadata.trailer : null });
-      metadata = null;
+      if (!url) return reject('invalid-uri');
+      if (entries.length >= MAX_ENTRIES) return reject('entry-limit');
+      metadata.url = url; entries.push(metadata); metadata = null;
+      return true;
     }
-    return { push: push, truncate: function (reason) { truncated = true; truncatedReason = reason; }, result: function () { return { entries: entries, truncated: truncated, truncatedReason: truncatedReason }; } };
+    return {
+      push: push,
+      result: function () {
+        if (!failure && (!header || metadata)) reject(metadata ? 'missing-uri' : 'invalid-format');
+        return { entries: entries, truncated: !!failure, truncatedReason: failure };
+      }
+    };
   }
 
   function parseM3U(text, baseUrl) {
     var parser = createM3UParser(baseUrl);
-    String(text || '').split(/\r?\n/).forEach(parser.push);
+    var lines = String(text || '').split(/\r?\n/);
+    for (var index = 0; index < lines.length; index += 1) if (!parser.push(lines[index])) break;
     return parser.result();
   }
 
@@ -82,7 +113,7 @@
       if (entry.done) return;
       entry.done = true;
       if (active === entry) active = null;
-      timers.clearTimeout(entry.timer);
+      timers.clearTimeout(entry.timer); timers.clearTimeout(entry.totalTimer);
       entry.controller.abort();
       if (entry.reader) {
         try { Promise.resolve(entry.reader.cancel()).catch(function () {}); } catch (_) {}
@@ -94,8 +125,7 @@
     function armTimeout(entry) {
       timers.clearTimeout(entry.timer);
       entry.timer = timers.setTimeout(function () {
-        var partial = entry.parser && entry.parser.result();
-        finish(entry, partial && partial.entries.length ? { state: 'complete', entries: partial.entries, truncated: true, truncatedReason: 'timeout' } : { state: 'timeout' });
+        finish(entry, { state: 'timeout' });
       }, TIMEOUT_MS);
     }
 
@@ -116,7 +146,8 @@
         }
         entry.reader = response.body.getReader();
         var decoder = new Decoder('utf-8');
-        var parser = createM3UParser(url); entry.parser = parser;
+        var parser = createM3UParser(response.url || url);
+        function invalidResult() { var reason = parser.result().truncatedReason; return { state: /-limit$/.test(reason) ? 'limit' : 'invalid', reason: reason }; }
         var pending = '';
         while (!entry.done) {
           var chunk = await entry.reader.read();
@@ -124,14 +155,18 @@
           if (chunk.done) break;
           var value = chunk.value;
           entry.bytes += value.byteLength;
+          if (entry.bytes > MAX_DOWNLOAD_BYTES) { finish(entry, { state: 'limit', reason: 'download-limit' }); return; }
           armTimeout(entry);
           var lines = (pending + decoder.decode(value, { stream: true })).split(/\r?\n/);
           pending = lines.pop() || '';
-          lines.forEach(parser.push);
+          if (pending.length > MAX_LINE_LENGTH) { finish(entry, { state: 'limit', reason: 'line-limit' }); return; }
+          for (var index = 0; index < lines.length; index += 1) {
+            if (!parser.push(lines[index])) { finish(entry, invalidResult()); return; }
+          }
         }
         pending += decoder.decode(); if (pending) parser.push(pending);
         var parsed = parser.result();
-        finish(entry, parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: parsed.truncated, truncatedReason: parsed.truncatedReason } : { state: 'empty' });
+        finish(entry, parsed.truncated ? invalidResult() : parsed.entries.length ? { state: 'complete', entries: parsed.entries, truncated: false, truncatedReason: null } : { state: 'empty' });
       } catch (_) { if (!entry.done) finish(entry, { state: 'error' }); }
     }
 
@@ -144,9 +179,10 @@
         var controller;
         try { controller = new Abort(); } catch (_) { return Promise.resolve({ state: 'unsupported' }); }
         return new Promise(function (resolve) {
-          var entry = { controller: controller, reader: null, parser: null, timer: null, bytes: 0, done: false, resolve: resolve };
+          var entry = { controller: controller, reader: null, timer: null, totalTimer: null, bytes: 0, done: false, resolve: resolve };
           active = entry;
           armTimeout(entry);
+          entry.totalTimer = timers.setTimeout(function () { finish(entry, { state: 'timeout' }); }, TOTAL_TIMEOUT_MS);
           load(entry, url);
         });
       },
@@ -154,5 +190,5 @@
     };
   }
 
-  return { createLoader: createLoader, parseM3U: parseM3U, TIMEOUT_MS: TIMEOUT_MS };
+  return { createLoader: createLoader, parseM3U: parseM3U, TIMEOUT_MS: TIMEOUT_MS, TOTAL_TIMEOUT_MS: TOTAL_TIMEOUT_MS, MAX_DOWNLOAD_BYTES: MAX_DOWNLOAD_BYTES, MAX_LINE_LENGTH: MAX_LINE_LENGTH, MAX_ENTRIES: MAX_ENTRIES };
 }));

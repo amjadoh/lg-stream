@@ -48,6 +48,7 @@
     entries.forEach(function (entry, index) {
       if ((entry.name || '').toLocaleLowerCase().indexOf(query) < 0) return;
       var section = sectionForIndex(index);
+      if (!matches[section]) return;
       counts[section] += 1;
       if (matches[section].length < limit) matches[section].push(index);
     });
@@ -176,7 +177,7 @@
         requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
         progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0, playRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
-        frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, errorCode: 0
+        frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, seekInProgress: false, errorCode: 0
       };
       active = entry;
       function validEntry() { return active === entry && generation === ownGeneration; }
@@ -186,6 +187,7 @@
         entry.listeners.push([name, guarded]);
       }
       on('playing', function () {
+        entry.seekInProgress = false;
         if (entry.playingMs === null) {
           entry.playingMs = Math.round(now() - entry.requested);
           entry.lastMediaTime = video.currentTime || 0;
@@ -201,8 +203,12 @@
         }
         entry.lastMediaTime = mediaTime;
       });
+      on('seeking', function () {
+        // Seeking and its refill are user-requested work, not playback stalls.
+        finishWait(entry); entry.seekInProgress = true;
+      });
       on('waiting', function () {
-        if (entry.playingMs !== null && entry.waitingSince === null) {
+        if (!entry.seekInProgress && !video.seeking && entry.playingMs !== null && entry.waitingSince === null) {
           entry.waitingSince = now(); entry.stalls += 1;
         }
         entry.state = 'waiting'; notify(entry);

@@ -9,6 +9,11 @@
   var activeCatalogRevision = null;
   var activeCatalogSavedAt = 0;
   var favorites = {};
+  var hiddenGroups = { tv: new Set(), movies: new Set(), series: new Set() };
+  var groupSettingsSaving = false;
+  var managedSection = 'tv';
+  var managedGroups = [];
+  var managedWindowStart = 0;
   var activeGroup = '';
   var activeSection = 'tv';
   var sourceMode = 'manual';
@@ -61,6 +66,8 @@
   var searchTimer = null;
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
+  var AUTO_UPDATE_IDLE_MS = 60000;
+  var lastUserActivityAt = Date.now();
   var autoUpdateTimer = null;
   var autoNextAttemptAt = 0;
   var switchPending = false;
@@ -82,15 +89,15 @@
     return 'tv';
   }
   function sectionIndex() {
-    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection].join('\u0001');
+    var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection].join('\u0001');
     if (cacheKey === sectionCacheKey) return sectionCache;
     sectionCache = api.buildSectionIndex(sources, function (_, index) {
-      return activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection;
+      return entryVisible(index) && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection);
     });
     sectionCacheKey = cacheKey; return sectionCache;
   }
   function visibleIndexes() {
-    var cacheKey = [catalogViewRevision, favoritesRevision, activeSection, activeGroup, contentSort].join('\u0001');
+    var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeGroup, contentSort].join('\u0001');
     if (cacheKey === visibleCacheKey) return visibleCache;
     var ownSection = sectionIndex();
     var indexes = activeGroup ? (ownSection.byGroup[activeGroup] || []) : ownSection.all;
@@ -122,7 +129,7 @@
     var query = $('channel-search').value.trim().toLocaleLowerCase(); $('search-results').replaceChildren();
     if (query.length < 2) { $('search-status').textContent = 'اكتب حرفين على الأقل.'; return; }
     var sections = [['tv', 'البث المباشر'], ['movies', 'الأفلام'], ['series', 'المسلسلات']]; var total = 0;
-    var results = api.searchCatalog(sources, query, entrySection, 12);
+    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12);
     sections.forEach(function (section) {
       var matches = results.matches[section[0]]; var count = results.counts[section[0]];
       total += count;
@@ -137,7 +144,7 @@
     });
     $('search-status').textContent = total ? 'وُجد ' + total + ' نتيجة. تظهر أول 12 نتيجة في كل قسم.' : 'لا توجد نتائج.';
   }
-  function openSearch() { setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
+  function openSearch() { cancelSwitch(); setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
   function renderPrimary() {
     document.querySelector('.library-panel').classList.toggle('content-mode', activeSection === 'movies' || activeSection === 'series');
     Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
@@ -157,7 +164,8 @@
       return state && state.revision === revision ? state : null;
     } catch (_) { return null; }
   }
-  function applyCatalog(entries, source, revision, savedAt, restored) {
+  function applyCatalog(entries, source, revision, savedAt, restored, visibility) {
+    if (visibility || source !== activePlaylistUrl) setHiddenGroups(visibility);
     sources = entries;
     catalogViewRevision += 1; favoritesRevision += 1; activePlaylistUrl = source; activeCatalogRevision = revision; activeCatalogSavedAt = savedAt || Date.now(); sourceMode = 'playlist'; favorites = {}; playingIndex = null;
     var state = readViewState(revision);
@@ -192,11 +200,12 @@
     var view = automaticReleasedView; var generation = sourceGeneration;
     automaticRestorePromise = catalogStore.load().then(function (saved) {
       if (generation !== sourceGeneration) { automaticReleasedView = null; automaticRestoreMessage = ''; return false; }
+      if (document.hidden || unloading) return false;
       if (saved.state !== 'complete') {
         $('status').textContent = 'تعذر استعادة القائمة الآن — ستُعاد المحاولة عند الرجوع للتطبيق.';
         return false;
       }
-      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true); restoreRuntimeView(view, shouldFocus);
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups); restoreRuntimeView(view, shouldFocus);
       automaticReleasedView = null;
       if (automaticRestoreMessage) $('status').textContent = automaticRestoreMessage;
       automaticRestoreMessage = '';
@@ -218,11 +227,85 @@
     sources.forEach(function (entry, index) { if (favoriteUrls[entry.url]) favorites[index] = true; });
     activeGroup = state.group; selected = Math.max(0, sources.findIndex(function (entry) { return entry.url === state.selectedUrl; }));
     contentWindowStart = state.contentWindowStart; channelWindowStart = state.channelWindowStart; renderPrimary(); renderGroups(); renderChannels(); saveViewState(state.detailsOpen);
-    if (shouldFocus === false) return;
+    if (shouldFocus === false || document.hidden || unloading || !setup.hidden || !searchPanel.hidden || !speedPanel.hidden || !diagnostics.hidden || !$('group-manager').hidden) return;
     if (state.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
   }
   function sectionGroups() {
     return sectionIndex().groups;
+  }
+  function setHiddenGroups(value) {
+    ['tv', 'movies', 'series'].forEach(function (section) {
+      hiddenGroups[section] = new Set(value && Array.isArray(value[section]) ? value[section].filter(function (name) { return typeof name === 'string'; }) : []);
+    });
+  }
+  function entryVisible(index) { return !hiddenGroups[entrySection(index)].has(sources[index].group || ''); }
+  function collectManagedGroups() {
+    var counts = new Map();
+    sources.forEach(function (entry, index) {
+      if (entrySection(index) !== managedSection) return;
+      var name = entry.group || ''; counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    managedGroups = Array.from(counts, function (item) { return { name: item[0], count: item[1] }; });
+    managedWindowStart = 0;
+  }
+  function renderManagedGroups() {
+    var list = $('managed-groups'); list.replaceChildren();
+    managedWindowStart = Math.max(0, Math.min(managedWindowStart, Math.max(0, managedGroups.length - 40)));
+    managedGroups.slice(managedWindowStart, managedWindowStart + 40).forEach(function (item, offset) {
+      var button = document.createElement('button'); button.type = 'button'; button.className = 'group-switch';
+      button.dataset.position = managedWindowStart + offset; button.setAttribute('role', 'switch');
+      var enabled = !hiddenGroups[managedSection].has(item.name);
+      button.setAttribute('aria-checked', String(enabled)); button.disabled = groupSettingsSaving;
+      var label = document.createElement('span'); label.className = 'group-switch-name'; label.textContent = item.name || 'بدون مجموعة';
+      var count = document.createElement('span'); count.className = 'group-switch-count'; count.textContent = item.count + ' عنصر';
+      var state = document.createElement('span'); state.className = 'switch-state'; state.textContent = enabled ? 'ON · ظاهر' : 'OFF · مخفي';
+      button.appendChild(label); button.appendChild(count); button.appendChild(state);
+      button.addEventListener('focus', function () { button.scrollIntoView({ block: 'nearest' }); });
+      button.addEventListener('click', function () { toggleManagedGroup(Number(button.dataset.position)); });
+      list.appendChild(button);
+    });
+    $('managed-summary').textContent = managedGroups.length ? managedGroups.length + ' مجموعة — المخفي يبقى محفوظًا ويمكن إظهاره مجددًا.' : 'لا توجد مجموعات في هذا القسم.';
+    Array.prototype.forEach.call($('group-manager').querySelectorAll('[data-manage-section]'), function (button) {
+      button.setAttribute('aria-pressed', String(button.dataset.manageSection === managedSection)); button.disabled = groupSettingsSaving;
+    });
+  }
+  function focusManagedGroup(position) {
+    if (!managedGroups.length) return;
+    position = Math.max(0, Math.min(managedGroups.length - 1, position));
+    if (position < managedWindowStart || position >= managedWindowStart + 40) {
+      managedWindowStart = Math.max(0, position - 20); renderManagedGroups();
+    }
+    var button = $('managed-groups').querySelector('[data-position="' + position + '"]'); if (button) button.focus();
+  }
+  function toggleManagedGroup(position) {
+    if (groupSettingsSaving || !activePlaylistUrl || !managedGroups[position]) return;
+    var item = managedGroups[position]; var next = {};
+    ['tv', 'movies', 'series'].forEach(function (section) { next[section] = Array.from(hiddenGroups[section]); });
+    var index = next[managedSection].indexOf(item.name);
+    if (index < 0) next[managedSection].push(item.name); else next[managedSection].splice(index, 1);
+    var source = activePlaylistUrl;
+    groupSettingsSaving = true; $('manager-status').textContent = 'جارٍ الحفظ…'; renderManagedGroups();
+    catalogStore.saveHiddenGroups(source, next).then(function (result) {
+      groupSettingsSaving = false;
+      if (result.state === 'complete' && source === activePlaylistUrl) {
+        setHiddenGroups(next); catalogViewRevision += 1;
+        if (playingIndex !== null && !entryVisible(playingIndex)) stop();
+        renderGroups(); renderChannels(); saveViewState(false);
+        $('manager-status').textContent = index < 0 ? 'أُخفيت المجموعة. عناصرها محفوظة ويمكن إظهارها مجددًا.' : 'ظهرت المجموعة من جديد.';
+      } else $('manager-status').textContent = 'تعذر حفظ التغيير. بقيت المجموعة كما كانت.';
+      renderManagedGroups(); if (!$('group-manager').hidden && !document.hidden) focusManagedGroup(position);
+    });
+  }
+  function openGroupManager() {
+    if (playlistRunning || !activePlaylistUrl) return;
+    cancelSwitch(); managedSection = /^(tv|movies|series)$/.test(activeSection) ? activeSection : 'tv';
+    collectManagedGroups(); renderManagedGroups(); $('manager-status').textContent = '';
+    $('group-manager').hidden = false;
+    $('group-manager').querySelector('[data-manage-section="' + managedSection + '"]').focus();
+  }
+  function closeGroupManager() {
+    if (groupSettingsSaving) return;
+    $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); $('manage-groups-button').focus();
   }
   function renderGroups() {
     var groups = sectionGroups();
@@ -268,6 +351,7 @@
     var cards = activeSection === 'movies' || activeSection === 'series';
     $('movie-browser').hidden = !cards;
     if (!cards) return;
+    $('movie-count').textContent = indexes.length + (activeSection === 'movies' ? ' فيلم' : ' حلقة أو فيديو');
     $('movie-title').textContent = activeGroup || (activeSection === 'movies' ? 'الأفلام' : 'المسلسلات');
     $('movie-grid').replaceChildren();
     contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
@@ -291,11 +375,13 @@
   }
   function closeDetails() { detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
   function openDetails(index) {
+    cancelSwitch();
     selected = index; detailsIndex = index; var details = sources[index] || {};
     $('details-title').textContent = details.name || (activeSection === 'series' ? 'مسلسل' : 'فيلم');
     $('details-year').textContent = details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر';
     $('details-description').textContent = details.description || 'الوصف غير متوفر في بيانات القائمة.';
-    $('details-poster').hidden = !details.poster; if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
+    $('details-poster').hidden = !details.poster; detailsPanel.querySelector('.details-card').classList.toggle('no-poster', !details.poster);
+    if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
     $('details-status').textContent = details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.';
     $('details-trailer').textContent = details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube';
     detailsPanel.hidden = false; saveViewState(true); $('details-play').focus();
@@ -333,7 +419,7 @@
       if (watchMode && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
         setWatchMode(false); $('retry-button').focus();
       }
-      if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && document.activeElement.disabled) focusSelected();
+      if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
       $('progress-ms').textContent = state.progressMs === null || state.progressMs === undefined ? '—' : state.progressMs + ' ms';
       $('frame-ms').textContent = state.firstFrameMs === null || state.firstFrameMs === undefined ? (state.frameApi ? 'بانتظار الإشارة' : 'غير متاح') : state.firstFrameMs + ' ms';
@@ -356,6 +442,7 @@
   }
   function renderChannels() {
     var indexes = visibleIndexes();
+    $('channel-count').textContent = indexes.length + ' قناة';
     renderMovies(indexes);
     $('channels').replaceChildren();
     $('channel-empty').hidden = indexes.length > 0;
@@ -420,6 +507,7 @@
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var rawNext = position + step; var next = step > 0 ? Math.min(indexes.length - 1, rawNext) : Math.max(0, rawNext);
+    if (step < 0 && position >= 0 && position < 4) { $('sort-button').focus(); return true; }
     if (next < 0 || next >= indexes.length) return false;
     if (next === position) return true;
     if (next >= contentWindowStart && next < contentWindowStart + contentWindowSize) {
@@ -482,7 +570,7 @@
   var lastConfirmAt = 0;
   function activateChannel(index) {
     var now = performance.now();
-    if (playingIndex === index && lastConfirmIndex === index && now - lastConfirmAt <= 700) {
+    if (playingIndex === index && lastConfirmIndex === index && now - lastConfirmAt <= 700 && ['loading', 'playing', 'waiting', 'paused'].indexOf(lastState) >= 0) {
       cancelSwitch(); setWatchMode(true); lastConfirmIndex = null; lastConfirmAt = 0; return;
     }
     lastConfirmIndex = index; lastConfirmAt = now; requestChannel(index, false);
@@ -587,7 +675,7 @@
     $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
     $('media-toggle').focus();
   }
-  $('media-toggle').addEventListener('click', function () { player.toggle(); });
+  $('media-toggle').addEventListener('click', function () { cancelSwitch(); player.toggle(); });
   $('media-close').addEventListener('click', function () { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); });
   $('media-exit').addEventListener('click', exitPlayback);
   $('seek-back').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) queueSeek((pendingSeek === null ? video.currentTime : pendingSeek) - 30); });
@@ -601,6 +689,10 @@
       catch (_) { $('track-status').textContent = 'تعذر تغيير المسار على هذا الجهاز.'; }
     });
   });
+  function noteUserActivity() {
+    lastUserActivityAt = Date.now();
+    if (playlistRunning && playlistAutomatic) prepareForegroundAction();
+  }
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
     if (playlistRunning) return;
@@ -608,11 +700,13 @@
       if (!document.hidden && !unloading) restoreReleasedCatalog('', true).then(function (restored) { if (restored) scheduleAutoUpdate(); });
       return;
     }
-    if (!activePlaylistUrl || !activeCatalogSavedAt || document.hidden) return;
+    if (!activePlaylistUrl || !activeCatalogSavedAt || document.hidden || unloading) return;
     var remaining = activeCatalogSavedAt + AUTO_UPDATE_MS - Date.now();
     if (remaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, Math.min(remaining, 2147483647)); return; }
     if (autoNextAttemptAt > Date.now()) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, autoNextAttemptAt - Date.now()); return; }
-    var browsing = lastState === 'idle' && playingIndex === null && !switchPending && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && !watchMode;
+    var idleRemaining = lastUserActivityAt + AUTO_UPDATE_IDLE_MS - Date.now();
+    if (idleRemaining > 0) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, idleRemaining); return; }
+    var browsing = lastState === 'idle' && playingIndex === null && !switchPending && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && !groupSettingsSaving && !watchMode;
     if (!browsing) { autoUpdateTimer = setTimeout(scheduleAutoUpdate, 60000); return; }
     loadPlaylist(activePlaylistUrl, true);
   }
@@ -629,6 +723,7 @@
     $('cancel-playlist').disabled = !running;
     $('playlist-url').disabled = running;
     $('refresh-saved').disabled = running;
+    $('manage-groups-button').disabled = running || !activePlaylistUrl;
     inputs.forEach(function (input) { input.disabled = running; });
     $('source-form').querySelector('button[type="submit"]').disabled = running;
     $('clear-sources').disabled = running;
@@ -693,13 +788,14 @@
     }
     if (!result.length) { $('form-error').textContent = 'أضف مصدرًا واحدًا على الأقل.'; inputs[0].focus(); return; }
     sourceGeneration += 1; catalogViewRevision += 1; favoritesRevision += 1; stop(); sources = result.map(function (url, index) { return { url: url, name: 'المصدر ' + (index + 1), group: '' }; });
+    setHiddenGroups(null);
     activePlaylistUrl = null; activeCatalogRevision = null; activeCatalogSavedAt = 0; clearTimeout(autoUpdateTimer); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0;
     renderPrimary(); renderGroups(); renderChannels(); closeSetup();
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
   function loadPlaylist(url, automatic) {
     if (playlistRunning) return;
-    var runtimeView = automatic ? captureRuntimeView() : null;
+    var runtimeView = automatic || (sourceMode === 'playlist' && url === activePlaylistUrl) ? captureRuntimeView() : null;
     sourceGeneration += 1; stop();
     if (automatic) releaseCatalogForAutomaticUpdate(runtimeView);
     var revision = ++playlistRevision;
@@ -714,7 +810,8 @@
           timeout: 'انتهت مهلة تحميل القائمة. تحقق من الاتصال وحاول مرة أخرى.',
           empty: 'لم نجد روابط قنوات صالحة داخل القائمة.',
           unsupported: 'محرك التلفزيون لا يدعم طريقة تحميل القائمة.',
-          invalid: 'رابط القائمة غير صالح.'
+          invalid: 'الرد ليس قائمة M3U مكتملة وصالحة. احتفظنا بالقائمة السابقة.',
+          limit: 'تجاوزت القائمة حد التحميل الآمن. لم نحفظ قائمة ناقصة؛ بقيت القائمة السابقة.'
         };
         var failure = result.truncated ? 'لم تكتمل القائمة، لذلك احتفظنا بالنسخة المحفوظة السابقة.' : (messages[result.state] || 'تعذر تحميل القائمة. احتفظنا بالنسخة المحفوظة السابقة.');
         if (automatic) {
@@ -739,7 +836,7 @@
         }
         automaticReleasedView = null;
         automaticRestoreMessage = '';
-        stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false); if (automatic) restoreRuntimeView(runtimeView, !document.hidden);
+        stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false); if (runtimeView) restoreRuntimeView(runtimeView, automatic && !document.hidden);
         var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
         $('status').textContent = (automatic ? 'تم تحديث القائمة تلقائيًا: ' : 'تم حفظ ') + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;
         playlistControls(false); autoNextAttemptAt = 0;
@@ -762,17 +859,35 @@
       $('clear-sources').disabled = false;
       if (result.state !== 'complete') { $('playlist-status').textContent = 'تعذر مسح القائمة المحفوظة. لم نغيّرها.'; return; }
       try { localStorage.removeItem(VIEW_KEY); } catch (_) {}
+      setHiddenGroups(null);
       catalogViewRevision += 1; favoritesRevision += 1; sources = []; activePlaylistUrl = null; activeCatalogRevision = null; activeCatalogSavedAt = 0; clearTimeout(autoUpdateTimer); favorites = {}; activeGroup = ''; activeSection = 'tv'; sourceMode = 'manual'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
       $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
+      $('manage-groups-button').disabled = true;
       $('saved-catalog-status').textContent = 'لا توجد قائمة محفوظة.'; $('refresh-saved').hidden = true; $('playlist-status').textContent = 'مُسحت القائمة المحفوظة.'; $('form-error').textContent = ''; inputs[0].focus();
     });
   });
   $('channel-search').addEventListener('input', function () { clearTimeout(searchTimer); searchTimer = setTimeout(renderSearch, 180); });
+  $('manage-groups-button').addEventListener('click', openGroupManager);
+  $('close-group-manager').addEventListener('click', closeGroupManager);
+  Array.prototype.forEach.call($('group-manager').querySelectorAll('[data-manage-section]'), function (button) {
+    button.addEventListener('click', function () {
+      managedSection = button.dataset.manageSection; collectManagedGroups(); renderManagedGroups(); $('manager-status').textContent = '';
+      if (managedGroups.length) focusManagedGroup(0);
+    });
+  });
+  $('managed-groups').addEventListener('wheel', function (event) {
+    if (groupSettingsSaving) { event.preventDefault(); return; }
+    var list = $('managed-groups'); var down = event.deltaY > 0;
+    if ((down && list.scrollTop + list.clientHeight < list.scrollHeight - 4) || (!down && list.scrollTop > 4)) return;
+    var next = Math.max(0, Math.min(Math.max(0, managedGroups.length - 40), managedWindowStart + (down ? 20 : -20)));
+    if (next !== managedWindowStart) { managedWindowStart = next; renderManagedGroups(); focusManagedGroup(next + (down ? 20 : 0)); }
+    event.preventDefault();
+  }, { passive: false });
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
   $('nav-search').addEventListener('click', openSearch);
   $('close-search').addEventListener('click', closeSearch);
   $('close-details').addEventListener('click', closeDetails);
-  $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); });
+  $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); detailsPanel.querySelector('.details-card').classList.add('no-poster'); });
   $('details-play').addEventListener('click', function () { var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
   $('details-trailer').addEventListener('click', function () {
     if (!prepareForegroundAction()) return;
@@ -809,6 +924,15 @@
   $('movie-browser').addEventListener('scroll', function () { schedulePosterCheck(); scheduleViewSave(); });
   $('groups').addEventListener('scroll', scheduleViewSave);
   $('channels').addEventListener('scroll', scheduleViewSave);
+  $('channels').addEventListener('wheel', function (event) {
+    if (!event.deltaY || activeSection === 'movies' || activeSection === 'series') return;
+    var list = $('channels'); var down = event.deltaY > 0;
+    if ((down && list.scrollTop + list.clientHeight < list.scrollHeight - 12) || (!down && list.scrollTop > 12)) return;
+    var indexes = visibleIndexes(); var target = down ? channelWindowStart + channelWindowSize : channelWindowStart - 1;
+    if (target < 0 || target >= indexes.length) return;
+    channelWindowStart = Math.max(0, Math.min(channelWindowStart + (down ? 12 : -12), Math.max(0, indexes.length - channelWindowSize)));
+    renderChannels(); focusChannel(indexes[target]); saveViewState(false); event.preventDefault();
+  }, { passive: false });
   $('groups').addEventListener('wheel', function (event) {
     var list = $('groups'); var down = event.deltaY > 0;
     if ((down && list.scrollTop + list.clientHeight < list.scrollHeight - 12) || (!down && list.scrollTop > 12)) return;
@@ -836,6 +960,8 @@
   }, { passive: false });
   Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
     button.addEventListener('click', function (event) {
+      cancelSwitch();
+      if (event.currentTarget.dataset.section === 'movies' || event.currentTarget.dataset.section === 'series') stop();
       activeSection = event.currentTarget.dataset.section; activeGroup = ''; contentWindowStart = 0; channelWindowStart = 0;
       setPrimary(false); renderPrimary(); renderGroups(); renderChannels();
       saveViewState(false);
@@ -970,7 +1096,10 @@
   document.addEventListener('keyboardStateChange', function (event) {
     keyboardVisible = !!(event.detail && event.detail.visibility);
   });
+  document.addEventListener('click', noteUserActivity, true);
+  document.addEventListener('wheel', noteUserActivity, { capture: true, passive: true });
   document.addEventListener('keydown', function (event) {
+    noteUserActivity();
     var code = event.keyCode;
     var key = event.key;
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
@@ -980,6 +1109,7 @@
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();
+      if (!$('group-manager').hidden) { closeGroupManager(); return; }
       if (!$('sort-menu').hidden) { $('sort-menu').hidden = true; $('sort-button').setAttribute('aria-expanded', 'false'); $('sort-button').focus(); }
       else if (!detailsPanel.hidden) closeDetails();
       else if (!setup.hidden) closeSetup();
@@ -992,8 +1122,15 @@
       else window.close();
       return;
     }
-    var dialog = !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
+    var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
+      if (dialog === $('group-manager') && document.activeElement.classList.contains('group-switch') && (key === 'ArrowUp' || key === 'ArrowDown')) {
+        event.preventDefault();
+        var position = Number(document.activeElement.dataset.position);
+        if (key === 'ArrowUp' && position === 0) $('group-manager').querySelector('[data-manage-section="' + managedSection + '"]').focus();
+        else focusManagedGroup(position + (key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
       if (key === 'Tab') {
         var controls = visibleControls(dialog);
         var position = controls.indexOf(document.activeElement);
@@ -1015,6 +1152,7 @@
       event.preventDefault(); return;
     }
     if ((code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
+      if (isOnDemand() || activeSection === 'movies' || activeSection === 'series') { event.preventDefault(); return; }
       var indexes = visibleIndexes();
       if (!indexes.length) return;
       var position = indexes.indexOf(selected);
@@ -1027,6 +1165,14 @@
     if (code === 415) { cancelSwitch(); player.resume(); event.preventDefault(); return; }
     if (code === 413) { stop(); focusSelected(); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { cancelSwitch(); player.toggle(); event.preventDefault(); return; }
+    if (key === 'ArrowDown' && document.activeElement === $('sort-button')) { focusSelected(); event.preventDefault(); return; }
+    if (key === 'ArrowLeft' && document.activeElement.classList.contains('movie-card')) {
+      var contentIndexes = visibleIndexes(); var contentPosition = contentIndexes.indexOf(Number(document.activeElement.dataset.index));
+      if (contentPosition % 4 === 3 || contentPosition === contentIndexes.length - 1) {
+        var contentGroup = $('groups').querySelector('.group-button.active');
+        if (contentGroup) contentGroup.focus(); event.preventDefault(); return;
+      }
+    }
     if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.channels-panel')) {
       if (document.activeElement.classList.contains('channel-button')) { document.activeElement.parentNode.querySelector('.favorite-button').focus(); event.preventDefault(); return; }
       var groupButton = $('groups').querySelector('.group-button.active');
@@ -1049,7 +1195,7 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
@@ -1064,11 +1210,14 @@
   var restoreGeneration = sourceGeneration;
   renderPrimary(); renderGroups(); renderChannels(); $('start-button').focus();
   catalogStore.load().then(function (saved) {
-    if (restoreGeneration !== sourceGeneration) return;
+    if (restoreGeneration !== sourceGeneration || unloading) return;
     if (saved.state === 'complete') {
-      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true);
-      if (pendingViewState && pendingViewState.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups);
+      if (!document.hidden) { if (pendingViewState && pendingViewState.detailsOpen && sources[selected] && entryVisible(selected)) openDetails(selected); else focusSelected(); }
       scheduleAutoUpdate();
+    } else if (saved.state !== 'empty') {
+      $('status').textContent = 'تعذر استعادة القائمة المحفوظة — أعد فتح التطبيق للمحاولة مجددًا.';
+      $('saved-catalog-status').textContent = 'تعذرت قراءة القائمة المحفوظة. لم تُحذف بياناتها؛ أعد فتح التطبيق أو حمّل القائمة من جديد.';
     }
   });
 }());
