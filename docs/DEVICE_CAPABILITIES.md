@@ -1,13 +1,13 @@
 # حدود تشغيل الوسائط وخطة إثبات قصيرة
 
-تاريخ التحقق: 2026-11-14. الجهاز المستهدف: LG OLED55CS6LA (موديل 2022). هذه نتائج توثيق ومقترحات هندسية، وليست نتائج تجربة على جهاز المستخدم. أكد المستخدم وجود ساوندبار متصل عبر HDMI eARC، وموديله غير معروف. إصدار webOS الحالي لم يُتحقّق منه؛ لا نفترض أنه ما زال على الإصدار الأصلي webOS 22.
+تاريخ التحقق: 2026-11-14. الجهاز المستهدف والمجرّب: LG OLED55CS6LA (موديل 2022)، إصدار SDK المبلغ `11.2.0` والبرنامج الثابت `43.21.94`. أكد المستخدم وجود ساوندبار متصل عبر HDMI eARC، وموديله غير معروف. تجمع هذه الوثيقة بين حدود المواصفات ونتائج الجهاز الفعلية؛ كل نتيجة مذكورة بحدودها ولا تُعمم على صيغة أو حاوية أخرى.
 
 ## مصفوفة القدرات
 
 | الخاصية | الدليل والقرار للمشروع |
 |---|---|
 | Dolby Vision / HDR10 / HLG | مواصفات الموديل تعلن Dolby Vision IQ وHDR10 وHLG. نستهدف الحفاظ على المسار الأصلي والبيانات الوصفية. هذا لا يضمن تشغيل كل Profile/Level أو كل ملف MKV/MP4. لا نعد بـProfile 7/FEL أو HDR10+؛ هذه ليست قدرات مؤكدة لهذا التطبيق. [LG UK](https://www.lg.com/uk/tvs/oled-tv/oled55cs6la/) |
-| Dolby Atmos عبر Dolby Digital Plus | الموديل يعلن Atmos ويدرج EAC3 ضمن صيغ الصوت. Dolby تؤكد أن Atmos يمكن حمله عبر DD+ أو TrueHD؛ وهما مساران مختلفان. DD+ مع Atmos هو هدف التوافق الأول، ويتطلب إثباتًا بعينة سليمة وسلسلة خرج الصوت الفعلية. EAC3 وحده لا يعني وجود Atmos. [LG Italy](https://www.lg.com/it/tv-soundbar/oled/oled55cs6la/)، [Dolby](https://professional.dolby.com/siteassets/tv/home/dolby-atmos/dolby-atmos-for-home-theater.pdf) |
+| Dolby Atmos عبر Dolby Digital Plus | الموديل يعلن Atmos ويدرج EAC3 ضمن صيغ الصوت. نجحت عينة Dolby رسمية DD+ Atmos ‏(JOC) في مشغل LG Stream، وظهر مؤشر Dolby Atmos على الساوندبار عبر HDMI eARC. هذا قبول للعينة والمسار فقط، وليس وعدًا لكل ملف EAC3؛ EAC3 وحده لا يعني وجود Atmos. [LG Italy](https://www.lg.com/it/tv-soundbar/oled/oled55cs6la/)، [Dolby](https://professional.dolby.com/siteassets/tv/home/dolby-atmos/dolby-atmos-for-home-theater.pdf) |
 | TrueHD / TrueHD Atmos | TrueHD غير مدرج ضمن صيغ هذا الموديل أو جدول webOS 22. يُسجل غير مدعوم ضمن نطاق النسخة الأولى، ولا يُوعد بتمريره من تطبيق التلفزيون. وجود eARC ليس دليلًا على دعم فك/تمرير مصدر داخلي بعينه. لا نعمم هذا الاستنتاج على جميع تلفزيونات LG. [مواصفات الموديل](https://www.lg.com/it/tv-soundbar/oled/oled55cs6la/)، [صيغ webOS 22](https://webostv.developer.lge.com/develop/specifications/video-audio-220) |
 | DTS / DTS-HD / DTS:X | صفحة LG الخاصة بـOLED55CS6LA تنص صراحة أن DTS غير مدعوم. جدول webOS 22 العام يذكر DTS في MKV؛ نرجح مواصفات الموديل المحدد، ولا نحول الجدول العام إلى وعد للمستخدم. لا نتوقع أن تحديث واجهة النظام وحده يضيف الترخيص/الدعم. [LG Italy](https://www.lg.com/it/tv-soundbar/oled/oled55cs6la/) |
 | خرج الصوت | eARC موجود على HDMI 2. يجب معرفة هل الخرج سماعات التلفزيون أم ساوندبار/AVR وما موديله. إثبات Atmos الخارجي يكون بإشارة الجهاز المستقبل، لا بمجرد اسم الملف أو قبول canPlayType. [LG South Africa](https://www.lg.com/za/tv-soundbars/oled/oled55cs6la/) |

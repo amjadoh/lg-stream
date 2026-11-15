@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, uniqueGroups, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -20,9 +20,11 @@ test('labels decoded video dimensions without trusting channel names', () => {
 
 test('collects groups from a full-size catalogue in one pass and preserves provider order', () => {
   const entries = Array.from({ length: 331681 }, (_, index) => ({ group: `مجموعة ${index % 6000}`, name: `عنوان ${index}` }));
-  const groups = uniqueGroups(entries, (_, index) => index % 2 === 0);
-  assert.equal(groups.length, 3000);
-  assert.deepEqual(groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
+  const index = buildSectionIndex(entries, (_, itemIndex) => itemIndex % 2 === 0);
+  assert.equal(index.all.length, 165841);
+  assert.equal(index.groups.length, 3000);
+  assert.deepEqual(index.groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
+  assert.deepEqual(index.byGroup['مجموعة 2'].slice(0, 3), [2, 6002, 12002]);
   const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
   assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
   assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
@@ -34,6 +36,13 @@ test('builds a YouTube TV voice search with title and year exactly once', () => 
   assert.equal(target.searchParams.get('launch'), 'voice');
   assert.equal(target.searchParams.get('vq'), 'Search for فيلم تجريبي 2024 on YouTube');
   assert.equal(youtubeSearchTarget('', '2024'), null);
+});
+
+test('search omits hidden entries from both results and totals', () => {
+  const entries = [{ name: 'عنوان مخفي' }, { name: 'عنوان ظاهر' }];
+  const result = searchCatalog(entries, 'عنوان', index => index === 0 ? null : 'tv', 12);
+  assert.deepEqual(result.matches, { tv: [1], movies: [], series: [] });
+  assert.deepEqual(result.counts, { tv: 1, movies: 0, series: 0 });
 });
 
 test('rapid channel requests commit only the latest and cancelled callbacks remain harmless', () => {
@@ -168,4 +177,49 @@ test('measures intent-to-start/progress including switch delay and aborts a stal
   const timedOut = state;
   video.historic.get('playing')(); video.rejectPlay();
   assert.equal(state, timedOut);
+});
+
+test('seeking and its refill do not inflate playback stall measurements', () => {
+  let time = 0; let video; let state;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo() {}, unmountVideo() {},
+    now: () => time, onState: next => { state = next; }, timers: fakeTimers()
+  });
+  player.start('https://example.test/movie', 1);
+  video.fire('playing');
+  time = 100; video.fire('waiting');
+  assert.equal(state.stalls, 1);
+  time = 150; video.seeking = true; video.fire('seeking');
+  time = 200; video.fire('waiting');
+  assert.equal(state.state, 'waiting', 'Seeking still exposes the waiting state');
+  assert.equal(state.stalls, 1);
+  assert.equal(state.stallMs, 50, 'Only the wait before seeking counts');
+  video.seeking = false; video.fire('seeked');
+  time = 300; video.fire('waiting');
+  assert.equal(state.stalls, 1, 'Refill after seeked still belongs to the seek');
+  time = 500; video.fire('playing');
+  assert.equal(state.stallMs, 50);
+  time = 600; video.fire('waiting');
+  assert.equal(state.stalls, 2, 'A new stall after playback resumes still counts');
+  time = 700; video.fire('playing');
+  assert.equal(state.stallMs, 150);
+  player.stop();
+});
+
+test('buffered seeking ends on media progress even without another playing event', () => {
+  let video; let state;
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo() {}, unmountVideo() {},
+    onState: next => { state = next; }, timers: fakeTimers()
+  });
+  player.start('https://example.test/movie', 1);
+  video.fire('playing'); video.currentTime = 10; video.fire('timeupdate');
+  video.seeking = true; video.fire('seeking'); video.currentTime = 30;
+  video.seeking = false; video.fire('seeked'); video.fire('timeupdate');
+  video.fire('waiting');
+  assert.equal(state.stalls, 0, 'The seek jump and a stationary update do not end refill');
+  video.currentTime = 30.1; video.fire('timeupdate');
+  video.fire('waiting');
+  assert.equal(state.stalls, 1, 'Actual progress ends seeking even without playing');
+  player.stop();
 });

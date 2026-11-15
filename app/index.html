@@ -31,7 +31,7 @@
           <button id="nav-settings" type="button" class="primary-settings">⚙<span>الإعدادات</span></button>
         </nav>
         <section class="groups-panel"><h1>المجموعات</h1><div id="groups" class="group-list"></div></section>
-        <section class="channels-panel"><h1>القنوات</h1>
+        <section class="channels-panel"><h1>القنوات</h1><p id="channel-count" class="list-count"></p>
         <div id="channels" class="channel-list"></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
         <div class="remote-hint"><span>↑ ↓</span> للتنقل بين القنوات<br><span>OK</span> للتشغيل · <span>CH + / −</span> للتبديل</div>
@@ -42,10 +42,16 @@
         <section id="movie-browser" class="movie-browser" aria-label="الأفلام" hidden>
           <div class="movie-heading"><h2 id="movie-title"></h2><button id="sort-button" class="sort-button" type="button" aria-expanded="false">ترتيب: المزوّد</button></div>
           <div id="sort-menu" class="sort-menu" hidden><button type="button" data-sort="provider">ترتيب المزوّد</button><button type="button" data-sort="year">السنة</button><button type="button" data-sort="rating">التقييم</button><button type="button" data-sort="added">تاريخ الإضافة</button><button type="button" data-sort="alpha">أبجدي</button></div>
-          <div id="movie-grid" class="movie-grid"></div>
+          <p id="movie-count" class="list-count"></p><div id="movie-grid" class="movie-grid"></div>
         </section>
         <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
-        <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق أو رجوع لإظهار التحكم</p>
+        <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق للتحكم · رجوع للخروج</p>
+        <section id="media-controls" class="media-controls" aria-label="التحكم بالمشاهدة" hidden>
+          <div id="seek-controls"><p id="playback-time" dir="ltr">—</p><input id="seek-position" type="range" min="0" max="0" step="10" aria-label="موضع التشغيل"><div class="form-actions"><button id="seek-back" type="button">رجوع 30 ثانية</button><button id="seek-forward" type="button">تقديم 30 ثانية</button></div><p id="seek-status" role="status"></p></div>
+          <div class="form-actions"><button id="media-toggle" type="button">إيقاف مؤقت</button><button id="media-close" type="button">إخفاء التحكم</button><button id="media-exit" type="button">الخروج من المشاهدة</button></div>
+          <div class="track-options"><label>لغة الصوت <select id="audio-language" aria-label="لغة الصوت"></select></label><label>الترجمة <select id="subtitle-language" aria-label="الترجمة"></select></label></div>
+          <p id="track-status">تظهر المسارات التي يتيحها المصدر ومشغل التلفزيون فقط.</p>
+        </section>
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
@@ -59,7 +65,8 @@
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
-      <h2 id="setup-title">أضف مصادر البث</h2>
+      <h2 id="setup-title">الإعدادات ومصادر البث</h2>
+      <button id="manage-groups-button" type="button">إدارة المجموعات</button>
       <p>ألصق رابط M3U الكامل لتحميل القنوات. بعد نجاح القائمة كاملة تُحفظ محليًا على التلفزيون وتعود عند فتح التطبيق.</p>
       <label for="playlist-url">رابط قائمة M3U الكامل</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
@@ -73,6 +80,14 @@
       <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
       <p class="small-note">قد يمنع مزود القائمة التحميل من تطبيق التلفزيون؛ عندها تظهر رسالة واضحة ولا نرسل الرابط لأي وسيط. يبدأ التشغيل فقط عند اختيار قناة.</p>
     </form>
+  </section>
+  <section id="group-manager" class="modal group-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" hidden>
+    <div class="setup-card manager-card">
+      <h2 id="manager-title">إدارة المجموعات</h2>
+      <div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button></div>
+      <p id="managed-summary"></p><div id="managed-groups" class="managed-groups"></div>
+      <p id="manager-status" role="status" aria-live="polite"></p><button id="close-group-manager" type="button">رجوع</button>
+    </div>
   </section>
   <section id="speed-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="speed-title" hidden>
     <div class="setup-card speed-card">
@@ -94,7 +109,10 @@
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
     <dl><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
     <p>الأزمنة تقديرية تبدأ من آخر طلب تبديل وتشمل تأخير تجميع أزرار CH. ليست إثباتًا لظهور الصورة؛ التأكيد بالمشاهدة.</p>
-    <p>Dolby Vision وAtmos: غير متحقق منهما. يتطلب التأكيد مؤشر التلفزيون أو الساوندبار ومصدرًا معروفًا.</p>
+    <h3>جاهزية مشغل LG التلقائية</h3>
+    <ul class="capability-list"><li>HDR10</li><li>Dolby Vision</li><li>HLG</li><li>4K HEVC</li><li>4K AV1</li></ul>
+    <p>هذه جاهزية للمسار الأصلي وليست كشفًا للصيغة النشطة. لا يبدأ هذا القسم أي تنزيل أو اختبار، ويظل تأكيد HDR من مؤشر التلفزيون.</p>
+    <p>HDR وDolby Vision يُفعّلهما التلفزيون تلقائيًا عند توافق المصدر، ويؤكدهما مؤشر الشاشة. نجحت عينة DD+ Atmos ‏(JOC) على هذا الجهاز وظهر مؤشر Atmos على الساوندبار؛ لا يشمل ذلك TrueHD أو DTS.</p>
     <button id="close-diagnostics" type="button">إغلاق القياسات</button>
   </section>
 </body>

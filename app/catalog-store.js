@@ -47,30 +47,34 @@
       try {
         var database = await open();
         var metaTransaction = database.transaction('meta', 'readonly');
-        var meta = await requestResult(metaTransaction.objectStore('meta').get('active'));
-        if (!meta || !meta.revision || !meta.source || !meta.chunkCount) return { state: 'empty' };
+        var metaStore = metaTransaction.objectStore('meta');
+        var records = await Promise.all([requestResult(metaStore.get('active')), requestResult(metaStore.get('group-visibility'))]);
+        var meta = records[0]; var preferences = records[1];
+        if (!meta) return { state: 'empty' };
+        if (!meta.revision || !meta.source || !Number.isSafeInteger(meta.count) || meta.count <= 0 || meta.chunkCount !== Math.ceil(meta.count / CHUNK_SIZE)) return { state: 'corrupt' };
         var transaction = database.transaction('chunks', 'readonly');
         var done = transactionDone(transaction);
         var store = transaction.objectStore('chunks');
         var requests = [];
         for (var index = 0; index < meta.chunkCount; index += 1) requests.push(requestResult(store.get(meta.revision + ':' + index)));
-        var chunks = await Promise.all(requests); await done;
+        var loaded = await Promise.all([Promise.all(requests), done]); var chunks = loaded[0];
         var entries = new Array(meta.count); var offset = 0;
         for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
           if (!chunks[chunkIndex] || chunks[chunkIndex].revision !== meta.revision) return { state: 'corrupt' };
-          var ownEntries = chunks[chunkIndex].entries || [];
+          var ownEntries = chunks[chunkIndex].entries;
+          if (!Array.isArray(ownEntries) || ownEntries.length !== Math.min(CHUNK_SIZE, meta.count - offset)) return { state: 'corrupt' };
           for (var entryIndex = 0; entryIndex < ownEntries.length; entryIndex += 1) entries[offset++] = ownEntries[entryIndex];
         }
         if (offset !== meta.count) return { state: 'corrupt' };
-        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt };
+        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt, hiddenGroups: preferences && preferences.source === meta.source ? copyHiddenGroups(preferences.hiddenGroups) : null };
       } catch (_) { return { state: 'error' }; }
     }
     async function cleanup(database, revision) {
       try {
         var transaction = database.transaction('chunks', 'readwrite');
         var store = transaction.objectStore('chunks');
-        var request = store.openCursor();
-        request.onsuccess = function () { var cursor = request.result; if (!cursor) return; if (cursor.value.revision !== revision) cursor.delete(); cursor.continue(); };
+        var request = store.openKeyCursor();
+        request.onsuccess = function () { var cursor = request.result; if (!cursor) return; if (String(cursor.primaryKey).indexOf(revision + ':') !== 0) store.delete(cursor.primaryKey); cursor.continue(); };
         await transactionDone(transaction);
       } catch (_) {}
     }
@@ -86,14 +90,37 @@
         var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
         activeWrite = transaction;
         var chunks = transaction.objectStore('chunks');
+        var metaStore = transaction.objectStore('meta');
+        var preferencesRequest = requestResult(metaStore.get('group-visibility'));
         for (var index = 0; index < chunkCount; index += 1) {
           chunks.put({ key: revision + ':' + index, revision: revision, index: index, entries: entries.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE) });
         }
-        transaction.objectStore('meta').put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
-        await transactionDone(transaction); activeWrite = null;
+        metaStore.put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
+        var completed = await Promise.all([preferencesRequest, transactionDone(transaction)]); activeWrite = null;
+        var preferences = completed[0];
         cleanup(database, revision);
-        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt };
+        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null };
       } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
+    }
+    function copyHiddenGroups(hiddenGroups) {
+      if (!hiddenGroups || typeof hiddenGroups !== 'object') return null;
+      var copy = {};
+      var sections = ['tv', 'movies', 'series'];
+      for (var index = 0; index < sections.length; index += 1) {
+        var section = sections[index]; var groups = hiddenGroups[section];
+        if (!Array.isArray(groups) || !groups.every(function (group) { return typeof group === 'string'; })) return null;
+        copy[section] = groups.slice();
+      }
+      return copy;
+    }
+    async function saveHiddenGroups(source, hiddenGroups) {
+      var copy = copyHiddenGroups(hiddenGroups);
+      if (!source || !copy) return { state: 'error' };
+      try {
+        var database = await open(); var transaction = database.transaction('meta', 'readwrite');
+        transaction.objectStore('meta').put({ key: 'group-visibility', source: source, hiddenGroups: copy });
+        await transactionDone(transaction); return { state: 'complete' };
+      } catch (_) { return { state: 'error' }; }
     }
     async function clear() {
       try {
@@ -105,7 +132,7 @@
       if (!activeWrite) { writeGeneration += 1; return true; }
       try { activeWrite.abort(); writeGeneration += 1; activeWrite = null; return true; } catch (_) { return false; }
     }
-    return { load: load, save: save, clear: clear, cancel: cancel };
+    return { load: load, save: save, clear: clear, cancel: cancel, saveHiddenGroups: saveHiddenGroups };
   }
   return { createStore: createStore, CHUNK_SIZE: CHUNK_SIZE };
 }));

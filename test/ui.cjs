@@ -38,12 +38,15 @@ async function main() {
         return states.get(video);
       };
       window.__mediaStarts = 0;
+      window.__seekWrites = 0;
       const proto = HTMLMediaElement.prototype;
       Object.defineProperty(proto, 'src', { configurable: true, get() { return state(this).source; }, set(value) { state(this).source = value; } });
       Object.defineProperty(proto, 'paused', { configurable: true, get() { return state(this).paused; } });
-      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; } });
+      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; }, set(value) { window.__seekWrites++; state(this).time = value; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get() { return 1920; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get() { return 1080; } });
+      Object.defineProperty(proto, 'duration', { configurable: true, get() { return 3600; } });
+      Object.defineProperty(proto, 'seekable', { configurable: true, get() { return { length: 1, start() { return 0; }, end() { return 3600; } }; } });
       proto.load = function () {};
       proto.play = function () {
         window.__mediaStarts++;
@@ -66,6 +69,22 @@ async function main() {
       let dateOffset = 0;
       Date.now = () => realDateNow() + dateOffset;
       window.__advanceTime = milliseconds => { dateOffset += milliseconds; };
+      Object.defineProperty(window, 'LGCatalogStore', {
+        configurable: true,
+        set(api) {
+          const createStore = api.createStore;
+          api.createStore = (...args) => {
+            const store = createStore(...args); const load = store.load;
+            store.load = () => {
+              if (!window.__holdNextCatalogLoad) return load();
+              window.__holdNextCatalogLoad = false;
+              return new Promise(resolve => { window.__resumeCatalogLoad = () => load().then(resolve); });
+            };
+            return store;
+          };
+          Object.defineProperty(window, 'LGCatalogStore', { configurable: true, writable: true, value: api });
+        }
+      });
       window.__speedRequests = [];
       window.__playlistRequests = [];
       window.__openedUrls = [];
@@ -96,7 +115,9 @@ async function main() {
             lines.push(`#EXTINF:-1 group-title="${group}"${details},قناة ${index}`);
             lines.push(`https://media.example.test/${index > 106 ? 'series' : index > 64 ? 'movie' : 'live'}/${index}.m3u8?token=synthetic`);
           }
-          const bytes = new TextEncoder().encode(lines.join('\n'));
+          const payload = window.__customPlaylist === undefined ? lines.join('\n') : window.__customPlaylist;
+          delete window.__customPlaylist;
+          const bytes = new TextEncoder().encode(payload);
           const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
           return Promise.resolve({ ok: true, status: 200, headers: { get: name => name === 'content-length' ? String(bytes.byteLength) : null }, body });
         }
@@ -187,6 +208,11 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1, 'Selecting the current channel must not restart it');
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Double OK must enter fullscreen without reconnecting');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#seek-controls').isVisible(), false, 'Live controls do not advertise VOD seeking');
+    assert.equal(await page.locator('#audio-language').isDisabled(), true, 'Missing native audio tracks disable selection');
+    assert.equal(await page.locator('#subtitle-language').isDisabled(), true, 'Missing native subtitle tracks disable selection');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.locator('#retry-button').click();
     assert.equal(await page.evaluate(() => window.__mediaStarts), 2, 'Explicit retry must restart media');
@@ -211,6 +237,8 @@ async function main() {
       assert.equal(await page.evaluate(() => window.__mediaStarts), count, `${action} must cancel the pending channel request`);
     }
     await pendingThen('diagnostics-button');
+    assert.equal(await page.locator('#diagnostics-panel .capability-list li').count(), 5, 'LG native readiness lists the five requested formats without probing media');
+    assert.match(await page.locator('#diagnostics-panel .capability-list').innerText(), /HDR10.*Dolby Vision.*HLG.*4K HEVC.*4K AV1/s);
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-diagnostics');
     await page.keyboard.press('Escape');
@@ -218,6 +246,15 @@ async function main() {
     assert.equal(await page.evaluate(() => document.getElementById('setup-panel').contains(document.activeElement)), true);
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#source-1').inputValue(), '');
+    await pendingThen('nav-search');
+    assert.equal(await page.locator('#search-panel').isVisible(), true);
+    await page.keyboard.press('Escape');
+    await page.locator('#fullscreen-button').click();
+    await page.keyboard.press('Enter');
+    await pendingThen('media-toggle');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Fullscreen pause cancels the pending channel too');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await pendingThen('pause');
     assert.equal(await page.evaluate(() => document.querySelector('video').paused), true);
     await pendingThen('stop-button');
@@ -239,6 +276,17 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false, 'Failure must reveal retry controls');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
+    const startsBeforeQuickFailure = await page.evaluate(() => window.__mediaStarts);
+    await page.evaluate(() => {
+      const channel = document.querySelector('#channels .channel-button');
+      // Run synchronously so the second OK is deterministically within 700ms.
+      channel.click();
+      document.querySelector('video').dispatchEvent(new Event('error'));
+      channel.click();
+    });
+    assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeQuickFailure + 2, 'Second OK after a rapid failure retries media instead of entering empty fullscreen');
+    assert.equal(await page.locator('video').count(), 1);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false);
 
     // The single-source case must not reconnect when channel keys wrap around.
     await page.locator('#setup-button').click();
@@ -265,6 +313,14 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('playlist-status').textContent.includes('السابقة'));
     await page.locator('#close-setup').click();
+    const savedBeforeInvalidResponse = await page.evaluate(() => window.__catalogSavedAt());
+    await page.locator('#setup-button').click();
+    await page.evaluate(() => { window.__customPlaylist = '<html>Provider error</html>\nhttps://media.example.test/error-ad.mp4'; });
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => !document.getElementById('refresh-saved').disabled);
+    assert.equal(await page.locator('#setup-panel').isVisible(), true, 'A non-M3U download must be rejected');
+    assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeInvalidResponse, 'A provider error page cannot replace the saved catalogue');
+    await page.locator('#close-setup').click();
     await page.locator('#setup-button').click();
     await page.locator('#playlist-url').fill('https://provider.example.test/stall');
     await page.locator('#load-playlist').click();
@@ -275,6 +331,84 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 0, 'Startup restores the last complete catalogue without a network request');
     assert.match(await page.locator('#status').innerText(), /استُعيدت القائمة المحفوظة/);
+    await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.locator('#channels .favorite-button').first().click();
+    await page.locator('#channels .channel-button').nth(2).focus();
+    await page.locator('#setup-button').click();
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Manual refresh of the same source preserves the active group');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Manual refresh restores the selected channel');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Manual refresh preserves favorites');
+    const beforePageReturn = await page.evaluate(() => ({ requests: window.__playlistRequests.length, starts: window.__mediaStarts }));
+    await page.evaluate(() => { window.dispatchEvent(new Event('pagehide')); window.dispatchEvent(new Event('pageshow')); });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Returning to a suspended page restores its saved catalogue');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(await page.evaluate(() => ({ requests: window.__playlistRequests.length, starts: window.__mediaStarts })), beforePageReturn, 'Page return restores locally without downloading or starting media');
+    const beforeRestoreRace = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true;
+      window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeRestoreRace);
+    await page.evaluate(() => { window.__holdNextCatalogLoad = true; });
+    await page.locator('#setup-button').click();
+    await page.waitForFunction(() => typeof window.__resumeCatalogLoad === 'function');
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Keep restoration pending while the settings remain usable');
+    assert.equal(await page.locator('#manage-groups-button').isDisabled(), true, 'Group management waits for the released catalogue to return');
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    await page.evaluate(async () => { await window.__resumeCatalogLoad(); delete window.__resumeCatalogLoad; });
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Refreshing before cancelled-download restoration completes preserves the original group');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'The old restoration cannot overwrite the refreshed selection');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Refresh during restoration retains the original favorites');
+    const beforeFailedRestoreRace = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true; window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeFailedRestoreRace);
+    await page.evaluate(() => { window.__holdNextCatalogLoad = true; });
+    await page.locator('#setup-button').click();
+    await page.waitForFunction(() => typeof window.__resumeCatalogLoad === 'function');
+    await page.evaluate(() => { window.__failNextPlaylist = true; });
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => !document.getElementById('refresh-saved').disabled);
+    await page.evaluate(async () => { await window.__resumeCatalogLoad(); delete window.__resumeCatalogLoad; });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'A failed manual refresh does not discard the pending original view');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
+    await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Retry after a failed refresh restores the original selection');
+
+    await page.waitForTimeout(180); // Finish any legitimate scroll-position save before releasing the catalogue.
+    const viewBeforeReleasedUnload = await page.evaluate(() => localStorage.getItem('lg-stream-view-v1'));
+    const beforeReleasedUnload = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true; window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, beforeReleasedUnload);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0);
+    await page.evaluate(() => document.getElementById('channels').dispatchEvent(new Event('scroll')));
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-view-v1')), viewBeforeReleasedUnload, 'A delayed view-save timer cannot save the temporarily empty catalogue');
+    await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-view-v1')), viewBeforeReleasedUnload, 'Closing during automatic refresh preserves the last complete view and favorites');
+    const fakeTimeBeforeReload = await page.evaluate(() => Date.now());
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Favorites survive reloading after the catalogue was temporarily released');
+    await page.evaluate(time => window.__advanceTime(time - Date.now()), fakeTimeBeforeReload);
+    await page.locator('#channels .favorite-button').first().click();
+    await page.locator('#groups [data-group=""]').click();
     const savedBeforeAutomaticFailure = await page.evaluate(() => window.__catalogSavedAt());
     await page.locator('#channels .channel-button').first().click();
     const requestsBeforeAutomatic = await page.evaluate(() => window.__playlistRequests.length);
@@ -282,6 +416,22 @@ async function main() {
     await page.waitForTimeout(80);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Due automatic refresh must not start while media is active');
     await page.locator('#stop-button').click();
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Stopping media is user activity, not permission to immediately refresh');
+    await page.evaluate(() => {
+      window.__advanceTime(30000);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Automatic refresh requires a complete minute without user input');
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true }));
+      window.__advanceTime(2000);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(80);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), requestsBeforeAutomatic, 'Navigating resets the inactivity window');
+    await page.evaluate(() => { window.__advanceTime(60001); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeAutomatic);
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('القائمة السابقة'));
     assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeAutomaticFailure, 'Failed automatic refresh must not advance the last-success timestamp');
@@ -305,17 +455,22 @@ async function main() {
     await page.waitForTimeout(100);
     assert.equal(await page.locator('video').count(), 1, 'Pending channel request still starts normally');
     await page.locator('#stop-button').click();
+    await page.evaluate(() => { window.__advanceTime(60001); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforePendingSwitch);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Automatic refresh releases the in-memory catalogue while keeping the saved copy');
     await page.locator('#speed-button').click();
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'A foreground click cancels a pending automatic catalogue download immediately');
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+    assert.equal(await page.evaluate(() => document.getElementById('speed-panel').contains(document.activeElement)), true, 'Catalogue restoration must not steal focus from the newly opened dialog');
+    assert.equal(await page.evaluate(() => window.__speedRequests.length), 0, 'Opening controls restores the saved catalogue without starting another download');
     await page.locator('#speed-wired').click();
     await page.locator('#speed-start').click();
-    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Starting the speed test cancels a pending automatic catalogue download');
     assert.equal(await page.evaluate(() => window.__speedRequests.length), 1);
     await page.locator('#speed-cancel').click();
     await page.locator('#close-speed').click();
     await page.evaluate(() => { window.__speedRequests = []; });
 
-    // Cancelling an automatic refresh directly from settings must reschedule it
+    // Opening settings during an automatic refresh must cancel and reschedule it
     // with the short foreground-action backoff instead of losing it forever.
     const requestsBeforeDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
     await page.evaluate(() => {
@@ -325,9 +480,9 @@ async function main() {
     });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeDirectCancel);
     await page.locator('#setup-button').click();
-    await page.locator('#cancel-playlist').click();
-    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Direct settings cancellation aborts the automatic catalogue download');
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Opening settings aborts the automatic catalogue download');
     await page.locator('#close-setup').click();
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     const requestsAfterDirectCancel = await page.evaluate(() => window.__playlistRequests.length);
     await page.evaluate(() => { window.__advanceTime(4 * 60 * 1000); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForTimeout(80);
@@ -336,6 +491,54 @@ async function main() {
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsAfterDirectCancel);
     await page.waitForFunction(() => document.getElementById('status').textContent.includes('تم تحديث القائمة تلقائيًا'));
 
+    // If the app is backgrounded during an automatic refresh, keep the large
+    // saved catalogue on disk and restore it only after returning foreground.
+    const requestsBeforeBackgroundCancel = await page.evaluate(() => window.__playlistRequests.length);
+    await page.evaluate(() => {
+      window.__stallNextPlaylist = true;
+      window.__advanceTime(24 * 60 * 60 * 1000 + 1);
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforeBackgroundCancel);
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'Backgrounding aborts the automatic catalogue download');
+    await page.waitForTimeout(80);
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'The saved catalogue is not reloaded into memory while hidden');
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+
+    const longLabelsFit = await page.evaluate(() => {
+      const nodes = [document.querySelector('#groups .group-button'), document.querySelector('#channels .channel-label'), document.getElementById('channel-title')];
+      return nodes.map(node => {
+        const original = node.textContent;
+        node.textContent = 'مجموعة القنوات الرياضية العربية بجميع البطولات والجودة العالية';
+        const fits = node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
+        node.textContent = original; return fits;
+      });
+    });
+    assert.deepEqual(longLabelsFit, [true, true, true], 'Long group and channel names wrap without clipping');
+    await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.className), 'favorite-button', 'The remote can reach favorites');
+    await page.locator('#channels .favorite-button').first().focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.favoriteIndex), '4', 'Favorite navigation also stops at the channel boundary');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.group), 'مجموعة 2', 'Left restores the same group');
+    await page.keyboard.press('ArrowRight');
+    await page.locator('#channels .channel-button').first().focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '4', 'Up stops at the first channel');
+    await page.locator('#channels .channel-button').last().focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '7', 'Down stops at the last channel');
+    await page.locator('#groups [data-group=""]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
@@ -381,13 +584,25 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
     await page.locator('#channel-search').fill('قناة 17');
+    await page.waitForFunction(() => document.getElementById('search-results').textContent.includes('البث المباشر (1)'));
     assert.match(await page.locator('#search-results').innerText(), /البث المباشر \(1\)/);
     assert.match(await page.locator('#search-results').innerText(), /قناة 17/);
     await page.locator('#clear-search').click();
     await page.locator('#close-search').click();
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
-    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#channels .channel-button').first().click();
+    const startsBeforeDetails = await page.evaluate(() => window.__mediaStarts);
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageUp', keyCode: 33, bubbles: true }));
+      document.querySelector('.primary-button[data-section="movies"]').click();
+      document.querySelector('#movie-grid .movie-card').click();
+    });
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeDetails, 'Opening content details cancels a previously queued live-channel request');
+    assert.equal(await page.locator('video').count(), 0, 'Entering the content library stops live audio hidden behind its cards');
+    assert.equal(await page.locator('#details-panel').isVisible(), true);
+    await page.locator('#close-details').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 24);
     assert.equal(await page.locator('#movie-grid .movie-poster').count(), 24);
@@ -446,8 +661,51 @@ async function main() {
     await page.locator('#movie-grid [data-index="64"]').click();
     await page.locator('#details-play').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
+    const movieStarts = await page.evaluate(() => window.__mediaStarts);
+    await page.keyboard.press('PageUp');
+    await page.waitForTimeout(180);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), movieStarts, 'Channel keys cannot replace an actively watched movie');
     await page.keyboard.press('Escape');
-    await page.locator('#stop-button').click();
+    assert.equal(await page.locator('video').count(), 0, 'Back from movie releases its source');
+    await page.locator('#movie-grid [data-index="64"]').click();
+    await page.locator('#details-play').click();
+    assert.equal(await page.locator('video').count(), 1, 'The same movie can immediately open again');
+    await page.evaluate(() => {
+      const video = document.querySelector('video');
+      Object.defineProperty(video, 'audioTracks', { configurable: true, value: [{ language: 'ar', enabled: true }, { language: 'en', enabled: false }] });
+      Object.defineProperty(video, 'textTracks', { configurable: true, value: [{ kind: 'subtitles', language: 'ar', mode: 'disabled' }] });
+    });
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-playback-controls-1080.png') });
+    const controlStarts = await page.evaluate(() => window.__mediaStarts);
+    const seekWrites = await page.evaluate(() => window.__seekWrites);
+    await page.locator('#seek-forward').click({ clickCount: 3 });
+    const pendingTime = await page.locator('#playback-time').innerText();
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('timeupdate')));
+    assert.equal(await page.locator('#playback-time').innerText(), pendingTime, 'Playback events preserve the pending seek preview');
+    await page.waitForFunction(() => document.querySelector('video').currentTime >= 90);
+    assert.equal(await page.evaluate(() => window.__seekWrites), seekWrites + 1, 'Rapid seek presses commit only the final position');
+    await page.locator('#seek-back').click({ clickCount: 3 });
+    await page.waitForFunction(() => document.querySelector('video').currentTime < 1);
+    await page.locator('#audio-language').focus();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'subtitle-language', 'Horizontal arrows move between track selectors');
+    assert.equal(await page.evaluate(() => document.querySelector('video').audioTracks[0].enabled), true, 'Moving focus must not switch audio');
+    await page.locator('#audio-language').selectOption('1');
+    await page.locator('#subtitle-language').selectOption('0');
+    assert.deepEqual(await page.evaluate(() => Array.from(document.querySelector('video').audioTracks, track => track.enabled)), [false, true]);
+    assert.equal(await page.evaluate(() => document.querySelector('video').textTracks[0].mode), 'showing');
+    await page.locator('#subtitle-language').selectOption('-1');
+    assert.equal(await page.evaluate(() => document.querySelector('video').textTracks[0].mode), 'disabled');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), controlStarts, 'Seeking and track changes do not reopen the source');
+    await page.locator('#media-toggle').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Remote OK activates playback controls');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#media-controls').isVisible(), false);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Stopping content must restore its visible card');
     assert.equal(await page.locator('.channels-panel').isVisible(), false, 'Movies use groups plus cards without a duplicate channel list');
     assert.equal(await page.locator('.groups-panel').isVisible(), true);
