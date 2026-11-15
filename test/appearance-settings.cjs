@@ -66,6 +66,7 @@ async function main() {
           lines.push(`#EXTINF:-1 group-title="${group}",قناة ${i}`);
           lines.push(`https://media.example.test/live/${i}.m3u8`);
         }
+        for (const kind of ['movie', 'series']) { lines.push('#EXTINF:-1 group-title="فيديو" year="2024" rating="8.4" description="وصف المزود",فيديو الاختبار'); lines.push(`https://media.example.test/${kind}/1.m3u8`); }
         return new Response(lines.join('\n'));
       };
     });
@@ -87,6 +88,7 @@ async function main() {
     await key('ArrowDown'); await key('ArrowDown'); await key('ArrowDown', 'nav-settings');
     await key('Enter', 'manage-groups-button');
     assert.equal(await page.locator('#setup-panel').isVisible(), false);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
     assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series', 'nav-settings']);
     await key('ArrowLeft', 'settings-sources');
     await key('Enter');
@@ -99,7 +101,28 @@ async function main() {
       await page.locator(`[data-layout="${layout}"]`).click();
       assert.equal(await page.locator('body').getAttribute('data-layout'), layout);
       assert.equal(await page.evaluate(() => document.querySelector('video') === window.__originalVideo), true);
+      await key('Escape'); await key('Escape'); await key('ArrowRight');
+      if (layout === 'vertical') {
+        await key('ArrowUp');
+        assert.equal(await page.evaluate(() => document.activeElement.dataset.category), 'other', 'Up from first group returns through vertical shortcuts');
+        for (let i = 0; i < 7; i++) await key('ArrowUp');
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'groups-filter');
+        await key('ArrowDown');
+        assert.equal(await page.evaluate(() => document.activeElement.dataset.category), 'all');
+      } else {
+        await key('ArrowUp', 'groups-filter'); await key('ArrowDown');
+        assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true, 'Down from header goes down into groups');
+      }
+      for (const [width, height] of [[1280,720], [1920,1080]]) {
+        await page.setViewportSize({ width, height });
+        const box = await page.locator('.groups-panel').boundingBox();
+        assert.ok(box.y + box.height <= height);
+        await page.screenshot({ path: path.join(root, `artifacts/ui-appearance-${layout}-${height}.png`) });
+      }
+      await page.locator('#groups-filter').focus(); await key('ArrowLeft'); await page.locator('#nav-settings').click();
+      await page.locator('#settings-appearance').click();
     }
+    await page.locator('[data-controls="comfortable"]').click();
     await key('Escape', 'settings-appearance'); await key('Escape', 'nav-settings');
     await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
     await key('Enter'); await key('ArrowDown'); await key('Enter', 'groups-filter');
@@ -118,6 +141,7 @@ async function main() {
     await page.locator('#manage-groups-button').click();
     await page.locator('.group-switch').filter({ hasText: 'رياضة' }).click();
     await page.waitForFunction(() => document.getElementById('manager-status').textContent.includes('أُخفيت'));
+    assert.equal(await page.locator('video').count(), 0, 'Hiding the currently playing group intentionally stops its video');
     await key('Escape', 'manage-groups-button');
     await page.locator('#settings-appearance').click();
     await page.locator('[data-layout="tabs"]').click(); await key('Escape'); await key('Escape');
@@ -138,6 +162,59 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 5);
     assert.equal(await page.locator('body').getAttribute('data-layout'), 'tabs', 'Appearance survives relaunch');
     assert.equal(await page.locator('video').count(), 0, 'Restoring appearance does not auto-play');
+    assert.equal(await page.locator('body').getAttribute('data-controls'), 'comfortable');
+    // A chosen genre survives a new catalogue revision after manual refresh.
+    await page.locator('#groups-filter').click();
+    await page.locator('#category-list [data-category="news"]').click();
+    await key('ArrowLeft'); await page.locator('#nav-settings').click();
+    await page.locator('#settings-sources').click(); await page.locator('#refresh-saved').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    assert.match(await page.locator('#groups-filter').innerText(), /أخبار/);
+    assert.equal(await page.locator('#channels .channel-button').count(), 1);
+    await key('Escape');
+    // Both VOD types use the same reachable controls and stop on display-menu exit.
+    for (const section of ['movies', 'series']) {
+      await page.locator(`.primary-button[data-section="${section}"]`).click();
+      await key('ArrowRight'); await key('Enter');
+      assert.match(await page.locator('#details-rating').innerText(), /8.4/);
+      await key('Enter'); await key('Enter', 'media-toggle');
+      assert.equal(await page.locator('#audio-language').isDisabled(), true);
+      assert.equal(await page.locator('#subtitle-language').isDisabled(), true);
+      await key('ArrowUp', 'seek-position'); await key('ArrowUp', 'seek-back');
+      await key('ArrowRight', 'seek-position'); await key('ArrowDown', 'seek-forward');
+      await key('Enter');
+      await page.waitForFunction(() => document.querySelector('video').currentTime >= 30);
+      await key('ArrowLeft', 'seek-position');
+      await page.evaluate(() => {
+        const video = document.querySelector('video');
+        Object.defineProperty(video, 'seekable', { configurable: true, value: { length: 0 } });
+        video.dispatchEvent(new Event('progress'));
+      });
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'media-toggle', 'Losing seekability restores usable focus');
+      await page.evaluate(() => { delete document.querySelector('video').seekable; document.querySelector('video').dispatchEvent(new Event('progress')); });
+      await key('ArrowUp', 'seek-position');
+      await page.locator('#seek-position').evaluate(input => { input.value = 3595; });
+      await key('ArrowRight');
+      await page.waitForFunction(() => document.querySelector('video').currentTime === 3600);
+      await key('ArrowDown', 'seek-forward'); await key('ArrowDown', 'media-toggle');
+      for (const [width, height] of [[1280,720], [1920,1080]]) {
+        await page.setViewportSize({ width, height });
+        const back = await page.locator('#seek-back').boundingBox();
+        const timeline = await page.locator('#seek-position').boundingBox();
+        const forward = await page.locator('#seek-forward').boundingBox();
+        assert.ok(back.x + back.width < timeline.x && timeline.x + timeline.width < forward.x, 'Seek buttons surround the timeline physically');
+        const box = await page.locator('#media-controls').boundingBox();
+        assert.ok(box.height <= height * 0.4 && box.y + box.height <= height, 'Comfortable controls fit without covering half the screen');
+        await page.screenshot({ path: path.join(root, `artifacts/ui-controls-comfortable-${height}.png`) });
+      }
+      await key('ArrowLeft', 'media-display'); await key('Enter', 'display-fullscreen'); await key('Enter');
+      assert.equal(await page.locator('video').count(), 0, 'Returning to VOD list stops audio and releases the video');
+      assert.equal(await page.locator('#movie-browser').isVisible(), true);
+      await key('Enter'); await key('Enter');
+      assert.equal(await page.locator('video').count(), 1, 'The same item opens again immediately');
+      await key('Escape');
+      await page.locator('#groups-filter').focus(); await key('ArrowLeft');
+    }
     assert.deepEqual(errors, []);
     assert.equal(unexpectedRequests, 0);
     console.log('Appearance/settings: remote card navigation, filters, hidden groups, persistence, same-player identity, 720/1080 geometry passed. No TV playback tested.');
