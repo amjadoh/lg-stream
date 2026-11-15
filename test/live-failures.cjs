@@ -81,6 +81,13 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
 
+    const columns = await page.evaluate(() => {
+      const groups = document.getElementById('groups').getBoundingClientRect();
+      const channels = document.getElementById('channels').getBoundingClientRect();
+      return { top: Math.abs(groups.top - channels.top), bottom: Math.abs(groups.bottom - channels.bottom) };
+    });
+    assert.ok(columns.top < 1 && columns.bottom < 1, 'Default live lists share their top and bottom edges');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-live-columns-1080.png') });
     async function watch(index) {
       await page.locator(`#channels [data-index="${index}"]`).click();
       await page.locator('#display-button').click();
