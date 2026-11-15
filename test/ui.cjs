@@ -41,9 +41,11 @@ async function main() {
       const proto = HTMLMediaElement.prototype;
       Object.defineProperty(proto, 'src', { configurable: true, get() { return state(this).source; }, set(value) { state(this).source = value; } });
       Object.defineProperty(proto, 'paused', { configurable: true, get() { return state(this).paused; } });
-      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; } });
+      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; }, set(value) { state(this).time = value; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get() { return 1920; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get() { return 1080; } });
+      Object.defineProperty(proto, 'duration', { configurable: true, get() { return 3600; } });
+      Object.defineProperty(proto, 'seekable', { configurable: true, get() { return { length: 1, start() { return 0; }, end() { return 3600; } }; } });
       proto.load = function () {};
       proto.play = function () {
         window.__mediaStarts++;
@@ -365,6 +367,17 @@ async function main() {
     });
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
 
+    await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.group), 'مجموعة 2', 'Left restores the same group');
+    await page.keyboard.press('ArrowRight');
+    await page.locator('#channels .channel-button').first().focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '4', 'Up stops at the first channel');
+    await page.locator('#channels .channel-button').last().focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '7', 'Down stops at the last channel');
+    await page.locator('#groups [data-group=""]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 40);
     assert.equal(await page.locator('#channel-paging').count(), 0, 'Channels scroll without previous/next controls');
     assert.equal((await page.locator('body').innerText()).includes('provider.example.test'), false);
@@ -477,7 +490,36 @@ async function main() {
     await page.locator('#details-play').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Movie playback enters app fullscreen immediately');
     await page.keyboard.press('Escape');
-    await page.locator('#stop-button').click();
+    assert.equal(await page.locator('video').count(), 0, 'Back from movie releases its source');
+    await page.locator('#movie-grid [data-index="64"]').click();
+    await page.locator('#details-play').click();
+    assert.equal(await page.locator('video').count(), 1, 'The same movie can immediately open again');
+    await page.evaluate(() => {
+      const video = document.querySelector('video');
+      Object.defineProperty(video, 'audioTracks', { configurable: true, value: [{ language: 'ar', enabled: true }, { language: 'en', enabled: false }] });
+      Object.defineProperty(video, 'textTracks', { configurable: true, value: [{ kind: 'subtitles', language: 'ar', mode: 'disabled' }] });
+    });
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    const controlStarts = await page.evaluate(() => window.__mediaStarts);
+    await page.locator('#seek-forward').click();
+    assert.ok(await page.evaluate(() => document.querySelector('video').currentTime >= 30));
+    await page.locator('#seek-back').click();
+    assert.ok(await page.evaluate(() => document.querySelector('video').currentTime < 1));
+    await page.locator('#audio-language').selectOption('1');
+    await page.locator('#subtitle-language').selectOption('0');
+    assert.deepEqual(await page.evaluate(() => Array.from(document.querySelector('video').audioTracks, track => track.enabled)), [false, true]);
+    assert.equal(await page.evaluate(() => document.querySelector('video').textTracks[0].mode), 'showing');
+    await page.locator('#subtitle-language').selectOption('-1');
+    assert.equal(await page.evaluate(() => document.querySelector('video').textTracks[0].mode), 'disabled');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), controlStarts, 'Seeking and track changes do not reopen the source');
+    await page.locator('#media-toggle').focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Remote OK activates playback controls');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#media-controls').isVisible(), false);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Stopping content must restore its visible card');
     assert.equal(await page.locator('.channels-panel').isVisible(), false, 'Movies use groups plus cards without a duplicate channel list');
     assert.equal(await page.locator('.groups-panel').isVisible(), true);
