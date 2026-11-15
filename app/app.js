@@ -149,7 +149,7 @@
       var title = document.createElement('h3'); title.textContent = section[1] + ' (' + count + ')'; box.appendChild(title);
       matches.forEach(function (index) {
         var button = document.createElement('button'); button.type = 'button'; button.textContent = sources[index].name || 'عنصر';
-        button.addEventListener('click', function () { closeSearch(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
+        button.addEventListener('click', function () { closeSearch(); if (section[0] !== 'tv') stop(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
       $('search-results').appendChild(box);
@@ -430,7 +430,7 @@
       $('status').textContent = labels[state.state] || 'جاهز';
       if (state.state === 'error' && state.errorCode) $('status').textContent += ' (' + state.errorCode + ')';
       $('toggle-button').textContent = state.state === 'paused' ? 'متابعة البث' : 'إيقاف مؤقت';
-      $('media-toggle').textContent = state.state === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
+      $('media-toggle').textContent = retryablePlayback() ? 'إعادة المحاولة' : state.state === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
       $('toggle-button').disabled = ['playing', 'waiting', 'paused'].indexOf(state.state) < 0;
       $('stop-button').disabled = state.state === 'idle';
       $('retry-button').disabled = playingIndex === null;
@@ -594,7 +594,7 @@
     $('empty-state').hidden = true;
     $('channel-title').textContent = sources[index].name || 'المصدر ' + (index + 1);
     if (!watchMode && activeSection === 'tv') focusChannel(index);
-    player.start(sources[index].url, index + 1, intent.requestedAt);
+    if (!player.start(sources[index].url, index + 1, intent.requestedAt)) return;
     if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
@@ -747,15 +747,16 @@
     $(id).setAttribute('aria-expanded', 'true'); $('track-picker').hidden = false;
     ($('track-list').querySelector('[aria-pressed="true"]') || $('track-list').firstElementChild).focus();
   }
+  function retryablePlayback() { return playingIndex !== null && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(lastState) >= 0; }
   function showPlaybackControls() {
     if (!$('track-picker').hidden) return;
     cancelSwitch();
     $('seek-status').textContent = ''; $('track-status').textContent = '';
     $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
-    $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
+    $('media-toggle').textContent = retryablePlayback() ? 'إعادة المحاولة' : lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
     $('media-toggle').focus();
   }
-  $('media-toggle').addEventListener('click', function () { cancelSwitch(); player.toggle(); });
+  $('media-toggle').addEventListener('click', function () { cancelSwitch(); if (retryablePlayback()) requestChannel(playingIndex, false, true); else player.toggle(); });
   $('media-close').addEventListener('click', function () { cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true; document.body.focus(); });
   $('media-exit').addEventListener('click', exitPlayback);
   $('seek-back').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) queueSeek((pendingSeek === null ? video.currentTime : pendingSeek) - 30); });
@@ -973,7 +974,7 @@
     saveViewState(true);
     if (details.trailer) {
       detailsPanel.hidden = true; detailsIndex = null; playingIndex = null; $('movie-browser').hidden = true; $('empty-state').hidden = true;
-      $('channel-title').textContent = 'الإعلان'; player.start(details.trailer, 'trailer', performance.now()); setWatchMode(true); return;
+      $('channel-title').textContent = 'الإعلان'; if (player.start(details.trailer, 'trailer', performance.now())) setWatchMode(true); return;
     }
     stop();
     var target = api.youtubeSearchTarget(details.name, details.year);
@@ -1301,6 +1302,7 @@
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
     var isInput = event.target.tagName === 'INPUT';
     if (isInput && keyboardVisible) return;
+    if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();

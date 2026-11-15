@@ -167,7 +167,7 @@
     }
     function start(source, channel, requestedAt) {
       var valid = validateSource(source);
-      if (!valid) return false;
+      if (!valid) { release(); emit({ state: 'error', channel: channel }); return false; }
       release();
       var ownGeneration = generation;
       var video = options.createVideo();

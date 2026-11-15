@@ -231,3 +231,21 @@ assert.equal(require('../app/core.js').groupCategory('رياضة HD'), 'sports')
 assert.equal(require('../app/core.js').groupCategory('Sports / News'), 'other');
 assert.equal(require('../app/core.js').groupCategory('قنوات أفلام'), 'movies');
 assert.equal(require('../app/core.js').groupCategory('الرياض'), 'other');
+
+
+test('an invalid next source releases the previous media and reports failure without source data', () => {
+  const videos = []; let mounted = 0; const states = [];
+  const player = createPlayer({
+    createVideo: () => { const video = fakeVideo(); videos.push(video); return video; },
+    mountVideo: () => mounted++, unmountVideo: () => mounted--,
+    onState: value => states.push(value), timers: fakeTimers()
+  });
+  assert.equal(player.start('https://example.test/first', 1), true);
+  assert.equal(player.start('https://example.test/' + 'x'.repeat(4096), 2), false);
+  assert.equal(mounted, 0); assert.equal(videos[0].src, undefined);
+  assert.equal(states.at(-1).state, 'error'); assert.equal(states.at(-1).channel, 2);
+  assert.ok(!JSON.stringify(states).includes('example.test'));
+  const count = states.length; videos[0].historic.get('playing')(); videos[0].rejectPlay();
+  assert.equal(states.length, count, 'Old events cannot revive the rejected selection');
+  assert.equal(player.start('https://example.test/next', 3), true); assert.equal(mounted, 1);
+});

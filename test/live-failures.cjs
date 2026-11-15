@@ -116,6 +116,32 @@ async function main() {
       await current(kind === 'error' || kind === 'ended' ? 2 : 4);
       await page.keyboard.press('Escape');
     }
+    // A held OK opens controls once; repeats must never toggle playback.
+    await watch(0);
+    const beforeHeldOK = await page.evaluate(() => window.__mediaStarts);
+    await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.up('Enter');
+    assert.equal(await page.evaluate(() => document.body.dataset.state), 'playing');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK);
+    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    await page.keyboard.press('Escape');
+    // Broken-source controls offer a real retry of the same live channel.
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#media-toggle').innerText(), 'إعادة المحاولة');
+    await page.keyboard.press('Enter'); await current(0);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 1);
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    // Search has the same stop-before-VOD behavior as the main navigation.
+    await page.locator('#groups-filter').focus(); await page.keyboard.press('ArrowLeft');
+    await page.locator('#nav-search').click();
+    await page.locator('#channel-search').fill('عنصر 1');
+    await page.locator('#search-results button').click();
+    assert.equal(await page.locator('video').count(), 0, 'Opening a movie result releases live audio before showing posters/details');
+    assert.equal(await page.locator('#details-panel').isVisible(), true);
+    await page.locator('#close-details').click();
+    await page.locator('#groups-filter').focus(); await page.keyboard.press('ArrowLeft');
+    await page.locator('.primary-button[data-section="tv"]').click();
+    await page.locator('#groups [data-group=""]').click();
     // Highlighting another channel must not change the anchor for live arrows.
     await page.locator('#channels [data-index="0"]').click();
     await page.locator('#channels [data-index="4"]').focus();
@@ -156,7 +182,7 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
     assert.deepEqual(errors, []);
     assert.equal(unexpectedRequests, 0);
-    console.log('Live failures: errors/end/rejection/timeout, burst/bounds, actual playing anchor, mixed favorites and VOD isolation passed. Synthetic only.');
+    console.log('Live failures: errors/end/rejection/timeout, burst/bounds, actual playing anchor, mixed favorites, held OK, retry, search-to-VOD and VOD isolation passed. Synthetic only.');
   } finally {
     if (browser) await browser.close();
     if (preview.exitCode === null) { const closed = once(preview, 'exit'); preview.kill(); await closed; }
