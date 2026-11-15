@@ -1362,6 +1362,7 @@
     if (watchMode && $('media-controls').hidden && playingIndex !== null && entrySection(playingIndex) === 'tv' && (key === 'ArrowUp' || key === 'ArrowDown')) {
       var liveIndexes = visibleIndexes();
       var livePosition = liveIndexes.indexOf(switchPending ? selected : playingIndex);
+      if (livePosition < 0) { showPlaybackControls(); event.preventDefault(); return; }
       var nextPosition = livePosition + (key === 'ArrowDown' ? 1 : -1);
       while (nextPosition >= 0 && nextPosition < liveIndexes.length && entrySection(liveIndexes[nextPosition]) !== 'tv') nextPosition += key === 'ArrowDown' ? 1 : -1;
       if (livePosition >= 0 && nextPosition >= 0 && nextPosition < liveIndexes.length) {
