@@ -308,7 +308,14 @@
       video.setAttribute('aria-label', 'البث الحالي');
       return video;
     },
-    mountVideo: function (video) { $('video-host').appendChild(video); },
+    mountVideo: function (video) {
+      $('video-host').appendChild(video);
+      ['loadedmetadata', 'durationchange', 'timeupdate', 'progress'].forEach(function (name) { video.addEventListener(name, function () { if (video.parentNode) updatePlaybackControls(); }); });
+      [video.audioTracks, video.textTracks].forEach(function (tracks) {
+        if (tracks && tracks.addEventListener) ['addtrack', 'removetrack', 'change'].forEach(function (name) { tracks.addEventListener(name, function () { if (video.parentNode) updateTrackOptions(); }); });
+      });
+      updateTrackOptions();
+    },
     unmountVideo: function (video) { video.remove(); },
     onState: function (state) {
       lastState = state.state;
@@ -443,8 +450,8 @@
   function moveChannelWindow(step) {
     if (activeSection === 'movies' || activeSection === 'series' || !document.activeElement.classList.contains('channel-button')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = position + step;
-    if (next < 0 || next >= indexes.length) return false;
-    if (next >= channelWindowStart && next < channelWindowStart + channelWindowSize) return false;
+    if (next < 0 || next >= indexes.length) return true;
+    if (next >= channelWindowStart && next < channelWindowStart + channelWindowSize) { focusChannel(indexes[next]); return true; }
     channelWindowStart = Math.max(0, next - (step > 0 ? 4 : channelWindowSize - 5)); renderChannels(); focusChannel(indexes[next]); return true;
   }
   function playChannel(intent) {
@@ -484,15 +491,18 @@
     cancelSwitch();
     setWatchMode(false);
     playingIndex = null;
+    lastConfirmIndex = null; lastConfirmAt = 0;
     player.stop();
     updateChannelStates();
     $('channel-title').textContent = 'لا يوجد بث محدد';
     $('empty-state').hidden = false;
     $('retry-button').disabled = true;
+    if (activeSection === 'movies' || activeSection === 'series') renderChannels();
     setTimeout(scheduleAutoUpdate, 0);
   }
   function setWatchMode(enabled) {
     watchMode = enabled;
+    $('media-controls').hidden = true;
     document.body.classList.toggle('watch-mode', enabled);
     $('fullscreen-button').setAttribute('aria-pressed', String(enabled));
     clearTimeout(hintTimer);
@@ -509,7 +519,69 @@
     $('video-host').dataset.fit = fitModes[fitIndex].value;
     $('fit-button').textContent = 'الصورة: ' + fitModes[fitIndex].label;
   });
-  $('video-host').addEventListener('click', function () { if (watchMode) { setWatchMode(false); focusSelected(); } });
+  $('video-host').addEventListener('click', function () { if (watchMode) showPlaybackControls(); });
+  function isOnDemand() { return playingIndex !== null && /^(movies|series)$/.test(entrySection(playingIndex)); }
+  function exitPlayback() {
+    if (isOnDemand() || (playingIndex === null && lastState !== 'idle')) stop(); else setWatchMode(false);
+    focusSelected();
+  }
+  function timeLabel(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '—';
+    var minutes = Math.floor(seconds / 60); return Math.floor(minutes / 60) + ':' + ('0' + minutes % 60).slice(-2) + ':' + ('0' + Math.floor(seconds % 60)).slice(-2);
+  }
+  function updatePlaybackControls() {
+    var video = $('video-host').querySelector('video');
+    var seekable = !!(video && isOnDemand() && isFinite(video.duration) && video.duration > 0 && video.seekable.length);
+    $('seek-controls').hidden = !isOnDemand();
+    ['seek-back', 'seek-forward', 'seek-position'].forEach(function (id) { $(id).disabled = !seekable; });
+    $('seek-position').max = video && isFinite(video.duration) ? video.duration : 0;
+    $('seek-position').value = video ? video.currentTime : 0;
+    $('playback-time').textContent = video ? timeLabel(video.currentTime) + ' / ' + timeLabel(video.duration) : '—';
+    $('seek-status').textContent = seekable ? '' : 'التقديم غير متاح حاليًا لهذا المصدر.';
+  }
+  function seekTo(seconds) {
+    var video = $('video-host').querySelector('video');
+    if (!video || !isOnDemand() || !isFinite(seconds) || !isFinite(video.duration)) return;
+    for (var i = 0; i < video.seekable.length; i += 1) {
+      if (seconds < video.seekable.start(i) || seconds > video.seekable.end(i)) continue;
+      try { video.currentTime = seconds; } catch (_) { $('seek-status').textContent = 'تعذر الانتقال في هذا المصدر.'; }
+      updatePlaybackControls(); return;
+    }
+    $('seek-status').textContent = 'هذا الموضع غير متاح في المصدر حاليًا.';
+  }
+  function updateTrackOptions() {
+    var video = $('video-host').querySelector('video');
+    [['audio-language', video && video.audioTracks, false], ['subtitle-language', video && video.textTracks, true]].forEach(function (item) {
+      var select = $(item[0]); var tracks = item[1]; var subtitle = item[2]; select.replaceChildren();
+      function option(value, label, selected) { var node = document.createElement('option'); node.value = value; node.textContent = label; node.selected = selected; select.appendChild(node); }
+      if (subtitle) option('-1', 'إيقاف الترجمة', true);
+      if (tracks) for (var i = 0; i < tracks.length; i += 1) {
+        if (subtitle && tracks[i].kind !== 'subtitles' && tracks[i].kind !== 'captions') continue;
+        option(String(i), tracks[i].label || tracks[i].language || (subtitle ? 'ترجمة ' : 'صوت ') + (i + 1), subtitle ? tracks[i].mode === 'showing' : tracks[i].enabled);
+      }
+      select.disabled = subtitle ? select.options.length <= 1 : !select.options.length;
+      if (!select.options.length) option('-1', 'لا توجد مسارات متاحة', true);
+    });
+  }
+  function showPlaybackControls() {
+    updatePlaybackControls(); updateTrackOptions(); $('media-controls').hidden = false;
+    $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
+    $('media-toggle').focus();
+  }
+  $('media-toggle').addEventListener('click', function () { player.toggle(); $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت'; });
+  $('media-close').addEventListener('click', function () { $('media-controls').hidden = true; document.body.focus(); });
+  $('media-exit').addEventListener('click', exitPlayback);
+  $('seek-back').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) seekTo(Math.max(0, video.currentTime - 30)); });
+  $('seek-forward').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) seekTo(Math.min(video.duration, video.currentTime + 30)); });
+  $('seek-position').addEventListener('change', function () { seekTo(Number(this.value)); });
+  ['audio-language', 'subtitle-language'].forEach(function (id) {
+    $(id).addEventListener('change', function () {
+      var video = $('video-host').querySelector('video'); if (!video) return;
+      var chosen = Number(this.value); var audio = id === 'audio-language'; var tracks = audio ? video.audioTracks : video.textTracks;
+      try { if (tracks) for (var i = 0; i < tracks.length; i += 1) { if (audio) tracks[i].enabled = i === chosen; else if (tracks[i].kind === 'subtitles' || tracks[i].kind === 'captions') tracks[i].mode = i === chosen ? 'showing' : 'disabled'; } }
+      catch (_) { $('track-status').textContent = 'تعذر تغيير المسار على هذا الجهاز.'; }
+    });
+  });
   function scheduleAutoUpdate() {
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
     if (playlistRunning) return;
@@ -895,7 +967,7 @@
       else if (!searchPanel.hidden) closeSearch();
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
-      else if (watchMode) { setWatchMode(false); focusSelected(); }
+      else if (watchMode) { if (!$('media-controls').hidden) { $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
       else if (lastState !== 'idle') { stop(); if (sources.length) focusSelected(); }
       else if (typeof window.webOS !== 'undefined' && window.webOS.platformBack) window.webOS.platformBack();
       else window.close();
@@ -914,10 +986,13 @@
       if (/^Arrow/.test(key)) { moveFocus(dialog, key); event.preventDefault(); }
       return;
     }
+    if (watchMode && !$('media-controls').hidden && (isInput || isSelect) && (key === 'ArrowUp' || key === 'ArrowDown')) { moveFocus($('media-controls'), key); event.preventDefault(); return; }
     if (isSelect || (isInput && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
     if ((key === 'ArrowDown' && (moveChannelWindow(1) || moveContentWindow(4) || moveGroupFocus(1))) || (key === 'ArrowUp' && (moveChannelWindow(-1) || moveContentWindow(-4) || moveGroupFocus(-1)))) { event.preventDefault(); return; }
+    if (watchMode && !$('media-controls').hidden && key === 'Enter' && $('media-controls').contains(document.activeElement)) return;
     if (watchMode && (key === 'Enter' || key === 'Tab' || /^Arrow/.test(key))) {
-      setWatchMode(false); focusSelected(); event.preventDefault(); return;
+      if ($('media-controls').hidden) showPlaybackControls(); else if (key === 'Tab') { var mediaButtons = visibleControls($('media-controls')); var mediaPosition = mediaButtons.indexOf(document.activeElement); mediaButtons[(mediaPosition + (event.shiftKey ? -1 : 1) + mediaButtons.length) % mediaButtons.length].focus(); } else if (/^Arrow/.test(key)) moveFocus($('media-controls'), key);
+      event.preventDefault(); return;
     }
     if ((code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown') && sources.length) {
       var indexes = visibleIndexes();
@@ -932,6 +1007,13 @@
     if (code === 415) { cancelSwitch(); player.resume(); event.preventDefault(); return; }
     if (code === 413) { stop(); focusSelected(); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { cancelSwitch(); player.toggle(); event.preventDefault(); return; }
+    if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.channels-panel')) {
+      var groupButton = $('groups').querySelector('.group-button.active');
+      if (groupButton) groupButton.focus(); event.preventDefault(); return;
+    }
+    if (key === 'ArrowRight' && document.activeElement.classList.contains('group-button')) {
+      focusSelected(); event.preventDefault(); return;
+    }
     if (key === 'ArrowRight' && document.activeElement.closest && document.activeElement.closest('.primary-panel')) {
       setPrimary(false); var activeGroupButton = $('groups').querySelector('.group-button.active') || $('groups button');
       if (activeGroupButton) activeGroupButton.focus(); event.preventDefault(); return;
