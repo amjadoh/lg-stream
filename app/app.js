@@ -1387,6 +1387,9 @@
       if (appearance.layout === 'tabs' && key === 'ArrowDown') { $('groups-filter').focus(); event.preventDefault(); return; }
       if (appearance.layout === 'vertical' && key === 'ArrowRight') { focusSelected(); event.preventDefault(); return; }
     }
+    if (document.activeElement === $('groups-filter') && key === 'ArrowUp' && appearance.layout === 'tabs' && !$('category-shortcuts').hidden) {
+      $('category-shortcuts').lastElementChild.focus(); event.preventDefault(); return;
+    }
     if (document.activeElement === $('groups-filter') && key === 'ArrowDown') {
       var firstGroup = appearance.layout === 'vertical' && !$('category-shortcuts').hidden ? $('category-shortcuts').querySelector('button') : $('groups').querySelector('button');
       if (firstGroup) firstGroup.focus(); event.preventDefault(); return;
