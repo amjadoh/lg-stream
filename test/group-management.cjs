@@ -79,8 +79,10 @@ async function main() {
         }
         for (let i = 0; i < 70; i++) item('live', 'مشتركة', i, `مشترك بث ${i}`);
         for (let i = 1; i <= 44; i++) item('live', `مجموعة ${i}`, 70 + i, `قناة مجموعة ${i}`);
-        for (let i = 0; i < 3; i++) item('movie', 'مشتركة', i, `مشترك فيلم ${i}`);
-        for (let i = 0; i < 2; i++) item('series', 'مشتركة', i, `مشترك حلقة ${i}`);
+        if (!window.__groupsLiveOnly) {
+          for (let i = 0; i < 3; i++) item('movie', 'مشتركة', i, `مشترك فيلم ${i}`);
+          for (let i = 0; i < 2; i++) item('series', 'مشتركة', i, `مشترك حلقة ${i}`);
+        }
         const bytes = new TextEncoder().encode(lines.join('\n'));
         return { ok: true, body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) };
       };
@@ -245,6 +247,19 @@ async function main() {
     assert.equal(restoredView.selected, previousView.selected);
     assert.deepEqual(restoredView.favorites, previousView.favorites);
     assert.equal(await storedCount(), 119);
+    await closeManager();
+    await page.evaluate(() => { window.__groupsLiveOnly = true; });
+    await page.locator('#setup-button').click();
+    await page.locator('#playlist-url').fill('https://provider.invalid/live-only');
+    await page.locator('#load-playlist').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    await openManager();
+    await page.locator('[data-manage-section="movies"]').click();
+    assert.equal(await page.locator('#managed-groups .group-switch').count(), 0);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'close-group-manager');
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.manageSection), 'movies', 'An empty section still lets the remote return from Close to its tabs');
     assert.equal(externalRequests, 0);
     assert.deepEqual(errors, []);
     console.log('Group checks passed: complete group contents, virtual remote navigation, independent visibility, persistence, same-source refresh, search/favorites filtering, and enabled playback. Synthetic media only.');

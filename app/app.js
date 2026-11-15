@@ -123,7 +123,7 @@
   function closeSearch() {
     clearTimeout(searchTimer); searchTimer = null;
     searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); $('search-status').textContent = 'اكتب حرفين على الأقل.';
-    setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups button'); if (group) group.focus();
+    setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups').querySelector('button'); if (group) group.focus();
   }
   function renderSearch() {
     var query = $('channel-search').value.trim().toLocaleLowerCase(); $('search-results').replaceChildren();
@@ -495,7 +495,7 @@
   function focusChannel(index) {
     var indexes = visibleIndexes();
     var position = indexes.indexOf(index);
-    if (position < 0) { if ($('channels').querySelector('button')) $('channels').querySelector('button').focus(); else if ($('groups button')) $('groups button').focus(); return; }
+    if (position < 0) { var fallback = $('channels').querySelector('button') || $('groups').querySelector('.group-button.active'); if (fallback) fallback.focus(); return; }
     if (position < channelWindowStart || position >= channelWindowStart + channelWindowSize) { channelWindowStart = Math.max(0, position - 4); renderChannels(); }
     var button = $('channels').querySelector('[data-index="' + index + '"]');
     if (button) button.focus();
@@ -507,13 +507,14 @@
     if (position >= 0 && (position < contentWindowStart || position >= contentWindowStart + contentWindowSize)) contentWindowStart = Math.floor(Math.max(0, position - 4) / 4) * 4;
     renderChannels();
     var card = $('movie-grid').querySelector('[data-index="' + selected + '"]') || $('movie-grid').querySelector('.movie-card');
-    if (card) card.focus(); else if ($('groups button')) $('groups button').focus();
+    if (card) card.focus(); else { var group = $('groups').querySelector('.group-button.active'); if (group) group.focus(); }
   }
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected);
     if (position < 0) return true;
     if (step === -4 && position < 4) { $('sort-button').focus(); return true; }
+    if (step === 4 && Math.floor(position / 4) === Math.floor((indexes.length - 1) / 4)) return true;
     if (step === -1 && position % 4 === 0) return true;
     if (step === 1 && (position % 4 === 3 || position === indexes.length - 1)) {
       var group = $('groups').querySelector('.group-button.active'); if (group) group.focus(); return true;
@@ -1135,7 +1136,11 @@
     }
     var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : null;
     if (dialog) {
-      if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager')) { focusManagedGroup(managedGroups.length - 1); event.preventDefault(); return; }
+      if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager')) {
+        if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
+        else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
+        event.preventDefault(); return;
+      }
       if (dialog === $('group-manager') && document.activeElement.classList.contains('group-switch') && (key === 'ArrowUp' || key === 'ArrowDown')) {
         event.preventDefault();
         var position = Number(document.activeElement.dataset.position);
@@ -1190,7 +1195,7 @@
       focusSelected(); event.preventDefault(); return;
     }
     if (key === 'ArrowRight' && document.activeElement.closest && document.activeElement.closest('.primary-panel')) {
-      setPrimary(false); var activeGroupButton = $('groups').querySelector('.group-button.active') || $('groups button');
+      setPrimary(false); var activeGroupButton = $('groups').querySelector('.group-button.active') || $('groups').querySelector('button');
       if (activeGroupButton) activeGroupButton.focus(); event.preventDefault(); return;
     }
     if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.groups-panel') && !document.querySelector('.library-panel').classList.contains('primary-open')) {
@@ -1211,6 +1216,7 @@
   window.addEventListener('pageshow', function () { unloading = false; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
     unloading = true; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
+    if (!automaticReleasedView && sourceMode === 'playlist' && sources.length) automaticReleasedView = captureRuntimeView();
     catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });
   });
