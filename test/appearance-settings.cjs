@@ -94,7 +94,9 @@ async function main() {
     await key('Enter');
     assert.equal(await page.evaluate(() => document.activeElement.tagName), 'FORM', 'Sources does not open the keyboard automatically');
     await key('Escape', 'settings-sources');
-    await key('ArrowDown', 'settings-info'); await key('Enter', 'close-diagnostics'); await key('Escape', 'settings-info');
+    await key('ArrowDown', 'settings-info'); await key('Enter', 'close-diagnostics');
+    assert.equal(await page.locator('#settings-home').isVisible(), false, 'Covered settings cards cannot receive pointer clicks');
+    await key('Escape', 'settings-info');
     await key('ArrowRight', 'settings-speed'); await key('Enter', 'speed-wired'); await key('Escape', 'settings-speed');
     await key('ArrowDown', 'settings-appearance'); await key('Enter');
     for (const layout of ['tabs', 'vertical', 'compact']) {
@@ -112,6 +114,16 @@ async function main() {
       } else {
         await key('ArrowUp', 'groups-filter'); await key('ArrowDown');
         assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true, 'Down from header goes down into groups');
+      }
+      if (layout === 'tabs') {
+        await key('ArrowUp', 'groups-filter'); await key('ArrowUp');
+        assert.equal(await page.evaluate(() => document.getElementById('category-shortcuts').contains(document.activeElement)), true);
+        for (let i = 0; i < 4; i++) await key('ArrowRight');
+        assert.equal(await page.evaluate(() => document.activeElement.dataset.category), 'all');
+        for (const category of ['sports', 'movies', 'more']) { await key('ArrowLeft'); assert.equal(await page.evaluate(() => document.activeElement.dataset.category), category); }
+        await key('ArrowLeft');
+        assert.equal(await page.evaluate(() => document.activeElement.dataset.section), 'tv', 'Left edge of tabs opens the main menu');
+        await key('ArrowRight');
       }
       for (const [width, height] of [[1280,720], [1920,1080]]) {
         await page.setViewportSize({ width, height });
@@ -170,6 +182,7 @@ async function main() {
     await page.locator('#settings-sources').click(); await page.locator('#refresh-saved').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.match(await page.locator('#groups-filter').innerText(), /أخبار/);
+    assert.equal(await page.locator('#category-shortcuts [data-category="more"]').getAttribute('aria-pressed'), 'true');
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
     await key('Escape');
     // Both VOD types use the same reachable controls and stop on display-menu exit.

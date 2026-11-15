@@ -1139,8 +1139,8 @@
     return ['display-picker', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   function returnToSettings() {
-    if ($('settings-home').hidden || !settingsReturn || document.hidden || unloading) return false;
-    $(settingsReturn).focus(); return true;
+    if (!settingsReturn || document.hidden || unloading) return false;
+    $('settings-home').hidden = false; $(settingsReturn).focus(); return true;
   }
   function openSettings() {
     cancelSwitch(); setWatchMode(false); setPrimary(false);
@@ -1180,6 +1180,7 @@
     var choices = appearance.layout === 'tabs' ? categories.slice(0, 3).concat([['more', 'المزيد ▾']]) : categories;
     choices.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.textContent = item[1]; button.dataset.category = item[0];
+      if (item[0] === 'all') button.textContent = 'الكل';
       var moreActive = item[0] === 'more' && !categories.slice(0, 3).some(function (choice) { return choice[0] === activeCategory; });
       if (moreActive) button.textContent = label + ' ▾';
       button.setAttribute('aria-pressed', String(item[0] === activeCategory || moreActive));
@@ -1220,7 +1221,7 @@
   ['close-settings', 'close-appearance', 'close-category', 'close-display'].forEach(function (id) { $(id).addEventListener('click', closeExtraDialog); });
   ['settings-sources', 'settings-speed', 'settings-info', 'settings-appearance', 'manage-groups-button'].forEach(function (id) {
     $(id).addEventListener('click', function () {
-      settingsReturn = id;
+      settingsReturn = id; $('settings-home').hidden = true;
       if (id === 'settings-sources') openSetup();
       else if (id === 'settings-speed') $('speed-button').click();
       else if (id === 'settings-info') $('diagnostics-button').click();
@@ -1237,8 +1238,8 @@
   });
   ['display-button', 'media-display'].forEach(function (id) { $(id).addEventListener('click', openDisplay); });
   $('display-fullscreen').addEventListener('click', function () {
-    if (watchMode && isOnDemand()) { exitPlayback(); return; }
-    setWatchMode(!watchMode); if (!watchMode) $('display-button').focus();
+    if (watchMode) { exitPlayback(); return; }
+    setWatchMode(true);
   });
   Array.prototype.forEach.call($('display-picker').querySelectorAll('[data-fit]'), function (button) {
     button.addEventListener('click', function () { fitIndex = Number(button.dataset.fit); $('video-host').dataset.fit = fitModes[fitIndex].value; closeExtraDialog(); });
@@ -1326,6 +1327,7 @@
     }
     var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : extraDialog();
     if (dialog) {
+      if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
       if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager')) {
         if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
         else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
@@ -1368,6 +1370,23 @@
       else moveFocus(media, key);
       event.preventDefault(); return;
     }
+    if ($('category-shortcuts').contains(document.activeElement) && /^Arrow/.test(key)) {
+      var categoryButtons = visibleControls($('category-shortcuts'));
+      var categoryPosition = categoryButtons.indexOf(document.activeElement);
+      if (appearance.layout === 'vertical' && (key === 'ArrowUp' || key === 'ArrowDown')) {
+        var nextCategory = categoryPosition + (key === 'ArrowDown' ? 1 : -1);
+        var categoryTarget = nextCategory < 0 ? $('groups-filter') : nextCategory >= categoryButtons.length ? $('groups').querySelector('button') : categoryButtons[nextCategory];
+        if (categoryTarget) categoryTarget.focus(); event.preventDefault(); return;
+      }
+      if (appearance.layout === 'tabs' && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+        var nextTab = categoryPosition + (key === 'ArrowLeft' ? 1 : -1);
+        if (nextTab >= categoryButtons.length) { setPrimary(true); (document.querySelector('.primary-button.active') || $('nav-search')).focus(); }
+        else if (nextTab >= 0) categoryButtons[nextTab].focus();
+        event.preventDefault(); return;
+      }
+      if (appearance.layout === 'tabs' && key === 'ArrowDown') { $('groups-filter').focus(); event.preventDefault(); return; }
+      if (appearance.layout === 'vertical' && key === 'ArrowRight') { focusSelected(); event.preventDefault(); return; }
+    }
     if (document.activeElement === $('groups-filter') && key === 'ArrowDown') {
       var firstGroup = appearance.layout === 'vertical' && !$('category-shortcuts').hidden ? $('category-shortcuts').querySelector('button') : $('groups').querySelector('button');
       if (firstGroup) firstGroup.focus(); event.preventDefault(); return;
@@ -1375,7 +1394,7 @@
     if (isInput && key !== 'ArrowUp' && key !== 'ArrowDown') return;
     if ((key === 'ArrowDown' && (moveChannelWindow(1) || moveContentWindow(4) || moveGroupFocus(1))) || (key === 'ArrowUp' && (moveChannelWindow(-1) || moveContentWindow(-4) || moveGroupFocus(-1)))) { event.preventDefault(); return; }
     if (watchMode && !$('media-controls').hidden && key === 'Enter' && $('media-controls').contains(document.activeElement)) {
-      if (event.repeat && (document.activeElement.id === 'audio-language' || document.activeElement.id === 'subtitle-language')) event.preventDefault();
+      if (event.repeat && (document.activeElement.id === 'audio-language' || document.activeElement.id === 'subtitle-language' || document.activeElement.id === 'media-display')) event.preventDefault();
       return;
     }
     if (watchMode && (key === 'Enter' || key === 'Tab' || /^Arrow/.test(key))) {
