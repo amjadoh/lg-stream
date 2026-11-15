@@ -175,6 +175,8 @@ async function main() {
     await watch(0); await page.keyboard.press('ArrowDown'); await current(2);
     await page.keyboard.press('ArrowDown'); await current(4);
     await page.keyboard.press('ArrowUp'); await current(2);
+    await page.keyboard.press('PageUp'); await current(4);
+    await page.keyboard.press('PageDown'); await current(2);
     await page.keyboard.press('Escape');
     // VOD error still exits; it must not inherit the live-only stay-in-view rule.
     await page.locator('#channels [data-index="1"]').click();
