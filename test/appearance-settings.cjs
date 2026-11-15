@@ -88,7 +88,7 @@ async function main() {
     await key('ArrowDown'); await key('ArrowDown'); await key('ArrowDown', 'nav-settings');
     await key('Enter', 'manage-groups-button');
     assert.equal(await page.locator('#setup-panel').isVisible(), false);
-    await page.screenshot({ path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
+    await page.screenshot({ animations: 'disabled', path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
     assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series', 'nav-settings']);
     await key('ArrowLeft', 'settings-sources');
     await key('Enter');
@@ -129,7 +129,11 @@ async function main() {
         await page.setViewportSize({ width, height });
         const box = await page.locator('.groups-panel').boundingBox();
         assert.ok(box.y + box.height <= height);
-        await page.screenshot({ path: path.join(root, `artifacts/ui-appearance-${layout}-${height}.png`) });
+        if (layout === 'vertical') {
+          const shortcuts = await page.locator('#category-shortcuts button').evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return { x: box.x, width: box.width }; }));
+          assert.ok(shortcuts.every(item => Math.abs(item.x - shortcuts[0].x) < 1 && Math.abs(item.width - shortcuts[0].width) < 1), 'Vertical shortcuts remain a single column instead of wrapping outside the panel');
+        }
+        await page.screenshot({ animations: 'disabled', path: path.join(root, `artifacts/ui-appearance-${layout}-${height}.png`) });
       }
       await page.locator('#groups-filter').focus(); await key('ArrowLeft'); await page.locator('#nav-settings').click();
       await page.locator('#settings-appearance').click();
@@ -168,7 +172,7 @@ async function main() {
         const box = await page.locator(selector).boundingBox();
         assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= width && box.y + box.height <= height, `${selector} fits ${height}p`);
       }
-      await page.screenshot({ path: path.join(root, `artifacts/ui-appearance-tabs-${height}.png`) });
+      await page.screenshot({ animations: 'disabled', path: path.join(root, `artifacts/ui-appearance-tabs-${height}.png`) });
     }
     await page.reload(); await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 5);
@@ -218,7 +222,7 @@ async function main() {
         assert.ok(back.x + back.width < timeline.x && timeline.x + timeline.width < forward.x, 'Seek buttons surround the timeline physically');
         const box = await page.locator('#media-controls').boundingBox();
         assert.ok(box.height <= height * 0.4 && box.y + box.height <= height, 'Comfortable controls fit without covering half the screen');
-        await page.screenshot({ path: path.join(root, `artifacts/ui-controls-comfortable-${height}.png`) });
+        await page.screenshot({ animations: 'disabled', path: path.join(root, `artifacts/ui-controls-comfortable-${height}.png`) });
       }
       await key('ArrowLeft', 'media-display'); await key('Enter', 'display-fullscreen'); await key('Enter');
       assert.equal(await page.locator('video').count(), 0, 'Returning to VOD list stops audio and releases the video');
