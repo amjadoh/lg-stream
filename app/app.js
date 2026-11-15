@@ -20,6 +20,7 @@
   var appearance = { layout: 'compact', controls: 'compact' };
   var settingsReturn = null;
   var displayReturn = null;
+  var categoryReturn = 'header';
   var activeGroup = '';
   var activeSection = 'tv';
   var sourceMode = 'manual';
@@ -194,7 +195,7 @@
     if (restored) $('status').textContent = 'استُعيدت القائمة المحفوظة — اختر ما تريد تشغيله';
   }
   function captureRuntimeView() {
-    return { section: activeSection, group: activeGroup, sort: contentSort, selectedUrl: sources[selected] && sources[selected].url, favoriteUrls: Object.keys(favorites).map(function (index) { return sources[index] && sources[index].url; }).filter(Boolean), contentWindowStart: contentWindowStart, channelWindowStart: channelWindowStart, detailsOpen: detailsIndex !== null };
+    return { section: activeSection, category: activeCategory, group: activeGroup, sort: contentSort, selectedUrl: sources[selected] && sources[selected].url, favoriteUrls: Object.keys(favorites).map(function (index) { return sources[index] && sources[index].url; }).filter(Boolean), contentWindowStart: contentWindowStart, channelWindowStart: channelWindowStart, detailsOpen: detailsIndex !== null };
   }
   function releaseCatalogForAutomaticUpdate(view) {
     automaticReleasedView = view;
@@ -237,6 +238,7 @@
   }
   function restoreRuntimeView(state, shouldFocus) {
     if (!state) return;
+    activeCategory = categories.some(function (item) { return item[0] === state.category; }) ? state.category : 'all';
     activeSection = state.section; contentSort = state.sort; favorites = {}; favoritesRevision += 1;
     var favoriteUrls = {}; state.favoriteUrls.forEach(function (url) { favoriteUrls[url] = true; });
     sources.forEach(function (entry, index) { if (favoriteUrls[entry.url]) favorites[index] = true; });
@@ -421,7 +423,7 @@
       });
       updateTrackOptions();
     },
-    unmountVideo: function (video) { cancelSeek(); closeTrackPicker(false); $('display-picker').hidden = true; video.remove(); },
+    unmountVideo: function (video) { cancelSeek(); closeTrackPicker(false); if (!$('display-picker').hidden) closeExtraDialog(); video.remove(); },
     onState: function (state) {
       lastState = state.state;
       document.body.dataset.state = state.state;
@@ -548,7 +550,10 @@
     if (!target) {
       var groups = [''].concat(sectionGroups());
       var position = groups.indexOf(current.dataset.group); var next = position + step;
-      if (next < 0) { $('groups-filter').focus(); return true; }
+      if (next < 0) {
+        var shortcuts = $('category-shortcuts');
+        (appearance.layout === 'vertical' && !shortcuts.hidden ? shortcuts.lastElementChild : $('groups-filter')).focus(); return true;
+      }
       if (next >= groups.length) return true;
       groupWindowStart = Math.max(0, Math.min(next - (step > 0 ? groupWindowSize - 1 : 0), Math.max(0, groups.length - groupWindowSize)));
       renderGroups();
@@ -648,9 +653,11 @@
     var video = $('video-host').querySelector('video');
     var seekable = !!(video && isOnDemand() && isFinite(video.duration) && video.duration > 0 && video.seekable.length);
     $('seek-controls').hidden = !isOnDemand();
+    var seekFocused = $('seek-controls').contains(document.activeElement);
     ['seek-back', 'seek-forward', 'seek-position'].forEach(function (id) { $(id).disabled = !seekable; });
+    if (!seekable && seekFocused && !extraDialog()) $('media-toggle').focus();
     $('seek-position').max = video && isFinite(video.duration) ? video.duration : 0;
-    $('seek-position').step = video && isFinite(video.duration) ? Math.max(30, Math.ceil(video.duration / 100 / 10) * 10) : 30;
+    $('seek-position').step = 'any';
     if (pendingSeek === null && document.activeElement !== $('seek-position')) $('seek-position').value = video ? video.currentTime : 0;
     $('playback-time').textContent = video ? timeLabel(pendingSeek === null ? video.currentTime : pendingSeek) + ' / ' + timeLabel(video.duration) : '—';
     if (!seekable) $('seek-status').textContent = 'التقديم غير متاح حاليًا لهذا المصدر.';
@@ -1146,7 +1153,7 @@
     panel.hidden = true;
     if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(true); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
-    else if (panel.id === 'category-picker') $('groups-filter').focus();
+    else if (panel.id === 'category-picker') focusCategoryReturn();
     else if (panel.id === 'display-picker') {
       if (displayReturn && displayReturn.offsetParent && !displayReturn.disabled) displayReturn.focus();
       else if (watchMode) showPlaybackControls(); else focusSelected();
@@ -1173,20 +1180,28 @@
     var choices = appearance.layout === 'tabs' ? categories.slice(0, 3).concat([['more', 'المزيد ▾']]) : categories;
     choices.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.textContent = item[1]; button.dataset.category = item[0];
-      button.setAttribute('aria-pressed', String(item[0] === activeCategory));
+      var moreActive = item[0] === 'more' && !categories.slice(0, 3).some(function (choice) { return choice[0] === activeCategory; });
+      if (moreActive) button.textContent = label + ' ▾';
+      button.setAttribute('aria-pressed', String(item[0] === activeCategory || moreActive));
       button.addEventListener('click', function () { if (item[0] === 'more') openCategories(); else selectCategory(item[0]); });
       shortcuts.appendChild(button);
     });
   }
+  function focusCategoryReturn() {
+    var button = categoryReturn !== 'header' && !$('category-shortcuts').hidden ? $('category-shortcuts').querySelector('[data-category="' + categoryReturn + '"]') : null;
+    (button || $('groups-filter')).focus();
+  }
   function selectCategory(category) {
+    if ($('category-shortcuts').contains(document.activeElement)) categoryReturn = document.activeElement.dataset.category;
     cancelSwitch(); categoryPositions[activeCategory] = { group: activeGroup, selected: selected };
     activeCategory = category; var position = categoryPositions[category];
     activeGroup = position ? position.group : ''; if (position) selected = position.selected;
     groupWindowStart = 0; channelWindowStart = 0; $('category-picker').hidden = true;
-    renderGroups(); renderChannels(); saveViewState(false); $('groups-filter').focus();
+    renderGroups(); renderChannels(); saveViewState(false); focusCategoryReturn();
   }
   function openCategories() {
     if (activeSection !== 'tv') { var first = $('groups').querySelector('button'); if (first) first.focus(); return; }
+    categoryReturn = $('category-shortcuts').contains(document.activeElement) ? document.activeElement.dataset.category : 'header';
     cancelSwitch(); $('category-list').replaceChildren();
     categories.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.textContent = item[1]; button.dataset.category = item[0];
@@ -1221,7 +1236,10 @@
     });
   });
   ['display-button', 'media-display'].forEach(function (id) { $(id).addEventListener('click', openDisplay); });
-  $('display-fullscreen').addEventListener('click', function () { setWatchMode(!watchMode); if (!watchMode) $('display-button').focus(); });
+  $('display-fullscreen').addEventListener('click', function () {
+    if (watchMode && isOnDemand()) { exitPlayback(); return; }
+    setWatchMode(!watchMode); if (!watchMode) $('display-button').focus();
+  });
   Array.prototype.forEach.call($('display-picker').querySelectorAll('[data-fit]'), function (button) {
     button.addEventListener('click', function () { fitIndex = Number(button.dataset.fit); $('video-host').dataset.fit = fitModes[fitIndex].value; closeExtraDialog(); });
   });
@@ -1337,7 +1355,11 @@
       var seekRow = [$('seek-back'), $('seek-position'), $('seek-forward')].filter(function (button) { return !button.disabled && button.offsetParent; });
       var seekIndex = seekRow.indexOf(current);
       if (seekIndex >= 0) {
-        if (current === $('seek-position') && (key === 'ArrowLeft' || key === 'ArrowRight')) return;
+        if (current === $('seek-position') && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+          var increment = Math.max(10, Math.round(Number(current.max) / 100 / 10) * 10);
+          queueSeek(Math.max(0, Math.min(Number(current.max), Number(current.value) + (key === 'ArrowRight' ? increment : -increment))));
+          event.preventDefault(); return;
+        }
         if (key === 'ArrowDown' && current !== $('seek-position')) $('media-toggle').focus();
         else if (key === 'ArrowUp' && current === $('seek-position')) $('seek-back').focus();
         else if (key === 'ArrowDown' && current === $('seek-position')) $('seek-forward').focus();
@@ -1347,7 +1369,7 @@
       event.preventDefault(); return;
     }
     if (document.activeElement === $('groups-filter') && key === 'ArrowDown') {
-      var firstGroup = !$('category-shortcuts').hidden ? $('category-shortcuts').querySelector('button') : $('groups').querySelector('button');
+      var firstGroup = appearance.layout === 'vertical' && !$('category-shortcuts').hidden ? $('category-shortcuts').querySelector('button') : $('groups').querySelector('button');
       if (firstGroup) firstGroup.focus(); event.preventDefault(); return;
     }
     if (isInput && key !== 'ArrowUp' && key !== 'ArrowDown') return;

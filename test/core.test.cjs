@@ -230,3 +230,4 @@ assert.equal(require('../app/core.js').groupCategory('RU 4K'), 'other');
 assert.equal(require('../app/core.js').groupCategory('رياضة HD'), 'sports');
 assert.equal(require('../app/core.js').groupCategory('Sports / News'), 'other');
 assert.equal(require('../app/core.js').groupCategory('قنوات أفلام'), 'movies');
+assert.equal(require('../app/core.js').groupCategory('الرياض'), 'other');
