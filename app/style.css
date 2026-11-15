@@ -200,7 +200,7 @@ input::placeholder { color: #7f90a7; }
 .media-controls button { padding: 10px 14px; font-size: 24px; }
 .media-controls .form-actions { gap: 10px; }
 #seek-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; margin-bottom: 14px; }
-#playback-time { font-size: 22px; white-space: nowrap; }
+#playback-time { font-size: 24px; white-space: nowrap; }
 .media-controls input[type="range"] { direction: ltr; padding: 8px 0; margin: 0; min-width: 0; }
 .media-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: stretch; }
 .track-options { display: flex; gap: 12px; }
@@ -212,7 +212,8 @@ input::placeholder { color: #7f90a7; }
 .track-list { min-height: 0; overflow: auto; padding: 8px; margin-bottom: 18px; }
 .track-list button { display: block; width: 100%; margin-bottom: 12px; text-align: right; white-space: normal; overflow-wrap: anywhere; }
 .track-list button[aria-pressed="true"] { border-color: #c9912f; color: #ffd98a; }
-#track-status, #seek-status { font-size: 22px; color: #f6d28a; grid-column: 1 / -1; }
+.track-list button[aria-pressed="true"]::before { content: '✓ '; }
+#track-status, #seek-status { font-size: 24px; color: #f6d28a; grid-column: 1 / -1; }
 #track-status:empty, #seek-status:empty { display: none; }
 @media (max-width: 1400px) {
   .media-actions { grid-template-columns: 1fr; gap: 12px; }

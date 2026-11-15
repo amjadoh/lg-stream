@@ -750,9 +750,11 @@ async function main() {
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.trackIndex), '1');
     assert.equal(await page.evaluate(() => document.querySelector('video').audioTracks[0].enabled), true, 'Highlighting another track must not select it');
-    await page.keyboard.press('Enter');
+    await page.keyboard.down('Enter');
+    await page.keyboard.down('Enter');
+    await page.keyboard.up('Enter');
     assert.deepEqual(await page.evaluate(() => Array.from(document.querySelector('video').audioTracks, track => track.enabled)), [false, true]);
-    assert.equal(await page.locator('#track-picker').isVisible(), false);
+    assert.equal(await page.locator('#track-picker').isVisible(), false, 'Holding OK after choosing cannot reopen the picker');
     assert.equal(await page.locator('#audio-language').getAttribute('aria-expanded'), 'false');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'audio-language', 'Selection restores the opener');
     await page.keyboard.press('Enter');
@@ -768,6 +770,8 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-track-picker', 'Down stops on the final Back button');
     await page.keyboard.press('ArrowUp');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.trackIndex), '1', 'Up from Back returns to the final track');
+    await page.locator('#video-host').evaluate(host => host.click());
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.trackIndex), '1', 'Playback controls cannot steal focus from the picker');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#track-picker').isVisible(), false, 'The dialog Back button closes only the picker');

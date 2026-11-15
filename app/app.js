@@ -715,6 +715,7 @@
         try {
           if (audio) choice.track.enabled = true;
           trackChoices(video, audio).forEach(function (item) { if (item.track) { if (audio) item.track.enabled = item.track === choice.track; else item.track.mode = item.track === choice.track ? 'showing' : 'disabled'; } });
+          $('track-status').textContent = '';
         } catch (_) { $('track-status').textContent = 'تعذر تغيير المسار على هذا الجهاز.'; }
         closeTrackPicker(true); updateTrackOptions();
       });
@@ -724,6 +725,7 @@
     ($('track-list').querySelector('[aria-pressed="true"]') || $('track-list').firstElementChild).focus();
   }
   function showPlaybackControls() {
+    if (!$('track-picker').hidden) return;
     cancelSwitch();
     $('seek-status').textContent = ''; $('track-status').textContent = '';
     $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
