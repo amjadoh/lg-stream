@@ -96,13 +96,15 @@ async function main() {
     assert.match(await page.locator('#status').innerText(), /119 عنصر/);
 
     async function openManager() {
-      await page.locator('#setup-button').click();
+      await page.locator('#groups-filter').focus();
+      await page.keyboard.press('ArrowLeft');
+      await page.locator('#nav-settings').click();
       await page.locator('#manage-groups-button').click();
       assert.equal(await page.locator('#group-manager').isVisible(), true);
     }
     async function closeManager() {
       await page.locator('#close-group-manager').click();
-      await page.locator('#close-setup').click();
+      await page.locator('#close-settings').click();
     }
     async function chooseSection(section) {
       await page.locator('#groups .group-button').first().focus();
