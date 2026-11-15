@@ -340,6 +340,13 @@ async function main() {
     assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Manual refresh of the same source preserves the active group');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6', 'Manual refresh restores the selected channel');
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true', 'Manual refresh preserves favorites');
+    const beforePageReturn = await page.evaluate(() => ({ requests: window.__playlistRequests.length, starts: window.__mediaStarts }));
+    await page.evaluate(() => { window.dispatchEvent(new Event('pagehide')); window.dispatchEvent(new Event('pageshow')); });
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 4);
+    assert.equal(await page.locator('#groups .group-button.active').getAttribute('data-group'), 'مجموعة 2', 'Returning to a suspended page restores its saved catalogue');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'), 'true');
+    assert.deepEqual(await page.evaluate(() => ({ requests: window.__playlistRequests.length, starts: window.__mediaStarts })), beforePageReturn, 'Page return restores locally without downloading or starting media');
     const beforeRestoreRace = await page.evaluate(() => window.__playlistRequests.length);
     await page.evaluate(() => {
       window.__stallNextPlaylist = true;
