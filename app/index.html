@@ -24,13 +24,13 @@
         <nav class="primary-panel" aria-label="القائمة الرئيسية">
           <div class="primary-mark">LS</div>
           <button id="nav-search" type="button">⌕<span>بحث</span></button>
+          <button class="primary-button" data-section="favorites" type="button">★<span>المفضلة</span></button>
           <button class="primary-button active" data-section="tv" type="button">▣<span>البث</span></button>
           <button class="primary-button" data-section="movies" type="button">▶<span>أفلام</span></button>
           <button class="primary-button" data-section="series" type="button">▤<span>مسلسلات</span></button>
-          <button class="primary-button" data-section="favorites" type="button">★<span>المفضلة</span></button>
           <button id="nav-settings" type="button" class="primary-settings">⚙<span>الإعدادات</span></button>
         </nav>
-        <section class="groups-panel"><h1>المجموعات</h1><div id="groups" class="group-list"></div></section>
+        <section class="groups-panel"><button id="groups-filter" type="button" aria-haspopup="dialog">المجموعات ▾</button><div id="category-shortcuts" hidden></div><div id="groups" class="group-list"></div></section>
         <section class="channels-panel"><h1>القنوات</h1><p id="channel-count" class="list-count"></p>
         <div id="channels" class="channel-list"></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
@@ -47,16 +47,39 @@
         <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
         <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق للتحكم · رجوع للخروج</p>
         <section id="media-controls" class="media-controls" aria-label="التحكم بالمشاهدة" hidden>
-          <div id="seek-controls"><p id="playback-time" dir="ltr">—</p><input id="seek-position" type="range" min="0" max="0" step="10" aria-label="موضع التشغيل"><div class="form-actions"><button id="seek-back" type="button">رجوع 30 ثانية</button><button id="seek-forward" type="button">تقديم 30 ثانية</button></div><p id="seek-status" role="status"></p></div>
-          <div class="media-actions"><div class="form-actions"><button id="media-toggle" type="button">إيقاف مؤقت</button><button id="media-close" type="button">إخفاء التحكم</button><button id="media-exit" type="button">الخروج من المشاهدة</button></div>
+          <div id="seek-controls"><button id="seek-back" type="button">↶ 30 ثانية</button><div class="timeline"><p id="playback-time" dir="ltr">—</p><input id="seek-position" type="range" min="0" max="0" step="10" aria-label="موضع التشغيل"></div><button id="seek-forward" type="button">30 ثانية ↷</button><p id="seek-status" role="status"></p></div>
+          <div class="media-actions"><div class="form-actions"><button id="media-toggle" type="button">إيقاف مؤقت</button><button id="media-display" type="button" aria-haspopup="dialog">العرض</button><button id="media-close" type="button">إخفاء التحكم</button><button id="media-exit" type="button">الخروج من المشاهدة</button></div>
           <div class="track-options"><button id="audio-language" type="button" aria-haspopup="dialog" aria-controls="track-picker" aria-expanded="false">لغة الصوت</button><button id="subtitle-language" type="button" aria-haspopup="dialog" aria-controls="track-picker" aria-expanded="false">الترجمة</button></div></div>
           <p id="track-status" role="status"></p>
         </section>
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="fullscreen-button" type="button" aria-pressed="false" disabled>ملء الشاشة</button><button id="fit-button" type="button" disabled>الصورة: ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="display-button" type="button" aria-haspopup="dialog" disabled>العرض</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
   </div>
+  <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
+      <button id="manage-groups-button" type="button">إدارة المجموعات<span>إظهار أو إخفاء مجموعات البث والأفلام والمسلسلات</span></button>
+      <button id="settings-sources" type="button">مصادر البث والقوائم<span>إضافة قائمة M3U وتحديث القائمة المحفوظة</span></button>
+      <button id="settings-speed" type="button">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
+      <button id="settings-info" type="button">معلومات التشغيل<span>قياسات الجلسة وقدرات المشغّل</span></button>
+      <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
+    </div><button id="close-settings" type="button">رجوع</button></div>
+  </section>
+  <section id="appearance-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="appearance-title" hidden>
+    <div class="setup-card settings-card"><h2 id="appearance-title">المظهر</h2><h3>قائمة المجموعات</h3><div class="appearance-options">
+      <button data-layout="compact" type="button">عنوان المجموعات ▾<span>الافتراضي — الفلتر داخل العنوان</span></button>
+      <button data-layout="tabs" type="button">تبويبات مباشرة<span>الكل، رياضة، قنوات أفلام، المزيد</span></button>
+      <button data-layout="vertical" type="button">اختصارات عمودية<span>التصنيفات فوق المجموعات</span></button>
+    </div><h3>التحكم بالمشاهدة</h3><div class="form-actions"><button data-controls="compact" type="button">شريط مختصر</button><button data-controls="comfortable" type="button">أزرار أوسع</button></div>
+    <p id="appearance-status" role="status">اختيار المظهر لا يوقف المشاهدة.</p><button id="close-appearance" type="button">رجوع</button></div>
+  </section>
+  <section id="category-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="category-title" hidden>
+    <div class="setup-card track-card"><h2 id="category-title">فلتر المجموعات</h2><p class="small-note">اختياري، حسب اسم المجموعة. «الكل» يحفظ ترتيب المزوّد.</p><div id="category-list" class="track-list"></div><button id="close-category" type="button">رجوع</button></div>
+  </section>
+  <section id="display-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="display-title" hidden>
+    <div class="setup-card track-card"><h2 id="display-title">العرض</h2><div class="track-list"><button id="display-fullscreen" type="button">ملء الشاشة</button><button data-fit="0" type="button">ملائم · الصورة كاملة</button><button data-fit="1" type="button">تكبير مع قص الأطراف</button><button data-fit="2" type="button">تمديد</button></div><button id="close-display" type="button">رجوع</button></div>
+  </section>
   <section id="track-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="track-picker-title" hidden>
     <div class="setup-card track-card"><h2 id="track-picker-title">لغة الصوت</h2><div id="track-list" class="track-list"></div><button id="close-track-picker" type="button">رجوع</button></div>
   </section>
@@ -64,14 +87,13 @@
     <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
   </section>
   <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
-    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button">مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
+    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-rating"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button">مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
-      <h2 id="setup-title">الإعدادات ومصادر البث</h2>
-      <button id="manage-groups-button" type="button">إدارة المجموعات</button>
+      <h2 id="setup-title">مصادر البث والقوائم</h2>
       <p>ألصق رابط M3U الكامل لتحميل القنوات. بعد نجاح القائمة كاملة تُحفظ محليًا على التلفزيون وتعود عند فتح التطبيق.</p>
-      <label for="playlist-url">رابط قائمة M3U الكامل</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+      <label for="playlist-url">إضافة قائمة M3U</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
       <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
       <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="refresh-saved" type="button" hidden>تحديث القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>

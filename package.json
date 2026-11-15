@@ -1,12 +1,12 @@
 {
   "name": "lg-stream",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "private": true,
   "description": "Native webOS IPTV app with one active player and a local last-good catalogue.",
   "scripts": {
     "check": "node --check app/core.js && node --check app/app.js && node --check app/playlist.js && node --check app/catalog-store.js && node --check app/speed-test.js && node --check scripts/preview.cjs && node --test test/*.test.cjs",
     "test": "node --test test/*.test.cjs",
-    "check:ui": "node test/ui.cjs && node test/navigation-regressions.cjs && node test/group-management.cjs",
+    "check:ui": "node test/ui.cjs && node test/navigation-regressions.cjs && node test/group-management.cjs && node test/appearance-settings.cjs",
     "preview": "node scripts/preview.cjs",
     "package:webos": "ares-package app --outdir dist"
   },
