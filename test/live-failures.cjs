@@ -189,10 +189,12 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.locator('#movie-browser').isVisible(), true, 'Rejected VOD source restores the grid');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
-    for (const kind of ['ended', 'error']) {
+    for (const kind of ['ended', 'error', 'reject', 'timeout']) {
       await page.locator('#movie-grid [data-index="1"]').click();
+      if (kind === 'reject' || kind === 'timeout') await page.evaluate(kind => { window.__nextPlayMode = kind; }, kind);
       await page.locator('#details-trailer').click();
-      await page.evaluate(kind => document.querySelector('video').dispatchEvent(new Event(kind)), kind);
+      if (kind === 'ended' || kind === 'error') await page.evaluate(kind => document.querySelector('video').dispatchEvent(new Event(kind)), kind);
+      await page.waitForFunction(() => document.querySelectorAll('video').length === 0);
       assert.equal(await page.locator('video').count(), 0, 'Trailer completion/failure releases media');
       assert.equal(await page.locator('#movie-browser').isVisible(), true);
       assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '1');
