@@ -374,7 +374,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
 
     const longLabelsFit = await page.evaluate(() => {
-      const nodes = [document.querySelector('#groups .group-button'), document.querySelector('#channels .channel-label')];
+      const nodes = [document.querySelector('#groups .group-button'), document.querySelector('#channels .channel-label'), document.getElementById('channel-title')];
       return nodes.map(node => {
         const original = node.textContent;
         node.textContent = 'مجموعة القنوات الرياضية العربية بجميع البطولات والجودة العالية';
@@ -382,7 +382,7 @@ async function main() {
         node.textContent = original; return fits;
       });
     });
-    assert.deepEqual(longLabelsFit, [true, true], 'Long group and channel names wrap without clipping');
+    assert.deepEqual(longLabelsFit, [true, true, true], 'Long group and channel names wrap without clipping');
     await page.locator('#groups [data-group="مجموعة 2"]').click();
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.className), 'favorite-button', 'The remote can reach favorites');
@@ -526,6 +526,9 @@ async function main() {
     const controlStarts = await page.evaluate(() => window.__mediaStarts);
     const seekWrites = await page.evaluate(() => window.__seekWrites);
     await page.locator('#seek-forward').click({ clickCount: 3 });
+    const pendingTime = await page.locator('#playback-time').innerText();
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('timeupdate')));
+    assert.equal(await page.locator('#playback-time').innerText(), pendingTime, 'Playback events preserve the pending seek preview');
     await page.waitForFunction(() => document.querySelector('video').currentTime >= 90);
     assert.equal(await page.evaluate(() => window.__seekWrites), seekWrites + 1, 'Rapid seek presses commit only the final position');
     await page.locator('#seek-back').click({ clickCount: 3 });

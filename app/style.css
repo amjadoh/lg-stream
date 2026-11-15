@@ -52,7 +52,7 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .search-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin: 18px 0 24px; }
 .search-section { min-width: 0; padding: 16px; background: #0e1722; border: 1px solid #3b4d64; border-radius: 14px; }
 .search-section h3 { margin: 0 0 12px; color: #f6d28a; }
-.search-section button { width: 100%; margin-top: 8px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
+.search-section button { width: 100%; margin-top: 8px; text-align: right; white-space: normal; overflow-wrap: anywhere; }
 .channel-list { flex: 1; min-height: 0; margin-top: 14px; overflow: auto; scrollbar-width: none; display: flex; flex-direction: column; gap: 12px; }
 .channel-row { flex-shrink: 0; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .channel-button { width: 100%; text-align: right; padding: 20px 16px; background: #141e2b; display: grid; grid-template-columns: 40px 1fr; column-gap: 12px; align-items: center; }
@@ -81,16 +81,16 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .sort-menu button { display: block; width: 100%; padding: 9px 12px; text-align: right; font-size: 17px; }
 .sort-menu button.active { color: #f6d28a; border-color: #c9912f; }
 .movie-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
-.movie-card { position: relative; overflow: hidden; min-width: 0; height: 230px; padding: 20px; text-align: right; white-space: normal; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(145deg, #345569, #172432 65%); border-radius: 18px; }
+.movie-card { position: relative; overflow: hidden; min-width: 0; min-height: 230px; height: auto; padding: 20px; text-align: right; white-space: normal; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(145deg, #345569, #172432 65%); border-radius: 18px; }
 .movie-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .78; }
 .movie-card::before { content: '▶'; color: #e2ad45; font: 42px/1 Arial, sans-serif; margin-bottom: auto; }
-.movie-card span { position: relative; z-index: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding: 8px; border-radius: 8px; background: rgba(3,7,19,.76); }
+.movie-card span { position: relative; z-index: 1; display: block; flex-shrink: 0; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: rgba(3,7,19,.76); }
 .empty-state { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #101923; padding: 40px 40px 110px; text-align: center; }
 .empty-state h2 { font-size: 36px; margin: 28px 0 10px; }
 .empty-state p { color: #aab8ca; font-size: 22px; line-height: 1.8; margin: 0 0 30px; max-width: 620px; }
 .play-symbol { display: grid; place-items: center; width: 96px; height: 96px; border: 1px solid #8b6724; border-radius: 28px; color: #e2ad45; font-size: 60px; line-height: 1; }
 .playback-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 20px 28px; display: flex; align-items: center; gap: 20px; background: rgba(9,15,23,.94); border-top: 1px solid #263448; }
-#channel-title { flex-shrink: 0; }
+#channel-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 #status { color: #f6d28a; font-size: 20px; text-align: left; margin-right: auto; }
 .quality-badge { direction: ltr; color: #161006; background: #d9a441; border-radius: 8px; padding: 4px 10px; font: bold 17px Arial, sans-serif; }
 body[data-state="error"] #status, body[data-state="play-rejected"] #status, body[data-state="startup-timeout"] #status { color: #ffc6b5; }
@@ -160,7 +160,7 @@ input::placeholder { color: #7f90a7; }
   .channel-button { padding: 15px 12px; grid-template-columns: 30px 1fr; }
   .channel-label { font-size: 27px; }
   .movie-grid { gap: 12px; }
-  .movie-card { height: 170px; padding: 14px; }
+  .movie-card { min-height: 170px; padding: 14px; }
   .remote-hint { font-size: 16px; padding-top: 16px; }
   .empty-state { padding: 24px 24px 94px; }
   .empty-state h2 { font-size: 30px; margin-top: 20px; }
