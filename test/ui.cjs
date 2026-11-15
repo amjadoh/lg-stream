@@ -333,6 +333,7 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__mediaStarts), failedStarts + 2, 'Back cancels a queued channel switch');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '0');
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), false, 'Only explicit Back exits live watching');
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
     const startsBeforeQuickFailure = await page.evaluate(() => window.__mediaStarts);
     await page.evaluate(() => {
       const channel = document.querySelector('#channels .channel-button');
