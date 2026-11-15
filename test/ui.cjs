@@ -664,7 +664,12 @@ async function main() {
     assert.match(await page.locator('#details-description').innerText(), /وصف تجريبي/);
     assert.equal(await page.locator('#details-trailer').isVisible(), true);
     assert.equal(await page.locator('#details-poster').isVisible(), true);
-    await page.locator('#close-details').click();
+    await page.locator('#details-trailer').click();
+    await page.keyboard.press('Enter'); await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
+    await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+    assert.equal(await page.locator('video').count(), 0, 'The display-menu exit releases provider trailers too');
+    assert.equal(await page.locator('#movie-browser').isVisible(), true);
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
@@ -724,8 +729,8 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-toggle');
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
-    await page.keyboard.press('Enter');
-    assert.equal(await page.locator('#display-picker').isVisible(), true);
+    await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.up('Enter');
+    assert.equal(await page.locator('#display-picker').isVisible(), true, 'Holding OK must not immediately activate the new display menu');
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
