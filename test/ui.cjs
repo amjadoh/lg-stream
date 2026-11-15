@@ -38,10 +38,11 @@ async function main() {
         return states.get(video);
       };
       window.__mediaStarts = 0;
+      window.__seekWrites = 0;
       const proto = HTMLMediaElement.prototype;
       Object.defineProperty(proto, 'src', { configurable: true, get() { return state(this).source; }, set(value) { state(this).source = value; } });
       Object.defineProperty(proto, 'paused', { configurable: true, get() { return state(this).paused; } });
-      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; }, set(value) { state(this).time = value; } });
+      Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return state(this).time; }, set(value) { window.__seekWrites++; state(this).time = value; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', { configurable: true, get() { return 1920; } });
       Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', { configurable: true, get() { return 1080; } });
       Object.defineProperty(proto, 'duration', { configurable: true, get() { return 3600; } });
@@ -189,6 +190,11 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1, 'Selecting the current channel must not restart it');
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Double OK must enter fullscreen without reconnecting');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#seek-controls').isVisible(), false, 'Live controls do not advertise VOD seeking');
+    assert.equal(await page.locator('#audio-language').isDisabled(), true, 'Missing native audio tracks disable selection');
+    assert.equal(await page.locator('#subtitle-language').isDisabled(), true, 'Missing native subtitle tracks disable selection');
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.locator('#retry-button').click();
     assert.equal(await page.evaluate(() => window.__mediaStarts), 2, 'Explicit retry must restart media');
@@ -367,7 +373,22 @@ async function main() {
     });
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
 
+    const longLabelsFit = await page.evaluate(() => {
+      const nodes = [document.querySelector('#groups .group-button'), document.querySelector('#channels .channel-label')];
+      return nodes.map(node => {
+        const original = node.textContent;
+        node.textContent = 'مجموعة القنوات الرياضية العربية بجميع البطولات والجودة العالية';
+        const fits = node.scrollHeight <= node.clientHeight + 1 && node.scrollWidth <= node.clientWidth + 1;
+        node.textContent = original; return fits;
+      });
+    });
+    assert.deepEqual(longLabelsFit, [true, true], 'Long group and channel names wrap without clipping');
     await page.locator('#groups [data-group="مجموعة 2"]').click();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.className), 'favorite-button', 'The remote can reach favorites');
+    await page.locator('#channels .favorite-button').first().focus();
+    await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.favoriteIndex), '4', 'Favorite navigation also stops at the channel boundary');
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.group), 'مجموعة 2', 'Left restores the same group');
     await page.keyboard.press('ArrowRight');
@@ -501,11 +522,18 @@ async function main() {
     });
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#media-controls').isVisible(), true);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-playback-controls-1080.png') });
     const controlStarts = await page.evaluate(() => window.__mediaStarts);
-    await page.locator('#seek-forward').click();
-    assert.ok(await page.evaluate(() => document.querySelector('video').currentTime >= 30));
-    await page.locator('#seek-back').click();
-    assert.ok(await page.evaluate(() => document.querySelector('video').currentTime < 1));
+    const seekWrites = await page.evaluate(() => window.__seekWrites);
+    await page.locator('#seek-forward').click({ clickCount: 3 });
+    await page.waitForFunction(() => document.querySelector('video').currentTime >= 90);
+    assert.equal(await page.evaluate(() => window.__seekWrites), seekWrites + 1, 'Rapid seek presses commit only the final position');
+    await page.locator('#seek-back').click({ clickCount: 3 });
+    await page.waitForFunction(() => document.querySelector('video').currentTime < 1);
+    await page.locator('#audio-language').focus();
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'subtitle-language', 'Horizontal arrows move between track selectors');
+    assert.equal(await page.evaluate(() => document.querySelector('video').audioTracks[0].enabled), true, 'Moving focus must not switch audio');
     await page.locator('#audio-language').selectOption('1');
     await page.locator('#subtitle-language').selectOption('0');
     assert.deepEqual(await page.evaluate(() => Array.from(document.querySelector('video').audioTracks, track => track.enabled)), [false, true]);

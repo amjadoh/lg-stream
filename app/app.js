@@ -310,19 +310,20 @@
     },
     mountVideo: function (video) {
       $('video-host').appendChild(video);
-      ['loadedmetadata', 'durationchange', 'timeupdate', 'progress'].forEach(function (name) { video.addEventListener(name, function () { if (video.parentNode) updatePlaybackControls(); }); });
+      ['loadedmetadata', 'durationchange', 'timeupdate', 'progress'].forEach(function (name) { video.addEventListener(name, function () { if (video.parentNode && !$('media-controls').hidden) updatePlaybackControls(); }); });
       [video.audioTracks, video.textTracks].forEach(function (tracks) {
-        if (tracks && tracks.addEventListener) ['addtrack', 'removetrack', 'change'].forEach(function (name) { tracks.addEventListener(name, function () { if (video.parentNode) updateTrackOptions(); }); });
+        if (tracks && tracks.addEventListener) ['addtrack', 'removetrack', 'change'].forEach(function (name) { tracks.addEventListener(name, function () { if (video.parentNode && !$('media-controls').hidden) updateTrackOptions(); }); });
       });
       updateTrackOptions();
     },
-    unmountVideo: function (video) { video.remove(); },
+    unmountVideo: function (video) { cancelSeek(); video.remove(); },
     onState: function (state) {
       lastState = state.state;
       document.body.dataset.state = state.state;
       $('status').textContent = labels[state.state] || 'جاهز';
       if (state.state === 'error' && state.errorCode) $('status').textContent += ' (' + state.errorCode + ')';
       $('toggle-button').textContent = state.state === 'paused' ? 'متابعة البث' : 'إيقاف مؤقت';
+      $('media-toggle').textContent = state.state === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
       $('toggle-button').disabled = ['playing', 'waiting', 'paused'].indexOf(state.state) < 0;
       $('stop-button').disabled = state.state === 'idle';
       $('retry-button').disabled = playingIndex === null;
@@ -420,7 +421,7 @@
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var rawNext = position + step; var next = step > 0 ? Math.min(indexes.length - 1, rawNext) : Math.max(0, rawNext);
     if (next < 0 || next >= indexes.length) return false;
-    if (next === position) return false;
+    if (next === position) return true;
     if (next >= contentWindowStart && next < contentWindowStart + contentWindowSize) {
       if (rawNext === next) return false;
       var edgeCard = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (edgeCard) edgeCard.focus(); return !!edgeCard;
@@ -436,7 +437,7 @@
     if (!target) {
       var groups = [''].concat(sectionGroups());
       var position = groups.indexOf(current.dataset.group); var next = position + step;
-      if (next < 0 || next >= groups.length) return false;
+      if (next < 0 || next >= groups.length) return true;
       groupWindowStart = Math.max(0, Math.min(next - (step > 0 ? groupWindowSize - 1 : 0), Math.max(0, groups.length - groupWindowSize)));
       renderGroups();
       Array.prototype.some.call($('groups').querySelectorAll('.group-button'), function (button) {
@@ -448,11 +449,14 @@
     target.focus(); return true;
   }
   function moveChannelWindow(step) {
-    if (activeSection === 'movies' || activeSection === 'series' || !document.activeElement.classList.contains('channel-button')) return false;
-    var indexes = visibleIndexes(); var position = indexes.indexOf(selected); var next = position + step;
+    var current = document.activeElement; var favorite = current.classList.contains('favorite-button');
+    if (activeSection === 'movies' || activeSection === 'series' || (!favorite && !current.classList.contains('channel-button'))) return false;
+    var index = Number(favorite ? current.dataset.favoriteIndex : current.dataset.index);
+    var indexes = visibleIndexes(); var position = indexes.indexOf(index); var next = position + step;
     if (next < 0 || next >= indexes.length) return true;
-    if (next >= channelWindowStart && next < channelWindowStart + channelWindowSize) { focusChannel(indexes[next]); return true; }
-    channelWindowStart = Math.max(0, next - (step > 0 ? 4 : channelWindowSize - 5)); renderChannels(); focusChannel(indexes[next]); return true;
+    if (next < channelWindowStart || next >= channelWindowStart + channelWindowSize) { channelWindowStart = Math.max(0, next - (step > 0 ? 4 : channelWindowSize - 5)); renderChannels(); }
+    var target = $('channels').querySelector(favorite ? '[data-favorite-index="' + indexes[next] + '"]' : '.channel-button[data-index="' + indexes[next] + '"]');
+    if (target) target.focus(); return true;
   }
   function playChannel(intent) {
     var index = intent.index;
@@ -501,6 +505,7 @@
     setTimeout(scheduleAutoUpdate, 0);
   }
   function setWatchMode(enabled) {
+    cancelSeek();
     watchMode = enabled;
     $('media-controls').hidden = true;
     document.body.classList.toggle('watch-mode', enabled);
@@ -520,6 +525,9 @@
     $('fit-button').textContent = 'الصورة: ' + fitModes[fitIndex].label;
   });
   $('video-host').addEventListener('click', function () { if (watchMode) showPlaybackControls(); });
+  var seekTimer = null;
+  var pendingSeek = null;
+  function cancelSeek() { clearTimeout(seekTimer); seekTimer = null; pendingSeek = null; }
   function isOnDemand() { return playingIndex !== null && /^(movies|series)$/.test(entrySection(playingIndex)); }
   function exitPlayback() {
     if (isOnDemand() || (playingIndex === null && lastState !== 'idle')) stop(); else setWatchMode(false);
@@ -535,24 +543,33 @@
     $('seek-controls').hidden = !isOnDemand();
     ['seek-back', 'seek-forward', 'seek-position'].forEach(function (id) { $(id).disabled = !seekable; });
     $('seek-position').max = video && isFinite(video.duration) ? video.duration : 0;
-    $('seek-position').value = video ? video.currentTime : 0;
+    $('seek-position').step = video && isFinite(video.duration) ? Math.max(30, Math.ceil(video.duration / 100 / 10) * 10) : 30;
+    if (pendingSeek === null && document.activeElement !== $('seek-position')) $('seek-position').value = video ? video.currentTime : 0;
     $('playback-time').textContent = video ? timeLabel(video.currentTime) + ' / ' + timeLabel(video.duration) : '—';
     $('seek-status').textContent = seekable ? '' : 'التقديم غير متاح حاليًا لهذا المصدر.';
   }
   function seekTo(seconds) {
     var video = $('video-host').querySelector('video');
     if (!video || !isOnDemand() || !isFinite(seconds) || !isFinite(video.duration)) return;
+    if (!video.seekable.length) return;
+    seconds = Math.max(video.seekable.start(0), Math.min(video.seekable.end(video.seekable.length - 1), seconds));
     for (var i = 0; i < video.seekable.length; i += 1) {
       if (seconds < video.seekable.start(i) || seconds > video.seekable.end(i)) continue;
-      try { video.currentTime = seconds; } catch (_) { $('seek-status').textContent = 'تعذر الانتقال في هذا المصدر.'; }
+      try { video.currentTime = seconds; } catch (_) { $('seek-status').textContent = 'تعذر الانتقال في هذا المصدر.'; return; }
       updatePlaybackControls(); return;
     }
     $('seek-status').textContent = 'هذا الموضع غير متاح في المصدر حاليًا.';
   }
+  function queueSeek(seconds) {
+    var video = $('video-host').querySelector('video'); if (!video || !isOnDemand() || !isFinite(seconds)) return;
+    clearTimeout(seekTimer); pendingSeek = Math.max(0, Math.min(video.duration, seconds));
+    $('seek-position').value = pendingSeek; $('playback-time').textContent = timeLabel(pendingSeek) + ' / ' + timeLabel(video.duration);
+    seekTimer = setTimeout(function () { var target = pendingSeek; cancelSeek(); if (video === $('video-host').querySelector('video')) seekTo(target); }, 400);
+  }
   function updateTrackOptions() {
     var video = $('video-host').querySelector('video');
     [['audio-language', video && video.audioTracks, false], ['subtitle-language', video && video.textTracks, true]].forEach(function (item) {
-      var select = $(item[0]); var tracks = item[1]; var subtitle = item[2]; select.replaceChildren();
+      var select = $(item[0]); if (document.activeElement === select) return; var tracks = item[1]; var subtitle = item[2]; select.replaceChildren();
       function option(value, label, selected) { var node = document.createElement('option'); node.value = value; node.textContent = label; node.selected = selected; select.appendChild(node); }
       if (subtitle) option('-1', 'إيقاف الترجمة', true);
       if (tracks) for (var i = 0; i < tracks.length; i += 1) {
@@ -564,21 +581,21 @@
     });
   }
   function showPlaybackControls() {
-    updatePlaybackControls(); updateTrackOptions(); $('media-controls').hidden = false;
+    $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
     $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت';
     $('media-toggle').focus();
   }
-  $('media-toggle').addEventListener('click', function () { player.toggle(); $('media-toggle').textContent = lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت'; });
-  $('media-close').addEventListener('click', function () { $('media-controls').hidden = true; document.body.focus(); });
+  $('media-toggle').addEventListener('click', function () { player.toggle(); });
+  $('media-close').addEventListener('click', function () { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); });
   $('media-exit').addEventListener('click', exitPlayback);
-  $('seek-back').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) seekTo(Math.max(0, video.currentTime - 30)); });
-  $('seek-forward').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) seekTo(Math.min(video.duration, video.currentTime + 30)); });
-  $('seek-position').addEventListener('change', function () { seekTo(Number(this.value)); });
+  $('seek-back').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) queueSeek((pendingSeek === null ? video.currentTime : pendingSeek) - 30); });
+  $('seek-forward').addEventListener('click', function () { var video = $('video-host').querySelector('video'); if (video) queueSeek((pendingSeek === null ? video.currentTime : pendingSeek) + 30); });
+  $('seek-position').addEventListener('input', function () { queueSeek(Number(this.value)); });
   ['audio-language', 'subtitle-language'].forEach(function (id) {
     $(id).addEventListener('change', function () {
       var video = $('video-host').querySelector('video'); if (!video) return;
       var chosen = Number(this.value); var audio = id === 'audio-language'; var tracks = audio ? video.audioTracks : video.textTracks;
-      try { if (tracks) for (var i = 0; i < tracks.length; i += 1) { if (audio) tracks[i].enabled = i === chosen; else if (tracks[i].kind === 'subtitles' || tracks[i].kind === 'captions') tracks[i].mode = i === chosen ? 'showing' : 'disabled'; } }
+      try { if (audio && tracks && tracks[chosen]) tracks[chosen].enabled = true; if (tracks) for (var i = 0; i < tracks.length; i += 1) { if (audio) tracks[i].enabled = i === chosen; else if (tracks[i].kind === 'subtitles' || tracks[i].kind === 'captions') tracks[i].mode = i === chosen ? 'showing' : 'disabled'; } }
       catch (_) { $('track-status').textContent = 'تعذر تغيير المسار على هذا الجهاز.'; }
     });
   });
@@ -967,7 +984,7 @@
       else if (!searchPanel.hidden) closeSearch();
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
-      else if (watchMode) { if (!$('media-controls').hidden) { $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
+      else if (watchMode) { if (!$('media-controls').hidden) { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
       else if (lastState !== 'idle') { stop(); if (sources.length) focusSelected(); }
       else if (typeof window.webOS !== 'undefined' && window.webOS.platformBack) window.webOS.platformBack();
       else window.close();
@@ -987,6 +1004,7 @@
       return;
     }
     if (watchMode && !$('media-controls').hidden && (isInput || isSelect) && (key === 'ArrowUp' || key === 'ArrowDown')) { moveFocus($('media-controls'), key); event.preventDefault(); return; }
+    if (watchMode && isSelect && (key === 'ArrowLeft' || key === 'ArrowRight')) { moveFocus($('media-controls'), key); event.preventDefault(); return; }
     if (isSelect || (isInput && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
     if ((key === 'ArrowDown' && (moveChannelWindow(1) || moveContentWindow(4) || moveGroupFocus(1))) || (key === 'ArrowUp' && (moveChannelWindow(-1) || moveContentWindow(-4) || moveGroupFocus(-1)))) { event.preventDefault(); return; }
     if (watchMode && !$('media-controls').hidden && key === 'Enter' && $('media-controls').contains(document.activeElement)) return;
@@ -1008,9 +1026,11 @@
     if (code === 413) { stop(); focusSelected(); event.preventDefault(); return; }
     if (key === ' ' || code === 10252) { cancelSwitch(); player.toggle(); event.preventDefault(); return; }
     if (key === 'ArrowLeft' && document.activeElement.closest && document.activeElement.closest('.channels-panel')) {
+      if (document.activeElement.classList.contains('channel-button')) { document.activeElement.parentNode.querySelector('.favorite-button').focus(); event.preventDefault(); return; }
       var groupButton = $('groups').querySelector('.group-button.active');
       if (groupButton) groupButton.focus(); event.preventDefault(); return;
     }
+    if (key === 'ArrowRight' && document.activeElement.classList.contains('favorite-button')) { document.activeElement.parentNode.querySelector('.channel-button').focus(); event.preventDefault(); return; }
     if (key === 'ArrowRight' && document.activeElement.classList.contains('group-button')) {
       focusSelected(); event.preventDefault(); return;
     }
