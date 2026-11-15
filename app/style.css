@@ -195,10 +195,28 @@ input::placeholder { color: #7f90a7; }
   .diagnostics p { font-size: 16px; }
 }
 
-.media-controls { position: absolute; z-index: 3; bottom: 90px; left: 5%; right: 5%; padding: 24px 32px; border: 2px solid #52657e; border-radius: 18px; background: rgba(9,15,23,.97); direction: rtl; }
-.media-controls p { margin: 10px 0; }
-.media-controls input[type="range"] { direction: ltr; padding: 12px 0; }
-.track-options { display: flex; gap: 30px; }
-.track-options label { flex: 1; }
-.track-options select { display: block; width: 100%; padding: 10px; background: #172338; color: #fffaf0; }
-#track-status, #seek-status { font-size: 22px; color: #f6d28a; }
+.media-controls { position: absolute; z-index: 3; bottom: 36px; left: 4%; right: 4%; padding: 16px 20px; border: 1px solid #52657e; border-radius: 18px; background: rgba(9,15,23,.96); direction: rtl; }
+.media-controls p { margin: 6px 0; }
+.media-controls button { padding: 10px 14px; font-size: 24px; }
+.media-controls .form-actions { gap: 10px; }
+#seek-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; margin-bottom: 14px; }
+#playback-time { font-size: 24px; white-space: nowrap; }
+.media-controls input[type="range"] { direction: ltr; padding: 8px 0; margin: 0; min-width: 0; }
+.media-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.track-options { display: flex; gap: 12px; }
+.track-options button { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.track-options button:disabled { opacity: .7; }
+.track-card { width: 700px; max-height: 65vh; padding: 24px; display: flex; flex-direction: column; }
+.track-card h2 { margin: 0 0 12px; font-size: 28px; }
+.track-card button { font-size: 26px; padding: 12px 18px; }
+.track-list { min-height: 0; overflow: auto; padding: 8px; margin-bottom: 18px; }
+.track-list button { display: block; width: 100%; margin-bottom: 12px; text-align: right; white-space: normal; overflow-wrap: anywhere; }
+.track-list button[aria-pressed="true"] { border-color: #c9912f; color: #ffd98a; }
+.track-list button[aria-pressed="true"]::before { content: '✓ '; }
+#track-status, #seek-status { font-size: 24px; color: #f6d28a; grid-column: 1 / -1; }
+#track-status:empty, #seek-status:empty { display: none; }
+@media (max-width: 1400px) {
+  .media-actions { grid-template-columns: 1fr; gap: 12px; }
+  .media-actions > .form-actions > button { flex: 1; }
+  #seek-controls { gap: 12px; }
+}
