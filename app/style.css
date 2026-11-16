@@ -103,6 +103,10 @@ body.watch-mode .viewing-panel { position: fixed; inset: 0; z-index: 5; border: 
 .fullscreen-hint.channel-announcement { top: auto; bottom: 48px; left: auto; right: 48px; transform: none; min-width: 300px; max-width: 65%; padding: 24px 32px; border-right: 4px solid #e6b963; border-radius: 18px; font-size: 32px; text-align: right; }
 body.watch-mode:not([data-state="playing"]) .fullscreen-hint.channel-announcement { top: 48px; bottom: auto; }
 body.watch-mode header, body.watch-mode .library-panel, body.watch-mode footer, body.watch-mode .empty-state, body.watch-mode .movie-browser { display: none; }
+body.watch-mode.watch-channels .library-panel { display: flex; position: fixed; z-index: 6; left: 48px; top: 48px; bottom: 48px; width: 480px; max-width: 42vw; padding: 0; }
+body.watch-channels .library-panel .primary-panel, body.watch-channels .library-panel .groups-panel, body.watch-channels .favorite-button { display: none; }
+body.watch-channels .channels-panel { width: 100%; background: rgba(16,21,31,.97); }
+body.watch-channels .channel-row { grid-template-columns: 1fr; }
 body.watch-mode[data-state="playing"] .playback-bar { display: none; }
 .modal { position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.88); display: flex; align-items: center; justify-content: center; padding: 28px; }
 .setup-card { background: #131e2b; border: 1px solid #46576d; border-radius: 20px; width: 1000px; max-width: 100%; max-height: calc(100vh - 56px); overflow: auto; padding: 30px 40px; }

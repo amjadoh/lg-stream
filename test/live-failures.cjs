@@ -124,20 +124,52 @@ async function main() {
       await current(kind === 'error' || kind === 'ended' ? 2 : 4);
       await page.keyboard.press('Escape');
     }
-    // A held OK opens controls once; repeats must never toggle playback.
+    // Live OK opens only channels; held OK must not immediately close the drawer.
     await watch(0);
     const beforeHeldOK = await page.evaluate(() => window.__mediaStarts);
-    await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.up('Enter');
+    await page.keyboard.down('Enter');
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true);
+    await page.keyboard.down('Enter');
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true, 'Repeated OK must not close the newly opened list');
+    await page.keyboard.up('Enter');
     assert.equal(await page.evaluate(() => document.body.dataset.state), 'playing');
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK);
-    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true);
+    assert.equal(await page.locator('#media-controls').isVisible(), false);
+    assert.equal(await page.locator('#groups').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '0');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK, 'Browsing never starts a channel');
+    await page.keyboard.press('Enter'); await current(2);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true, 'First OK starts the channel and keeps the list');
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true, 'A broken channel must not close the list');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '2');
+    await page.keyboard.press('Enter'); await current(2);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true, 'OK on a failed channel retries explicitly and keeps the list');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-watch-channels-1080.png') });
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), false, 'OK on current channel returns to fullscreen');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 2, 'Closing the list never restarts playback');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowUp');
     await page.keyboard.press('Escape');
+    await current(2);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 2, 'Back discards the highlighted channel without playing it');
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode') && !node.classList.contains('watch-channels')), true);
+    assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), false, 'Right replaces the channel list with playback controls');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('ArrowUp'); await current(0);
     // Broken-source controls offer a real retry of the same live channel.
     await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#media-toggle').innerText(), 'إعادة المحاولة');
     await page.keyboard.press('Enter'); await current(0);
-    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 1);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 4);
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
     // Search has the same stop-before-VOD behavior as the main navigation.
     await page.locator('#groups-filter').focus(); await page.keyboard.press('ArrowLeft');
@@ -191,7 +223,16 @@ async function main() {
     await page.reload();
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 5);
-    await watch(0); await page.keyboard.press('ArrowDown'); await current(2);
+    await watch(0);
+    await keys('ArrowDown', 'Enter');
+    await page.waitForTimeout(160);
+    await current(0);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-channels')), true);
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '0', 'OK cancels pending zap and anchors the list to the actual channel');
+    assert.deepEqual(await page.locator('#channels .channel-button').evaluateAll(nodes => nodes.map(node => Number(node.dataset.index))), [0, 2, 4], 'Live drawer excludes VOD from mixed favorites');
+    assert.equal(await page.locator('#fullscreen-hint').isVisible(), false);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('ArrowDown'); await current(2);
     await page.keyboard.press('ArrowDown'); await current(4);
     await page.keyboard.press('ArrowUp'); await current(2);
     await page.keyboard.press('PageUp'); await current(4);
