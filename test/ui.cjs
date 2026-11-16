@@ -287,7 +287,7 @@ async function main() {
     await page.locator('#display-button').click();
     await page.locator('#display-fullscreen').click();
     await setMediaTracks([{ language: 'ar', enabled: true }, { language: 'en', enabled: false }], [{ kind: 'captions', language: 'en', mode: 'disabled' }]);
-    await page.keyboard.press('Enter');
+    await page.keyboard.press('ArrowRight');
     const liveTrackStarts = await page.evaluate(() => window.__mediaStarts);
     await page.locator('#audio-language').focus();
     await page.keyboard.press('Enter');
