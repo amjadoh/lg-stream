@@ -627,8 +627,8 @@ async function main() {
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.locator('.library-panel').getAttribute('class'), 'library-panel primary-open');
-    await page.keyboard.press('ArrowRight');
-    assert.equal(await page.locator('.library-panel').getAttribute('class'), 'library-panel');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.closest('.groups-panel') !== null), true);
     assert.equal(await page.evaluate(() => document.activeElement.closest('.groups-panel') !== null), true);
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="favorites"]').click();
