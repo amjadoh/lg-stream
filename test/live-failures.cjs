@@ -156,8 +156,9 @@ async function main() {
     await page.keyboard.press('Escape');
     await current(2);
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 2, 'Back discards the highlighted channel without playing it');
-    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode') && !node.classList.contains('watch-channels')), true);
-    assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
+    assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), false);
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true);
+    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter');
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#media-controls').isVisible(), true);
@@ -232,6 +233,7 @@ async function main() {
     assert.deepEqual(await page.locator('#channels .channel-button').evaluateAll(nodes => nodes.map(node => Number(node.dataset.index))), [0, 2, 4], 'Live drawer excludes VOD from mixed favorites');
     assert.equal(await page.locator('#fullscreen-hint').isVisible(), false);
     await page.keyboard.press('Escape');
+    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowDown'); await current(2);
     await page.keyboard.press('ArrowDown'); await current(4);
     await page.keyboard.press('ArrowUp'); await current(2);

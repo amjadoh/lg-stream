@@ -1,14 +1,13 @@
 @font-face { font-family: Plex; src: url('assets/fonts/IBMPlexSansArabic-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
 @font-face { font-family: Plex; src: url('assets/fonts/IBMPlexSansArabic-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
-:root { font-family: Plex, sans-serif; background: #211e19; }
-body { --surface: #211e19; --panel: #29251f; --line: #51483c; --text: #f3ece1; --muted: #c6bcad; --accent: #edb971; --focus: #f3ece1; background: var(--surface); color: var(--text); }
-body[data-theme="cinema"] { --surface: #100f0e; --panel: #1c1a17; --line: #49443d; --text: #efe7d6; --muted: #c4bdaf; --accent: #c9a24a; --focus: #efe7d6; }
+:root { font-family: Plex, sans-serif; background: #060b16; }
+body { --surface: #060b16; --panel: #10151f; --line: #303743; --text: #fffaf0; --muted: #a1aec1; --accent: #d9a441; --focus: #343943; --focus-text: #fffaf0; --focus-ring: #f4ead5; background: var(--surface); color: var(--text); }
 button, input, select, .tag, .primary-panel button span { font-family: Plex, sans-serif; }
 button { background: var(--panel); color: var(--text); border-radius: 5px; }
 button:hover { background: var(--line); }
-button:focus, button.active:focus, .group-button.active:focus, .channel-button.active:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--surface); outline: 3px solid var(--focus); outline-offset: 2px; }
+button:focus, button.active:focus, .group-button.active:focus, .channel-button.active:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--focus-text); outline: 3px solid var(--focus-ring); outline-offset: 2px; }
 button:focus span, button:focus .channel-number { color: inherit; }
-input:focus, select:focus { outline-color: var(--focus); }
+input:focus, select:focus { outline-color: var(--focus-ring); }
 button.primary, .quality-badge { background: var(--accent); color: var(--surface); }
 .tag, .footer-note, .list-count, .muted, .settings-grid span, .appearance-options span, .small-note { color: var(--muted); }
 .shell { padding: 28px 42px 20px; }
@@ -82,9 +81,9 @@ html[dir="ltr"] .settings-grid button, html[dir="ltr"] .appearance-options butto
   body.watch-channels .channels-panel { padding: 20px 16px; }
 }
 
-.primary-panel button:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--surface); border-color: var(--focus); }
-body[data-theme="cinema"] .library-panel .primary-panel button:focus { background: var(--focus); color: var(--surface); }
-.theme-options button:focus, .appearance-options button:focus, [data-controls]:focus, [data-language]:focus { background: var(--focus); color: var(--surface); }
+.primary-panel button:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--focus-text); border-color: var(--focus-ring); }
+body[data-theme="cinema"] .library-panel .primary-panel button:focus { background: var(--focus); color: var(--focus-text); }
+.theme-options button:focus, .appearance-options button:focus, [data-controls]:focus, [data-language]:focus { background: var(--focus); color: var(--focus-text); }
 .theme-options button:focus span, .appearance-options button:focus span { color: inherit; }
 .channel-label { line-height: 1.5; }
 body[data-theme="cinema"] .library-panel .primary-panel { grid-row: 1; }

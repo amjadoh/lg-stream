@@ -142,10 +142,12 @@ async function main() {
     assert.ok(await page.locator('#channels .channel-button').count() <= 40);
     assert.equal(await page.evaluate(() => document.querySelector('video') === window.__drawerVideo), true, 'Drawer browsing keeps the current player');
     await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true, 'Drawer Back returns to its group');
+    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter'); await focusedIndex(0);
     for (let index = 1; index <= 45; index++) await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
-    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape'); await page.keyboard.press('ArrowRight');
     await focusedIndex(45);
 
     for (const [section, group, base] of [['movies', 'أفلام الاختبار', 95], ['series', 'حلقات الاختبار', 140]]) {

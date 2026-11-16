@@ -1,6 +1,9 @@
 (function () {
   'use strict';
   var dictionary = {
+  "هل تريد الخروج من التطبيق؟": "Do you want to exit the app?",
+  "خروج": "Exit",
+  "إلغاء": "Cancel",
   "الكل · ترتيب المزوّد": "All · Provider order",
   "رياضة": "Sports",
   "قنوات أفلام": "Movie channels",
