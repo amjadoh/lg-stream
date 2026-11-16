@@ -24,6 +24,8 @@
   var activeGroup = '';
   var activeSection = 'tv';
   var sourceMode = 'manual';
+  var liveTransport = 'original';
+  var transportSaving = false;
   var selected = 0;
   var contentSort = 'provider';
   var contentWindowStart = 0;
@@ -176,8 +178,9 @@
       return state && state.revision === revision ? state : null;
     } catch (_) { return null; }
   }
-  function applyCatalog(entries, source, revision, savedAt, restored, visibility) {
+  function applyCatalog(entries, source, revision, savedAt, restored, visibility, transport) {
     setHiddenGroups(visibility);
+    liveTransport = transport === 'hls' ? 'hls' : 'original';
     sources = entries;
     catalogViewRevision += 1; favoritesRevision += 1; activePlaylistUrl = source; activeCatalogRevision = revision; activeCatalogSavedAt = savedAt || Date.now(); sourceMode = 'playlist'; favorites = {}; playingIndex = null;
     var state = readViewState(revision);
@@ -220,7 +223,7 @@
         $('status').textContent = 'تعذر استعادة القائمة الآن — ستُعاد المحاولة عند الرجوع للتطبيق.';
         return false;
       }
-      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups); restoreRuntimeView(view, shouldFocus);
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups, saved.liveTransport); restoreRuntimeView(view, shouldFocus);
       automaticReleasedView = null;
       if (automaticRestoreMessage) $('status').textContent = automaticRestoreMessage;
       automaticRestoreMessage = '';
@@ -595,7 +598,11 @@
     $('empty-state').hidden = true;
     $('channel-title').textContent = sources[index].name || 'المصدر ' + (index + 1);
     if (!watchMode && activeSection === 'tv') focusChannel(index);
-    if (!player.start(sources[index].url, index + 1, intent.requestedAt)) return;
+    var playbackSource = sources[index].url;
+    if (liveTransport === 'hls' && sourceMode === 'playlist' && entrySection(index) === 'tv') {
+      playbackSource = api.nativeHlsSource(playbackSource, activePlaylistUrl);
+    }
+    if (!player.start(playbackSource, index + 1, intent.requestedAt)) return;
     if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
@@ -797,14 +804,16 @@
   function playlistControls(running) {
     playlistRunning = running;
     if (!running) { playlistSaving = false; playlistAutomatic = false; }
-    $('load-playlist').disabled = running;
+    var busy = running || transportSaving;
+    $('load-playlist').disabled = busy;
     $('cancel-playlist').disabled = !running;
-    $('playlist-url').disabled = running;
-    $('refresh-saved').disabled = running;
+    $('playlist-url').disabled = busy;
+    $('refresh-saved').disabled = busy;
     $('manage-groups-button').disabled = running || !activePlaylistUrl || !sources.length;
-    inputs.forEach(function (input) { input.disabled = running; });
-    $('source-form').querySelector('button[type="submit"]').disabled = running;
-    $('clear-sources').disabled = running;
+    inputs.forEach(function (input) { input.disabled = busy; });
+    $('source-form').querySelector('button[type="submit"]').disabled = busy;
+    $('clear-sources').disabled = busy;
+    renderLiveTransport();
   }
   function cancelPlaylist() {
     if (playlistSaving && !catalogStore.cancel()) { $('playlist-status').textContent = 'جارٍ إتمام الحفظ المحلي…'; return false; }
@@ -820,6 +829,32 @@
     }
     return true;
   }
+
+  function renderLiveTransport() {
+    var button = $('live-transport');
+    button.hidden = !api.nativeHlsPlaylist(activePlaylistUrl);
+    button.disabled = playlistRunning || transportSaving;
+    button.setAttribute('aria-pressed', String(liveTransport === 'hls'));
+    button.textContent = liveTransport === 'hls' ? 'البث المباشر: HLS من المزود' : 'البث المباشر: رابط القائمة الأصلي';
+  }
+  $('live-transport').addEventListener('click', function () {
+    if (playlistRunning || transportSaving || !api.nativeHlsPlaylist(activePlaylistUrl)) return;
+    var source = activePlaylistUrl;
+    var generation = sourceGeneration;
+    var next = liveTransport === 'hls' ? 'original' : 'hls';
+    transportSaving = true;
+    $('transport-status').textContent = 'جارٍ حفظ طريقة البث…';
+    playlistControls(false);
+    catalogStore.saveLiveTransport(source, next).then(function (result) {
+      transportSaving = false;
+      if (unloading || generation !== sourceGeneration || source !== activePlaylistUrl) return;
+      if (result.state === 'complete') {
+        liveTransport = next;
+        $('transport-status').textContent = 'حُفظت طريقة البث. تُطبق عند اختيار قناة أخرى أو إعادة المحاولة يدويًا.';
+      } else $('transport-status').textContent = 'تعذر حفظ طريقة البث. بقي الاختيار السابق.';
+      playlistControls(playlistRunning);
+    });
+  });
   function openSetup() {
     cancelSwitch();
     setWatchMode(false);
@@ -831,6 +866,7 @@
     $('saved-catalog-status').textContent = activeCatalogRevision ? 'قائمة محفوظة: ' + sources.length + ' عنصرًا.' : 'لا توجد قائمة محفوظة.';
     $('refresh-saved').hidden = !activePlaylistUrl;
     $('form-error').textContent = '';
+    $('transport-status').textContent = '';
     playlistControls(playlistRunning);
     setup.hidden = false;
     // Keep the field unfocused until the user selects it. On webOS, focusing
@@ -839,7 +875,7 @@
     $('source-form').focus();
   }
   function closeSetup() {
-    if (!cancelPlaylist()) return;
+    if (transportSaving || !cancelPlaylist()) return;
     setup.hidden = true;
     $('playlist-url').value = '';
     inputs.forEach(function (input) { input.value = ''; });
@@ -873,7 +909,7 @@
     $('status').textContent = 'تم حفظ المصادر للجلسة — اختر قناة للتشغيل';
   });
   function loadPlaylist(url, automatic) {
-    if (playlistRunning) return;
+    if (playlistRunning || transportSaving) return;
     var runtimeView = automatic || (sourceMode === 'playlist' && url === activePlaylistUrl) ? (automaticReleasedView || captureRuntimeView()) : null;
     sourceGeneration += 1; stop();
     if (automatic) releaseCatalogForAutomaticUpdate(runtimeView);
@@ -915,7 +951,7 @@
         }
         automaticReleasedView = null;
         automaticRestoreMessage = '';
-        stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false, saved.hiddenGroups); if (runtimeView) restoreRuntimeView(runtimeView, automatic && !document.hidden);
+        stop(); applyCatalog(result.entries, url, saved.revision, saved.savedAt, false, saved.hiddenGroups, saved.liveTransport); if (runtimeView) restoreRuntimeView(runtimeView, automatic && !document.hidden);
         var totals = { tv: 0, movies: 0, series: 0 }; sources.forEach(function (_, index) { totals[entrySection(index)] += 1; });
         $('status').textContent = (automatic ? 'تم تحديث القائمة تلقائيًا: ' : 'تم حفظ ') + sources.length + ' عنصرًا — بث ' + totals.tv + ' · أفلام ' + totals.movies + ' · مسلسلات ' + totals.series;
         playlistControls(false); autoNextAttemptAt = 0;
@@ -1486,7 +1522,7 @@
   catalogStore.load().then(function (saved) {
     if (restoreGeneration !== sourceGeneration || unloading) return;
     if (saved.state === 'complete') {
-      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups);
+      applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups, saved.liveTransport);
       if (!document.hidden && !extraDialog() && setup.hidden && searchPanel.hidden && speedPanel.hidden && diagnostics.hidden) { if (pendingViewState && pendingViewState.detailsOpen && sources[selected] && entryVisible(selected)) openDetails(selected); else focusSelected(); }
       scheduleAutoUpdate();
     } else if (saved.state !== 'empty') {

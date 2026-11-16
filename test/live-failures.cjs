@@ -206,6 +206,59 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.locator('#movie-browser').isVisible(), true, 'Invalid trailer restores the grid');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '6');
+
+    // Native HLS changes the playback URL only. The synthetic catalogue remains intact.
+    const nativePlaylist = 'https://provider.example.test/get.php?username=user&password=pass&type=m3u_plus&output=mpegts';
+    await page.evaluate(() => {
+      window.fetch = async () => new Response([
+        '#EXTM3U',
+        '#EXTINF:-1 group-title="Live",عنصر 0',
+        'https://provider.example.test/user/pass/42',
+        '#EXTINF:-1 group-title="Live",عنصر 1',
+        'https://provider.example.test/live/user/pass/43.ts'
+      ].join('\n'));
+    });
+    await page.locator('#setup-button').click();
+    await page.locator('#playlist-url').fill(nativePlaylist);
+    await page.locator('#load-playlist').click();
+    await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
+    await page.locator('#channels [data-index="0"]').click();
+    await current(0);
+    assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/user/pass/42');
+    await page.locator('#channels [data-favorite-index="0"]').click();
+    await page.locator('#setup-button').click();
+    const beforePreference = await page.evaluate(() => window.__mediaStarts);
+    await page.locator('#live-transport').focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.getElementById('live-transport').getAttribute('aria-pressed') === 'true');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforePreference, 'Changing preference does not restart playback');
+    await page.locator('#close-setup').click();
+    await page.locator('#channels [data-index="1"]').click();
+    await current(1);
+    assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/43.m3u8');
+    await page.locator('#display-button').click();
+    await page.locator('#display-fullscreen').click();
+    await page.keyboard.press('ArrowUp');
+    await current(0);
+    assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/42.m3u8');
+    assert.equal(await page.locator('#channels [data-favorite-index="0"]').getAttribute('aria-pressed'), 'true');
+    const catalog = await page.evaluate(() => window.LGCatalogStore.createStore().load());
+    assert.equal(catalog.source, nativePlaylist);
+    assert.equal(catalog.entries[0].url, 'https://provider.example.test/user/pass/42');
+    assert.equal(catalog.liveTransport, 'hls');
+    await page.waitForTimeout(160);
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached' });
+    await page.locator('#channels [data-index="0"]').waitFor();
+    await page.locator('#channels [data-index="0"]').click();
+    await current(0);
+    assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/42.m3u8');
+    assert.equal(await page.locator('#channels [data-favorite-index="0"]').getAttribute('aria-pressed'), 'true');
+    await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
+    const afterError = await page.evaluate(() => window.__mediaStarts);
+    await page.waitForTimeout(160);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), afterError, 'HLS failure never starts an automatic fallback');
+
     assert.deepEqual(errors, []);
     assert.equal(unexpectedRequests, 0);
     console.log('Live failures: errors/end/rejection/timeout, burst/bounds, actual playing anchor, mixed favorites, held OK, retry, search-to-VOD and VOD isolation passed. Synthetic only.');
