@@ -1246,8 +1246,36 @@
 
 
   function extraDialog() {
-    return ['display-picker', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['exit-confirm', 'display-picker', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
+  var exitReturn = null;
+  function focusSection() {
+    setPrimary(true);
+    (document.querySelector('.primary-button.active') || $('nav-search')).focus();
+  }
+  function focusActiveGroup() {
+    if (!$('groups').querySelector('.group-button.active')) {
+      var previousGroup = activeGroup; renderGroups();
+      if (previousGroup !== activeGroup) { renderChannels(); saveViewState(false); }
+    }
+    var group = $('groups').querySelector('.group-button.active');
+    if (group) { setPrimary(false); group.focus(); } else focusSection();
+  }
+  function backToLibrary() {
+    var focused = document.activeElement;
+    if (focused.closest('.primary-panel') || focused.closest('.header-actions')) {
+      exitReturn = focused; $('exit-confirm').hidden = false; $('exit-cancel').focus();
+    } else if (focused.closest('.groups-panel') || focused.closest('#category-shortcuts')) {
+      focusSection();
+    } else {
+      // Rebuild the bounded group window around the active group if it was scrolled away.
+      focusActiveGroup();
+    }
+  }
+  $('exit-cancel').addEventListener('click', closeExtraDialog);
+  $('exit-accept').addEventListener('click', function () {
+    closeExtraDialog(); cancelSwitch(); stop(); window.close();
+  });
   function returnToSettings() {
     if (!settingsReturn || document.hidden || unloading) return false;
     $('settings-home').hidden = false; $(settingsReturn).focus(); return true;
@@ -1261,7 +1289,8 @@
   function closeExtraDialog() {
     var panel = extraDialog(); if (!panel) return;
     panel.hidden = true;
-    if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
+    if (panel.id === 'exit-confirm') { if (exitReturn && exitReturn.isConnected && exitReturn.offsetParent) exitReturn.focus(); else focusSection(); exitReturn = null; }
+    else if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
     else if (panel.id === 'category-picker') focusCategoryReturn();
     else if (panel.id === 'display-picker') {
@@ -1409,7 +1438,10 @@
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();
-      if (watchChannels !== null) { closeWatchChannels(); return; }
+      if (event.repeat) return;
+      if (switchPending && playingIndex !== null) selected = playingIndex;
+      cancelSwitch();
+      if (watchChannels !== null) { closeWatchChannels(); exitPlayback(); focusActiveGroup(); return; }
       if (!$('track-picker').hidden) { closeTrackPicker(true); return; }
       if (!$('group-manager').hidden) { closeGroupManager(); return; }
       if (!$('sort-menu').hidden) { $('sort-menu').hidden = true; $('sort-button').setAttribute('aria-expanded', 'false'); $('sort-button').focus(); }
@@ -1420,9 +1452,7 @@
       else if (!speedPanel.hidden) closeSpeed();
       else if (extraDialog()) closeExtraDialog();
       else if (watchMode) { if (!$('media-controls').hidden) { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
-      else if (lastState !== 'idle') { stop(); if (sources.length) focusSelected(); }
-      else if (typeof window.webOS !== 'undefined' && window.webOS.platformBack) window.webOS.platformBack();
-      else window.close();
+      else backToLibrary();
       return;
     }
     if (!$('track-picker').hidden) {
@@ -1606,7 +1636,7 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { ['settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
@@ -1614,7 +1644,7 @@
   });
   window.addEventListener('pageshow', function () { unloading = false; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
-    unloading = true; ['settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); settingsReturn = null; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
+    unloading = true; ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
     if (!automaticReleasedView && sourceMode === 'playlist' && sources.length) automaticReleasedView = captureRuntimeView();
     catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });

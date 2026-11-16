@@ -140,6 +140,26 @@ async function main() {
     assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'),'إزالة من المفضلة: المفضلة');
     await page.keyboard.press('Escape');
     assert.equal(await page.evaluate(()=>window.__mediaStarts),starts);
+    // Back navigates the hierarchy without releasing or restarting the current stream.
+    await page.locator('#groups [data-group="رياضة"]').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(()=>document.activeElement.dataset.group),'رياضة');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),'tv');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#exit-confirm').isVisible(),true);
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'exit-cancel');
+    await page.evaluate(()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',repeat:true,bubbles:true})));
+    assert.equal(await page.locator('#exit-confirm').isVisible(),true,'Held Back cannot cycle the confirmation');
+    await page.screenshot({path:path.join(root,'artifacts/exit-confirm-1080.png')});
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),'tv');
+    assert.equal(await page.evaluate(()=>document.querySelector('video')===window.__originalVideo),true);
+    assert.equal(await page.evaluate(()=>window.__mediaStarts),starts);
+    await page.locator('#groups [data-group=""]').click();
+    const queuedIndex=await page.evaluate(()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'PageUp',keyCode:33,bubbles:true}));const index=document.activeElement.dataset.index;document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));return index;});
+    assert.equal(queuedIndex,'1','Cancellation test queues a different channel');
+    await page.waitForTimeout(180);assert.equal(await page.evaluate(()=>window.__mediaStarts),starts,'Back cancels a pending channel switch');
     const catalogueAfter=await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('lg-stream-catalog');r.onsuccess=()=>resolve(r.result)});const value=await new Promise(resolve=>{const r=db.transaction('meta').objectStore('meta').get('active');r.onsuccess=()=>resolve({count:r.result.count,revision:r.result.revision})});db.close();return value});
     assert.deepEqual(catalogueAfter,catalogueBefore);
     await page.locator('#nav-settings').click();await page.locator('[data-language="en"]').click();
@@ -157,6 +177,18 @@ async function main() {
     const cards=page.locator('#movie-grid .movie-card');assert.equal(await cards.count(),5);await cards.first().focus();
     const firstX=(await cards.first().boundingBox()).x;await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.dataset.index),await cards.nth(1).getAttribute('data-index'));assert.ok((await cards.nth(1).boundingBox()).x>firstX);
     await page.keyboard.press('ArrowLeft');await page.keyboard.press('ArrowLeft');assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('group-button')),true,'English left edge goes to physically left groups');
+    for(const section of ['movies','series']){
+      await page.locator('.primary-button[data-section="'+section+'"]').click();
+      await page.locator('#groups [data-group="فيديو"]').click();
+      assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('movie-card')),true);
+      await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.dataset.group),'فيديو');
+      await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),section);
+      await page.keyboard.press('Escape');assert.equal(await page.locator('#exit-confirm').isVisible(),true);
+      assert.equal(await page.locator('#exit-title').innerText(),'Do you want to exit the app?');
+      await page.locator('#exit-cancel').click();assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),section);
+    }
+    await page.evaluate(()=>{window.__exitCalls=0;window.close=()=>{window.__exitCalls++}});
+    await page.keyboard.press('Escape');await page.locator('#exit-accept').click();assert.equal(await page.evaluate(()=>window.__exitCalls),1);
     assert.deepEqual(errors,[]);assert.equal(unexpectedRequests,0);
     console.log('Themes/language: physical menu order, same player, unchanged catalogue, 720/1080 layouts passed. Synthetic media only.');
   }finally{if(browser)await browser.close();if(preview.exitCode===null){const closed=once(preview,'exit');preview.kill();await closed}}
