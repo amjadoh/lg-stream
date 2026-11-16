@@ -833,7 +833,7 @@
   function renderLiveTransport() {
     var button = $('live-transport');
     button.hidden = !api.nativeHlsPlaylist(activePlaylistUrl);
-    button.disabled = playlistRunning || transportSaving;
+    button.disabled = playlistRunning;
     button.setAttribute('aria-pressed', String(liveTransport === 'hls'));
     button.textContent = liveTransport === 'hls' ? 'البث المباشر: HLS من المزود' : 'البث المباشر: رابط القائمة الأصلي';
   }
@@ -847,7 +847,12 @@
     playlistControls(false);
     catalogStore.saveLiveTransport(source, next).then(function (result) {
       transportSaving = false;
-      if (unloading || generation !== sourceGeneration || source !== activePlaylistUrl) return;
+      if (unloading) return;
+      if (generation !== sourceGeneration || source !== activePlaylistUrl) {
+        $('transport-status').textContent = '';
+        playlistControls(playlistRunning);
+        return;
+      }
       if (result.state === 'complete') {
         liveTransport = next;
         $('transport-status').textContent = 'حُفظت طريقة البث. تُطبق عند اختيار قناة أخرى أو إعادة المحاولة يدويًا.';
