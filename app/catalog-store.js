@@ -48,8 +48,8 @@
         var database = await open();
         var metaTransaction = database.transaction('meta', 'readonly');
         var metaStore = metaTransaction.objectStore('meta');
-        var records = await Promise.all([requestResult(metaStore.get('active')), requestResult(metaStore.get('group-visibility'))]);
-        var meta = records[0]; var preferences = records[1];
+        var records = await Promise.all([requestResult(metaStore.get('active')), requestResult(metaStore.get('group-visibility')), requestResult(metaStore.get('live-transport'))]);
+        var meta = records[0]; var preferences = records[1]; var transport = records[2];
         if (!meta) return { state: 'empty' };
         if (!meta.revision || !meta.source || !Number.isSafeInteger(meta.count) || meta.count <= 0 || meta.chunkCount !== Math.ceil(meta.count / CHUNK_SIZE)) return { state: 'corrupt' };
         var transaction = database.transaction('chunks', 'readonly');
@@ -66,7 +66,7 @@
           for (var entryIndex = 0; entryIndex < ownEntries.length; entryIndex += 1) entries[offset++] = ownEntries[entryIndex];
         }
         if (offset !== meta.count) return { state: 'corrupt' };
-        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt, hiddenGroups: preferences && preferences.source === meta.source ? copyHiddenGroups(preferences.hiddenGroups) : null };
+        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt, hiddenGroups: preferences && preferences.source === meta.source ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && transport.source === meta.source && transport.value === 'hls' ? 'hls' : 'original' };
       } catch (_) { return { state: 'error' }; }
     }
     async function cleanup(database, revision) {
@@ -92,14 +92,15 @@
         var chunks = transaction.objectStore('chunks');
         var metaStore = transaction.objectStore('meta');
         var preferencesRequest = requestResult(metaStore.get('group-visibility'));
+        var transportRequest = requestResult(metaStore.get('live-transport'));
         for (var index = 0; index < chunkCount; index += 1) {
           chunks.put({ key: revision + ':' + index, revision: revision, index: index, entries: entries.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE) });
         }
         metaStore.put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
-        var completed = await Promise.all([preferencesRequest, transactionDone(transaction)]); activeWrite = null;
-        var preferences = completed[0];
+        var completed = await Promise.all([preferencesRequest, transportRequest, transactionDone(transaction)]); activeWrite = null;
+        var preferences = completed[0]; var transport = completed[1];
         cleanup(database, revision);
-        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null };
+        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && transport.source === source && transport.value === 'hls' ? 'hls' : 'original' };
       } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
     }
     function copyHiddenGroups(hiddenGroups) {
@@ -122,6 +123,25 @@
         await transactionDone(transaction); return { state: 'complete' };
       } catch (_) { return { state: 'error' }; }
     }
+
+    async function saveLiveTransport(source, value) {
+      if (!source || (value !== 'original' && value !== 'hls')) return { state: 'error' };
+      try {
+        var database = await open();
+        var transaction = database.transaction('meta', 'readwrite');
+        var completed = transactionDone(transaction);
+        completed.catch(function () {});
+        var store = transaction.objectStore('meta');
+        var active = await requestResult(store.get('active'));
+        if (!active || active.source !== source) {
+          await completed;
+          return { state: 'stale' };
+        }
+        store.put({ key: 'live-transport', source: source, value: value });
+        await completed;
+        return { state: 'complete' };
+      } catch (_) { return { state: 'error' }; }
+    }
     async function clear() {
       try {
         var database = await open(); var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
@@ -132,7 +152,7 @@
       if (!activeWrite) { writeGeneration += 1; return true; }
       try { activeWrite.abort(); writeGeneration += 1; activeWrite = null; return true; } catch (_) { return false; }
     }
-    return { load: load, save: save, clear: clear, cancel: cancel, saveHiddenGroups: saveHiddenGroups };
+    return { load: load, save: save, clear: clear, cancel: cancel, saveHiddenGroups: saveHiddenGroups, saveLiveTransport: saveLiveTransport };
   }
   return { createStore: createStore, CHUNK_SIZE: CHUNK_SIZE };
 }));

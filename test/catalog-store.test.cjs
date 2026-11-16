@@ -118,3 +118,31 @@ test('distinguishes missing catalogue from corrupt metadata or chunks without ex
   }
   assert.deepEqual(await createStore({ indexedDB: null }).load(), { state: 'error' });
 });
+
+test('native transport preferences preserve catalogue identity and survive refresh and reload', async () => {
+  let fail = false;
+  const indexed = fakeIndexedDB({ commitDelay: 1, failWrite: value => fail && value.key === 'live-transport' });
+  const store = createStore({ indexedDB: indexed });
+  const source = 'https://provider.example.test/get.php?username=user&password=pass';
+  const entries = [{ url: 'https://provider.example.test/user/pass/42', name: 'Synthetic live' }];
+  await store.save(source, entries);
+  assert.equal((await store.load()).liveTransport, 'original', 'Old catalogues keep their original transport');
+  assert.deepEqual(await store.saveLiveTransport(source, 'hls'), { state: 'complete' });
+  const cold = createStore({ indexedDB: indexed });
+  assert.equal((await cold.load()).liveTransport, 'hls');
+  const refreshed = await store.save(source, entries);
+  assert.equal(refreshed.liveTransport, 'hls');
+  assert.deepEqual((await cold.load()).entries, entries, 'Transport choice never rewrites catalogue URLs');
+  fail = true;
+  assert.deepEqual(await store.saveLiveTransport(source, 'original'), { state: 'error' });
+  assert.equal((await cold.load()).liveTransport, 'hls');
+  fail = false;
+  await store.save('https://other.example.test/list', entries);
+  assert.equal((await cold.load()).liveTransport, 'original');
+  assert.deepEqual(await store.saveLiveTransport(source, 'original'), { state: 'stale' });
+  await store.save(source, entries);
+  assert.equal((await cold.load()).liveTransport, 'hls', 'A stale save cannot overwrite matching source preferences');
+  assert.deepEqual(await store.saveLiveTransport(source, 'invalid'), { state: 'error' });
+  await store.clear();
+  assert.deepEqual(await cold.load(), { state: 'empty' });
+});

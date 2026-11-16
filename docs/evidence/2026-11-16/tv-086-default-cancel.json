@@ -1,0 +1,9 @@
+{
+  "cancelDefault": true,
+  "closedPrompt": true,
+  "sameVideo": true,
+  "paused": false,
+  "error": 0,
+  "ready": 4,
+  "focus": "tv"
+}

@@ -1,0 +1,808 @@
+{
+  "sweep": {
+    "running": false,
+    "requested": 24,
+    "rows": [
+      {
+        "ordinal": 1,
+        "index": 1699,
+        "elapsedMs": 9019,
+        "state": "playing",
+        "switched": null,
+        "oldReleased": null,
+        "maxVideos": 1,
+        "samples": 18,
+        "firstTime": 45.015,
+        "lastTime": 53.443,
+        "measuredProgressMs": 1003,
+        "playingMs": 1468,
+        "progressMs": 2261,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 0,
+        "minReadyAfterProgress": 4,
+        "width": 1282,
+        "height": 534,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "stalled": 2
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 2,
+        "index": 1700,
+        "elapsedMs": 10023,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 26.096,
+        "measuredProgressMs": 2006,
+        "playingMs": 1592,
+        "progressMs": 3470,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1500,
+        "minReadyAfterProgress": 2,
+        "width": 1682,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 3,
+        "index": 1701,
+        "elapsedMs": 9521,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 24.744,
+        "measuredProgressMs": 1504,
+        "playingMs": 1402,
+        "progressMs": 2338,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1719,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 4,
+        "index": 1702,
+        "elapsedMs": 10022,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 26.957,
+        "measuredProgressMs": 2005,
+        "playingMs": 1613,
+        "progressMs": 2862,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 2,
+        "width": 1724,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1,
+          "stalled": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 5,
+        "index": 1703,
+        "elapsedMs": 9518,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 27.599,
+        "measuredProgressMs": 1502,
+        "playingMs": 1460,
+        "progressMs": 2575,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1280,
+        "height": 721,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 6,
+        "index": 1704,
+        "elapsedMs": 9521,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 25.648,
+        "measuredProgressMs": 1504,
+        "playingMs": 1426,
+        "progressMs": 2368,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1282,
+        "height": 534,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 7,
+        "index": 1705,
+        "elapsedMs": 9520,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 30.259,
+        "measuredProgressMs": 1503,
+        "playingMs": 1447,
+        "progressMs": 2863,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 2,
+        "width": 1680,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 8,
+        "index": 1706,
+        "elapsedMs": 9524,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 22.261,
+        "measuredProgressMs": 1503,
+        "playingMs": 1431,
+        "progressMs": 2530,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1280,
+        "height": 534,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 9,
+        "index": 1707,
+        "elapsedMs": 10023,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 19.52,
+        "measuredProgressMs": 2006,
+        "playingMs": 1913,
+        "progressMs": 4100,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 2000,
+        "minReadyAfterProgress": 2,
+        "width": 1350,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 10,
+        "index": 1708,
+        "elapsedMs": 9520,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 28.737,
+        "measuredProgressMs": 1504,
+        "playingMs": 1378,
+        "progressMs": 2484,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1350,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1,
+          "stalled": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 11,
+        "index": 1709,
+        "elapsedMs": 9523,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 27.509,
+        "measuredProgressMs": 1507,
+        "playingMs": 1448,
+        "progressMs": 2229,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1274,
+        "height": 534,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 12,
+        "index": 1710,
+        "elapsedMs": 10021,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 31.061,
+        "measuredProgressMs": 2004,
+        "playingMs": 1533,
+        "progressMs": 2940,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 2,
+        "width": 1024,
+        "height": 576,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 13,
+        "index": 1711,
+        "elapsedMs": 10022,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 24.658,
+        "measuredProgressMs": 2007,
+        "playingMs": 1548,
+        "progressMs": 2654,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 2,
+        "width": 1692,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 14,
+        "index": 1712,
+        "elapsedMs": 9538,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 27.26,
+        "measuredProgressMs": 1523,
+        "playingMs": 1520,
+        "progressMs": 3084,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1500,
+        "minReadyAfterProgress": 2,
+        "width": 1692,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 15,
+        "index": 1713,
+        "elapsedMs": 10029,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 20,
+        "firstTime": 0,
+        "lastTime": 26.16,
+        "measuredProgressMs": 2012,
+        "playingMs": 1589,
+        "progressMs": 2686,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 4,
+        "width": 1728,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 16,
+        "index": 1714,
+        "elapsedMs": 9519,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 28.931,
+        "measuredProgressMs": 1503,
+        "playingMs": 1486,
+        "progressMs": 2580,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 1728,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 17,
+        "index": 1715,
+        "elapsedMs": 9531,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 19,
+        "firstTime": 0,
+        "lastTime": 27.155,
+        "measuredProgressMs": 1514,
+        "playingMs": 1507,
+        "progressMs": 2467,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 1000,
+        "minReadyAfterProgress": 2,
+        "width": 1694,
+        "height": 720,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      },
+      {
+        "ordinal": 18,
+        "index": 1716,
+        "elapsedMs": 3007,
+        "state": "playing",
+        "switched": true,
+        "oldReleased": true,
+        "maxVideos": 1,
+        "samples": 6,
+        "firstTime": 0,
+        "lastTime": 19.882,
+        "measuredProgressMs": 1504,
+        "playingMs": 1461,
+        "progressMs": 2561,
+        "frameMs": null,
+        "backwards": 0,
+        "maxFlatMs": 500,
+        "minReadyAfterProgress": 2,
+        "width": 672,
+        "height": 384,
+        "nativeHls": true,
+        "audioTracks": 1,
+        "events": {
+          "playing": 2,
+          "waiting": 1
+        },
+        "keptWatchMode": true
+      }
+    ],
+    "ordinal": 18
+  },
+  "timedEvents": [
+    {
+      "ordinal": 9,
+      "event": "waiting",
+      "time": 0,
+      "at": 154746,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 9,
+      "event": "playing",
+      "time": 13.679,
+      "at": 156470,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 9,
+      "event": "waiting",
+      "time": 13.679,
+      "at": 156479,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 9,
+      "event": "playing",
+      "time": 13.679,
+      "at": 158025,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 10,
+      "event": "waiting",
+      "time": 0,
+      "at": 164763,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 10,
+      "event": "playing",
+      "time": 21.604,
+      "at": 165959,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 10,
+      "event": "waiting",
+      "time": 21.604,
+      "at": 165975,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 10,
+      "event": "playing",
+      "time": 21.604,
+      "at": 166349,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 10,
+      "event": "stalled",
+      "time": 27.934,
+      "at": 173347,
+      "progressMetric": "2484 ms"
+    },
+    {
+      "ordinal": 11,
+      "event": "waiting",
+      "time": 0,
+      "at": 174262,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 11,
+      "event": "playing",
+      "time": 20.166,
+      "at": 175549,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 11,
+      "event": "waiting",
+      "time": 20.166,
+      "at": 175555,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 11,
+      "event": "playing",
+      "time": 20.166,
+      "at": 175656,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 12,
+      "event": "waiting",
+      "time": 0,
+      "at": 183801,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 12,
+      "event": "playing",
+      "time": 23.933,
+      "at": 185158,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 12,
+      "event": "waiting",
+      "time": 23.933,
+      "at": 185163,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 12,
+      "event": "playing",
+      "time": 23.933,
+      "at": 185845,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 13,
+      "event": "waiting",
+      "time": 0,
+      "at": 193793,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 13,
+      "event": "playing",
+      "time": 17.416,
+      "at": 195194,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 13,
+      "event": "waiting",
+      "time": 17.416,
+      "at": 195201,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 13,
+      "event": "playing",
+      "time": 17.416,
+      "at": 195727,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 14,
+      "event": "waiting",
+      "time": 0,
+      "at": 203825,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 14,
+      "event": "playing",
+      "time": 20.748,
+      "at": 205189,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 14,
+      "event": "waiting",
+      "time": 20.748,
+      "at": 205196,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 14,
+      "event": "playing",
+      "time": 20.748,
+      "at": 206059,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 15,
+      "event": "waiting",
+      "time": 0,
+      "at": 213377,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 15,
+      "event": "playing",
+      "time": 18.85,
+      "at": 214795,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 15,
+      "event": "waiting",
+      "time": 18.85,
+      "at": 214810,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 15,
+      "event": "playing",
+      "time": 18.85,
+      "at": 215211,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 16,
+      "event": "waiting",
+      "time": 0,
+      "at": 223408,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 16,
+      "event": "playing",
+      "time": 21.729,
+      "at": 224721,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 16,
+      "event": "waiting",
+      "time": 21.729,
+      "at": 224730,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 16,
+      "event": "playing",
+      "time": 21.729,
+      "at": 224936,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 17,
+      "event": "waiting",
+      "time": 0,
+      "at": 232924,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 17,
+      "event": "playing",
+      "time": 20.102,
+      "at": 234261,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 17,
+      "event": "waiting",
+      "time": 20.102,
+      "at": 234270,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 17,
+      "event": "playing",
+      "time": 20.102,
+      "at": 234581,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 18,
+      "event": "waiting",
+      "time": 0,
+      "at": 242454,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 18,
+      "event": "playing",
+      "time": 19.36,
+      "at": 243745,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 18,
+      "event": "waiting",
+      "time": 19.36,
+      "at": 243755,
+      "progressMetric": "—"
+    },
+    {
+      "ordinal": 18,
+      "event": "playing",
+      "time": 19.36,
+      "at": 244048,
+      "progressMetric": "—"
+    }
+  ],
+  "state": "playing",
+  "videoCount": 1,
+  "watch": true,
+  "currentIndex": "1716",
+  "time": 20.083
+}

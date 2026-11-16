@@ -6,6 +6,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https: http:; media-src https: http: blob:; connect-src https: http:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>LG Stream</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="appearance.css">
+  <script defer src="i18n.js"></script>
   <script defer src="core.js"></script>
   <script defer src="playlist.js"></script>
   <script defer src="catalog-store.js"></script>
@@ -17,24 +19,23 @@
   <div class="shell">
     <header>
       <div class="brand" dir="ltr"><img class="brand-mark" src="icon.png" alt=""> LG Stream <span class="tag">تجربة البث</span></div>
-      <div class="header-actions"><button id="setup-button" type="button">مصادر البث</button><button id="speed-button" type="button" aria-expanded="false">اختبار الاتصال</button><button id="diagnostics-button" type="button" aria-expanded="false">القياسات</button></div>
+      <div class="header-actions"><button id="nav-settings" type="button" class="header-settings"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="4"/><path d="M12 1v4m0 14v4M1 12h4m14 0h4M4 4l3 3m10 10 3 3M4 20l3-3M17 7l3-3"/></svg><span>الإعدادات</span></button><button id="setup-button" type="button">مصادر البث</button></div>
     </header>
     <main>
       <aside class="library-panel" aria-label="المجموعات والقنوات">
         <nav class="primary-panel" aria-label="القائمة الرئيسية">
           <div class="primary-mark">LS</div>
-          <button id="nav-search" type="button">⌕<span>بحث</span></button>
-          <button class="primary-button" data-section="favorites" type="button">★<span>المفضلة</span></button>
-          <button class="primary-button active" data-section="tv" type="button">▣<span>البث</span></button>
-          <button class="primary-button" data-section="movies" type="button">▶<span>أفلام</span></button>
-          <button class="primary-button" data-section="series" type="button">▤<span>مسلسلات</span></button>
-          <button id="nav-settings" type="button" class="primary-settings">⚙<span>الإعدادات</span></button>
+          <button id="nav-search" type="button"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><span>البحث</span></button>
+          <button class="primary-button" data-section="favorites" type="button"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z"/></svg><span>المفضلة</span></button>
+          <button class="primary-button active" data-section="tv" type="button"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="5" width="20" height="15" rx="2"/><path d="m8 1 4 4 4-4"/></svg><span>البث المباشر</span></button>
+          <button class="primary-button" data-section="movies" type="button"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M3 16h18M8 3v5M16 3v5"/></svg><span>الأفلام</span></button>
+          <button class="primary-button" data-section="series" type="button"><svg class="nav-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M7 21h15V8"/></svg><span>المسلسلات</span></button>
+
         </nav>
         <section class="groups-panel"><button id="groups-filter" type="button" aria-haspopup="dialog">المجموعات ▾</button><div id="category-shortcuts" hidden></div><div id="groups" class="group-list"></div></section>
-        <section class="channels-panel"><h1>القنوات</h1><p id="channel-count" class="list-count"></p>
+        <section class="channels-panel"><div class="channel-heading"><h1>القنوات</h1><p id="channel-count" class="list-count"></p></div>
         <div id="channels" class="channel-list"></div>
         <p id="channel-empty" class="channel-empty">قنواتك تظهر هنا<br><span>أضف مصدرًا للبدء</span></p>
-        <div class="remote-hint"><span>↑ ↓</span> للتنقل بين القنوات<br><span>OK</span> للتشغيل · <span>CH + / −</span> للتبديل</div>
         </section>
       </aside>
       <section class="viewing-panel" aria-label="مشغّل البث">
@@ -57,17 +58,20 @@
     </main>
     <footer><div class="transport"><button id="display-button" type="button" aria-haspopup="dialog" disabled>العرض</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
   </div>
+  <section id="exit-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="exit-title" hidden>
+    <div class="setup-card"><h2 id="exit-title">هل تريد الخروج من التطبيق؟</h2><div class="form-actions"><button id="exit-cancel" type="button">إلغاء</button><button id="exit-accept" type="button">خروج</button></div></div>
+  </section>
   <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
       <button id="manage-groups-button" type="button">إدارة المجموعات<span>إظهار أو إخفاء مجموعات البث والأفلام والمسلسلات</span></button>
       <button id="settings-sources" type="button">مصادر البث والقوائم<span>إضافة قائمة M3U وتحديث القائمة المحفوظة</span></button>
-      <button id="settings-speed" type="button">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
-      <button id="settings-info" type="button">معلومات التشغيل<span>قياسات الجلسة وقدرات المشغّل</span></button>
+      <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
+      <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
-    </div><button id="close-settings" type="button">رجوع</button></div>
+    </div><h3>اللغة · Language</h3><div class="form-actions"><button data-language="ar" type="button">العربية</button><button data-language="en" type="button">English</button></div><p id="language-status" role="status"></p><button id="close-settings" type="button">رجوع</button></div>
   </section>
   <section id="appearance-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="appearance-title" hidden>
-    <div class="setup-card settings-card"><h2 id="appearance-title">المظهر</h2><h3>قائمة المجموعات</h3><div class="appearance-options">
+    <div class="setup-card settings-card"><h2 id="appearance-title">المظهر</h2><h3>تصميم الواجهة</h3><div class="theme-options"><button data-theme-choice="editorial" type="button">رواق<span>المظهر الأساسي · قائمة رئيسية علوية</span></button><button data-theme-choice="cinema" type="button">سينما<span>قائمة جانبية مختصرة</span></button></div><h3>قائمة المجموعات</h3><div class="appearance-options">
       <button data-layout="compact" type="button">عنوان المجموعات ▾<span>الافتراضي — الفلتر داخل العنوان</span></button>
       <button data-layout="tabs" type="button">تبويبات مباشرة<span>الكل، رياضة، قنوات أفلام، المزيد</span></button>
       <button data-layout="vertical" type="button">اختصارات عمودية<span>التصنيفات فوق المجموعات</span></button>
@@ -97,6 +101,8 @@
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
       <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
       <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="refresh-saved" type="button" hidden>تحديث القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
+      <button id="live-transport" type="button" aria-pressed="false" hidden>البث المباشر: رابط القائمة الأصلي</button>
+      <p id="transport-status" class="small-note" role="status"></p>
       <h3 class="setup-divider">أو روابط مباشرة</h3>
       <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
       <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
@@ -132,7 +138,7 @@
   </section>
   <section id="diagnostics-panel" class="diagnostics" role="dialog" aria-modal="true" aria-labelledby="diagnostics-title" hidden>
     <h2 id="diagnostics-title">قياسات الجلسة الحالية</h2>
-    <dl><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
+    <dl><dt>الطلب ← تعيين المصدر</dt><dd id="source-ms">—</dd><dt>الطلب ← معلومات الفيديو</dt><dd id="metadata-ms">—</dd><dt>الطلب ← إشارة التشغيل (تقدير)</dt><dd id="playing-ms">—</dd><dt>الطلب ← تقدم زمن الفيديو (تقدير)</dt><dd id="progress-ms">—</dd><dt>الطلب ← إشارة إطار (تقدير إضافي)</dt><dd id="frame-ms">—</dd><dt>توقفات الانتظار بعد البدء</dt><dd id="stall-count">0</dd><dt>مدة الانتظار المكتملة</dt><dd id="stall-ms">0 ms</dd><dt>حجم الفيديو المبلّغ</dt><dd id="video-size">—</dd><dt>رقم خطأ المشغّل</dt><dd id="error-code">—</dd></dl>
     <p>الأزمنة تقديرية تبدأ من آخر طلب تبديل وتشمل تأخير تجميع أزرار CH. ليست إثباتًا لظهور الصورة؛ التأكيد بالمشاهدة.</p>
     <h3>جاهزية مشغل LG التلقائية</h3>
     <ul class="capability-list"><li>HDR10</li><li>Dolby Vision</li><li>HLG</li><li>4K HEVC</li><li>4K AV1</li></ul>

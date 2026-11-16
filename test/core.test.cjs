@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { nativeHlsPlaylist, nativeHlsSource, validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -158,6 +158,12 @@ test('measures intent-to-start/progress including switch delay and aborts a stal
     now: () => time, onState: next => { state = next; }, timers
   });
   player.start('https://example.test/live', 1, 0);
+  assert.equal(state.sourceMs, 120);
+  assert.equal(state.metadataMs, null);
+  time = 130; video.fire('loadedmetadata');
+  assert.equal(state.metadataMs, 130);
+  time = 135; video.fire('loadedmetadata');
+  assert.equal(state.metadataMs, 130);
   assert.equal(timers.entries[0].delay, 15000);
   time = 140; video.fire('waiting'); assert.equal(state.stalls, 0);
   time = 520; video.fire('playing'); assert.equal(state.playingMs, 520);
@@ -231,3 +237,60 @@ assert.equal(require('../app/core.js').groupCategory('رياضة HD'), 'sports')
 assert.equal(require('../app/core.js').groupCategory('Sports / News'), 'other');
 assert.equal(require('../app/core.js').groupCategory('قنوات أفلام'), 'movies');
 assert.equal(require('../app/core.js').groupCategory('الرياض'), 'other');
+
+
+test('an invalid next source releases the previous media and reports failure without source data', () => {
+  const videos = []; let mounted = 0; const states = [];
+  const player = createPlayer({
+    createVideo: () => { const video = fakeVideo(); videos.push(video); return video; },
+    mountVideo: () => mounted++, unmountVideo: () => mounted--,
+    onState: value => states.push(value), timers: fakeTimers()
+  });
+  assert.equal(player.start('https://example.test/first', 1), true);
+  assert.equal(player.start('https://example.test/' + 'x'.repeat(4096), 2), false);
+  assert.equal(mounted, 0); assert.equal(videos[0].src, undefined);
+  assert.equal(states.at(-1).state, 'error'); assert.equal(states.at(-1).channel, 2);
+  assert.ok(!JSON.stringify(states).includes('example.test'));
+  const count = states.length; videos[0].historic.get('playing')(); videos[0].rejectPlay();
+  assert.equal(states.length, count, 'Old events cannot revive the rejected selection');
+  assert.equal(player.start('https://example.test/next', 3), true); assert.equal(mounted, 1);
+});
+
+test('native HLS resolves only matching provider live paths and preserves all other sources', () => {
+  const playlist = 'https://provider.example.test/get.php?username=user&password=pass&type=m3u_plus&output=mpegts';
+  for (const source of ['https://provider.example.test/user/pass/42', 'https://provider.example.test/live/user/pass/42.ts']) {
+    assert.equal(nativeHlsSource(source, playlist), 'https://provider.example.test/live/user/pass/42.m3u8');
+  }
+  for (const source of [
+    'https://other.example.test/user/pass/42',
+    'http://provider.example.test/user/pass/42',
+    'https://provider.example.test:9443/user/pass/42',
+    'https://user:pass@provider.example.test/user/pass/42',
+    'https://provider.example.test/user/pass/42?token=signed',
+    'https://provider.example.test/user/pass/42#time',
+    'https://provider.example.test/user/other/42',
+    'https://provider.example.test/live/user/pass/42.m3u8',
+    'https://provider.example.test/movie/user/pass/42.mp4',
+    'https://provider.example.test/series/user/pass/42.mkv',
+    'https://provider.example.test/timeshift/user/pass/42.ts',
+    'https://provider.example.test/user/pass/not-a-number',
+    'https://provider.example.test/%ZZ/pass/42',
+    'file:///user/pass/42',
+    null
+  ]) assert.equal(nativeHlsSource(source, playlist), source);
+  const source = 'https://provider.example.test/user/pass/42';
+  for (const other of [
+    null,
+    'https://provider.example.test/list',
+    'https://provider.example.test/get.php?username=user',
+    playlist + '&username=other',
+    playlist + '#extra',
+    playlist.replace('https://', 'https://admin:secret@')
+  ]) {
+    assert.equal(nativeHlsPlaylist(other), null);
+    assert.equal(nativeHlsSource(source, other), source);
+  }
+  const encoded = 'https://provider.example.test/u%2Bser/p%26ass/42';
+  const encodedList = 'https://provider.example.test/get.php?username=u%2Bser&password=p%26ass';
+  assert.equal(nativeHlsSource(encoded, encodedList), 'https://provider.example.test/live/u%2Bser/p%26ass/42.m3u8');
+});

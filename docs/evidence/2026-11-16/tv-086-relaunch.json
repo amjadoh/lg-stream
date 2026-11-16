@@ -1,0 +1,21 @@
+{
+  "saved": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  },
+  "ui": {
+    "theme": "editorial",
+    "lang": "ar",
+    "exitHidden": true,
+    "channelCount": 40,
+    "videos": 0
+  },
+  "confirmedExitRemovedFromRunningList": true
+}
