@@ -228,11 +228,17 @@ async function main() {
     await page.locator('#channels [data-favorite-index="0"]').click();
     await page.locator('#setup-button').click();
     const beforePreference = await page.evaluate(() => window.__mediaStarts);
-    await page.locator('#live-transport').focus();
+    await page.locator('#load-playlist').focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'live-transport', 'Remote reaches the transport choice');
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.getElementById('live-transport').getAttribute('aria-pressed') === 'true');
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforePreference, 'Changing preference does not restart playback');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'live-transport', 'Saving retains remote focus');
     await page.locator('#close-setup').click();
+    await page.locator('#retry-button').click();
+    await current(0);
+    assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/42.m3u8', 'Manual retry applies the saved transport');
     await page.locator('#channels [data-index="1"]').click();
     await current(1);
     assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/43.m3u8');

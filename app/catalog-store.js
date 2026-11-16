@@ -130,6 +130,7 @@
         var database = await open();
         var transaction = database.transaction('meta', 'readwrite');
         var completed = transactionDone(transaction);
+        completed.catch(function () {});
         var store = transaction.objectStore('meta');
         var active = await requestResult(store.get('active'));
         if (!active || active.source !== source) {
