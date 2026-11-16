@@ -66,6 +66,13 @@ async function main() {
 
 
       window.fetch = async () => {
+        if (window.__nativePlaylistFixture) return new Response([
+          '#EXTM3U',
+          '#EXTINF:-1 group-title="Live",عنصر 0',
+          'https://provider.example.test/user/pass/42',
+          '#EXTINF:-1 group-title="Live",عنصر 1',
+          'https://provider.example.test/live/user/pass/43.ts'
+        ].join('\n'));
         const lines = ['#EXTM3U'];
         for (const [i, kind] of ['live', 'movie', 'live', 'series', 'live', 'live', 'movie'].entries()) {
           const trailer = i === 1 ? 'https://media.example.test/trailer.mp4' : i === 6 ? 'https://media.example.test/' + 'x'.repeat(5000) : '';
@@ -209,15 +216,7 @@ async function main() {
 
     // Native HLS changes the playback URL only. The synthetic catalogue remains intact.
     const nativePlaylist = 'https://provider.example.test/get.php?username=user&password=pass&type=m3u_plus&output=mpegts';
-    await page.evaluate(() => {
-      window.fetch = async () => new Response([
-        '#EXTM3U',
-        '#EXTINF:-1 group-title="Live",عنصر 0',
-        'https://provider.example.test/user/pass/42',
-        '#EXTINF:-1 group-title="Live",عنصر 1',
-        'https://provider.example.test/live/user/pass/43.ts'
-      ].join('\n'));
-    });
+    await page.evaluate(() => { window.__nativePlaylistFixture = true; });
     await page.locator('#setup-button').click();
     await page.locator('#playlist-url').fill(nativePlaylist);
     await page.locator('#load-playlist').click();
