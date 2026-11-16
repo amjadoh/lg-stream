@@ -1,0 +1,134 @@
+{
+  "before": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  },
+  "results": [
+    {
+      "index": 653,
+      "events": [
+        {
+          "type": "waiting",
+          "ms": 705
+        },
+        {
+          "type": "playing",
+          "ms": 3380
+        },
+        {
+          "type": "waiting",
+          "ms": 3426
+        },
+        {
+          "type": "playing",
+          "ms": 3529
+        }
+      ],
+      "backwards": 0,
+      "maxFlat": 0,
+      "maxVideos": 1,
+      "oldReleased": true,
+      "error": 0,
+      "size": [
+        1280,
+        720
+      ],
+      "metrics": {
+        "source-ms": "189 ms",
+        "metadata-ms": "3362 ms",
+        "playing-ms": "3391 ms",
+        "progress-ms": "4219 ms"
+      }
+    },
+    {
+      "index": 654,
+      "events": [
+        {
+          "type": "waiting",
+          "ms": 79
+        },
+        {
+          "type": "playing",
+          "ms": 1651
+        },
+        {
+          "type": "waiting",
+          "ms": 1668
+        },
+        {
+          "type": "playing",
+          "ms": 1821
+        }
+      ],
+      "backwards": 0,
+      "maxFlat": 500,
+      "maxVideos": 1,
+      "oldReleased": true,
+      "error": 0,
+      "size": [
+        1920,
+        1080
+      ],
+      "metrics": {
+        "source-ms": "26 ms",
+        "metadata-ms": "1637 ms",
+        "playing-ms": "1652 ms",
+        "progress-ms": "2590 ms"
+      }
+    },
+    {
+      "index": 638,
+      "events": [
+        {
+          "type": "waiting",
+          "ms": 44
+        },
+        {
+          "type": "playing",
+          "ms": 2100
+        },
+        {
+          "type": "waiting",
+          "ms": 2113
+        },
+        {
+          "type": "playing",
+          "ms": 2390
+        }
+      ],
+      "backwards": 0,
+      "maxFlat": 500,
+      "maxVideos": 1,
+      "oldReleased": true,
+      "error": 0,
+      "size": [
+        1920,
+        1080
+      ],
+      "metrics": {
+        "source-ms": "12 ms",
+        "metadata-ms": "2091 ms",
+        "playing-ms": "2100 ms",
+        "progress-ms": "3207 ms"
+      }
+    }
+  ],
+  "after": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  }
+}
