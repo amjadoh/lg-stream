@@ -62,7 +62,7 @@ async function main() {
 
       window.fetch = async () => {
         const lines = ['#EXTM3U'];
-        for (const [i, group] of ['رياضة', 'قنوات أفلام', 'أخبار', 'RU 4K', 'beIN', 'أطفال'].entries()) {
+        for (const [i, group] of ['رياضة', 'قنوات أفلام', 'أخبار', 'الرياضة العالمية · جودة عالية', 'beIN', 'أطفال'].entries()) {
           lines.push(`#EXTINF:-1 group-title="${group}",${i===0?"المفضلة":"قناة "+i}`);
           lines.push(`https://media.example.test/live/${i}.m3u8`);
         }
