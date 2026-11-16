@@ -278,14 +278,19 @@
   try { if (localStorage.getItem('lg-stream-language-v1') === 'en') language = 'en'; } catch (_) {}
   var originals = new WeakMap();
   var attributes = new WeakMap();
-  var protectedNodes = '.channel-label,.group-switch-name,.movie-card,[data-provider-text="true"],#fullscreen-hint.channel-announcement,.group-button[data-group]:not([data-group=""]),#search-results button,[data-language]';
+  var protectedNodes = '[data-provider-text="true"],#fullscreen-hint.channel-announcement,.group-button[data-group]:not([data-group=""]),[data-language]';
   var keys = Object.keys(dictionary).sort(function(a,b){return b.length-a.length;});
   var pattern = new RegExp(keys.map(function(k){return Array.from(k).map(function(c){return String.fromCharCode(92)+'u'+c.charCodeAt(0).toString(16).padStart(4,'0');}).join('');}).join('|'),'g');
   function t(value) {
     var raw = String(value == null ? '' : value);
     if (language === 'ar' || !/[\u0600-\u06ff]/.test(raw)) return raw;
     if (Object.prototype.hasOwnProperty.call(dictionary, raw)) return dictionary[raw];
-    return raw.replace(pattern, function(part){return dictionary[part];});
+    return raw.replace(pattern, function(part, offset, whole){
+      var letter = /[\u0621-\u065f\u066e-\u06d3]/;
+      if ((letter.test(part.charAt(0)) && letter.test(whole.charAt(offset - 1))) ||
+          (letter.test(part.charAt(part.length - 1)) && letter.test(whole.charAt(offset + part.length)))) return part;
+      return dictionary[part];
+    });
   }
   function excluded(element) { return !element || element.closest('script,style,' + protectedNodes); }
   function translateNode(node) {
