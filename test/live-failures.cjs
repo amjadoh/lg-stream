@@ -157,11 +157,23 @@ async function main() {
     await page.keyboard.press('ArrowDown'); await current(2);
     const beforeBurst = await page.evaluate(() => window.__mediaStarts);
     await keys('ArrowDown', 'ArrowDown', 'ArrowDown'); await current(5);
+    assert.equal(await page.locator('#fullscreen-hint').innerText(), 'عنصر 5');
+    assert.equal(await page.locator('#fullscreen-hint').isVisible(), true);
+    await page.evaluate(() => { document.body.dataset.state = 'loading'; });
+    const announcementLayout = await page.evaluate(() => {
+      const hint = document.getElementById('fullscreen-hint').getBoundingClientRect();
+      const bar = document.querySelector('.playback-bar').getBoundingClientRect();
+      return { bottom: hint.bottom, barTop: bar.top };
+    });
+    assert.ok(announcementLayout.bottom < announcementLayout.barTop, 'Channel name leaves the loading/status bar readable');
+    await page.evaluate(() => { document.body.dataset.state = 'playing'; });
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-channel-switch-1080.png') });
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 1, 'A burst opens only the final live source');
     await page.keyboard.press('ArrowDown'); await page.waitForTimeout(160);
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 1, 'Last live channel does not wrap');
     await page.keyboard.press('Escape');
     await page.locator('#groups [data-group="مجموعة الاختبار"]').focus();
+    assert.equal(await page.locator('#fullscreen-hint').isVisible(), false);
     await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.locator('#media-controls').isVisible(), true, 'A playing channel outside the visible group leaves controls accessible');
