@@ -171,14 +171,16 @@ async function main() {
     }
     for (const [width, height] of [[1920, 1080], [1280, 720]]) {
       await page.setViewportSize({ width, height });
-      for (const selector of ['#start-button', '#setup-button', '#diagnostics-button', '.viewing-panel', '.transport']) await insideViewport(selector);
+      for (const selector of ['#start-button', '#setup-button', '#nav-settings', '.viewing-panel', '.transport']) await insideViewport(selector);
       await page.screenshot({ path: path.join(root, `artifacts/ui-idle-${height}.png`) });
-      await page.locator('#speed-button').click();
+      if (!await page.locator('#settings-home').isVisible()) await page.locator('#nav-settings').click();
+      await page.locator('#settings-speed').click();
       for (const selector of ['#speed-wired', '#speed-wifi', '#speed-start', '#close-speed']) await insideViewport(selector);
       assert.equal(await page.locator('#speed-start').isDisabled(), true, 'Choose a connection label before starting');
       assert.equal(await page.evaluate(() => window.__speedRequests.length), 0, 'Opening speed-test controls must not download anything');
       await page.screenshot({ path: path.join(root, `artifacts/ui-speed-${height}.png`) });
       await page.locator('#close-speed').click();
+      await page.locator('#close-settings').click();
     }
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.locator('#start-button').click();
@@ -248,12 +250,14 @@ async function main() {
       await page.waitForTimeout(180); // Longer than the documented 120ms channel coalescing delay.
       assert.equal(await page.evaluate(() => window.__mediaStarts), count, `${action} must cancel the pending channel request`);
     }
-    await pendingThen('diagnostics-button');
+    await pendingThen('nav-settings');
+    await page.locator('#settings-info').click();
     assert.equal(await page.locator('#diagnostics-panel .capability-list li').count(), 5, 'LG native readiness lists the five requested formats without probing media');
     assert.match(await page.locator('#diagnostics-panel .capability-list').innerText(), /HDR10.*Dolby Vision.*HLG.*4K HEVC.*4K AV1/s);
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-diagnostics');
     await page.keyboard.press('Escape');
+    await page.locator('#close-settings').click();
     await pendingThen('setup-button');
     assert.equal(await page.evaluate(() => document.getElementById('setup-panel').contains(document.activeElement)), true);
     await page.keyboard.press('Escape');
@@ -516,7 +520,8 @@ async function main() {
     await page.evaluate(() => { window.__advanceTime(60001); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(count => window.__playlistRequests.length === count + 1, requestsBeforePendingSwitch);
     assert.equal(await page.locator('#channels .channel-button').count(), 0, 'Automatic refresh releases the in-memory catalogue while keeping the saved copy');
-    await page.locator('#speed-button').click();
+    if (!await page.locator('#settings-home').isVisible()) await page.locator('#nav-settings').click();
+      await page.locator('#settings-speed').click();
     assert.equal(await page.evaluate(() => window.__playlistRequests.at(-1).aborted), true, 'A foreground click cancels a pending automatic catalogue download immediately');
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
     assert.equal(await page.evaluate(() => document.getElementById('speed-panel').contains(document.activeElement)), true, 'Catalogue restoration must not steal focus from the newly opened dialog');
@@ -526,6 +531,7 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__speedRequests.length), 1);
     await page.locator('#speed-cancel').click();
     await page.locator('#close-speed').click();
+      await page.locator('#close-settings').click();
     await page.evaluate(() => { window.__speedRequests = []; });
 
     // Opening settings during an automatic refresh must cancel and reschedule it
@@ -904,7 +910,8 @@ async function main() {
     await page.locator('#channels .channel-button').first().click();
     assert.equal(await page.evaluate(() => window.__mediaStarts), playlistStarts + 1);
 
-    await pendingThen('speed-button');
+    await pendingThen('nav-settings');
+    await page.locator('#settings-speed').click();
     assert.equal(await page.locator('video').count(), 1, 'Opening speed controls alone must preserve playback');
     await page.locator('#speed-wired').click();
     assert.equal(await page.locator('#speed-wired').getAttribute('aria-pressed'), 'true');
@@ -954,7 +961,8 @@ async function main() {
     await page.keyboard.press('Escape');
     assert.equal(await page.evaluate(() => window.__speedRequests.at(-1).aborted), true, 'Back must abort a pending download');
     assert.equal(await page.locator('#speed-panel').isVisible(), false);
-    await page.locator('#speed-button').click();
+    if (!await page.locator('#settings-home').isVisible()) await page.locator('#nav-settings').click();
+      await page.locator('#settings-speed').click();
     assert.equal(await page.locator('#speed-results').innerText(), history);
     assert.equal(await page.locator('#speed-start').isDisabled(), true, 'Reopening requires the current connection to be selected again');
     await page.locator('#speed-wifi').click();
