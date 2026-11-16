@@ -153,7 +153,7 @@
       var box = document.createElement('section'); box.className = 'search-section';
       var title = document.createElement('h3'); LGI18n.text(title, section[1] + ' (' + count + ')'); box.appendChild(title);
       matches.forEach(function (index) {
-        var button = document.createElement('button'); button.type = 'button'; button.textContent = sources[index].name || 'عنصر';
+        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر');
         button.addEventListener('click', function () { closeSearch(); if (section[0] !== 'tv') stop(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
@@ -279,7 +279,7 @@
       button.dataset.position = managedWindowStart + offset; button.setAttribute('role', 'switch');
       var enabled = !hiddenGroups[managedSection].has(item.name);
       button.setAttribute('aria-checked', String(enabled)); button.disabled = groupSettingsSaving;
-      var label = document.createElement('span'); label.className = 'group-switch-name'; label.textContent = item.name || 'بدون مجموعة';
+      var label = document.createElement('span'); label.className = 'group-switch-name'; LGI18n.provider(label, item.name, 'بدون مجموعة');
       var count = document.createElement('span'); count.className = 'group-switch-count'; LGI18n.text(count, item.count + ' عنصر');
       var state = document.createElement('span'); state.className = 'switch-state'; LGI18n.text(state, enabled ? 'ON · ظاهر' : 'OFF · مخفي');
       button.appendChild(label); button.appendChild(count); button.appendChild(state);
@@ -385,7 +385,7 @@
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var details = sources[index] || {};
       if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
-      var name = document.createElement('span'); name.textContent = sources[index].name || (activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
+      var name = document.createElement('span'); LGI18n.provider(name, sources[index].name, activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); saveViewState(false); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       card.addEventListener('click', function () { openDetails(index); }); $('movie-grid').appendChild(card);
     });
@@ -497,7 +497,7 @@
       var number = document.createElement('span');
       number.className = 'channel-number'; number.textContent = String(index + 1);
       var label = document.createElement('span');
-      label.className = 'channel-label'; label.textContent = sources[index].name || 'المصدر ' + (index + 1);
+      label.className = 'channel-label'; LGI18n.provider(label, sources[index].name, 'المصدر ' + (index + 1));
       button.appendChild(number); button.appendChild(label);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest' }); });

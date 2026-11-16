@@ -81,6 +81,8 @@ async function main() {
     await page.evaluate(() => { window.__originalVideo = document.querySelector('video'); });
     const starts = await page.evaluate(() => window.__mediaStarts);
 
+    await page.locator('#channels .favorite-button').first().click();
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-pressed'),'true');
     const catalogueBefore = await page.evaluate(async () => {
       const db = await new Promise((resolve,reject)=>{const r=indexedDB.open('lg-stream-catalog');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
       const value = await new Promise(resolve=>{const r=db.transaction('meta').objectStore('meta').get('active');r.onsuccess=()=>resolve({count:r.result.count,revision:r.result.revision})}); db.close();return value;
@@ -120,14 +122,15 @@ async function main() {
     assert.equal(await page.locator('#channel-title').innerText(),'المفضلة');
     assert.equal(await page.locator('#groups [data-group="رياضة"]').innerText(),'رياضة');
     assert.equal(await page.locator('#status').innerText(),'Playing');
-    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'),'Add to favorites: المفضلة');
+    assert.equal(await page.evaluate(()=>LGI18n.t('والترجمة')),'والترجمة','Do not partially translate inside an unknown Arabic word');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'),'Remove from favorites: المفضلة');
     await page.keyboard.press('Escape');await page.locator('#nav-search').focus();await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),'favorites');await page.locator('#nav-settings').click();
     await page.screenshot({path:path.join(root,'artifacts/settings-english.png')});
     await page.locator('[data-language="ar"]').click();
     assert.equal(await page.locator('html').getAttribute('dir'),'rtl');
     assert.equal(await page.locator('#nav-search span').innerText(),'البحث');
     assert.equal(await page.locator('#status').innerText(),'يعمل');
-    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'),'إضافة إلى المفضلة: المفضلة');
+    assert.equal(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'),'إزالة من المفضلة: المفضلة');
     await page.keyboard.press('Escape');
     assert.equal(await page.evaluate(()=>window.__mediaStarts),starts);
     const catalogueAfter=await page.evaluate(async()=>{const db=await new Promise(resolve=>{const r=indexedDB.open('lg-stream-catalog');r.onsuccess=()=>resolve(r.result)});const value=await new Promise(resolve=>{const r=db.transaction('meta').objectStore('meta').get('active');r.onsuccess=()=>resolve({count:r.result.count,revision:r.result.revision})});db.close();return value});
