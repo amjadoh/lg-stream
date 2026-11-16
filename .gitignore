@@ -14,3 +14,4 @@ private/
 .ares/
 .DS_Store
 Thumbs.db
+.local-transfer-*/

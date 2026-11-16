@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>LG Stream · تصور تصميم</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#0a1124;color:#e9edf6;font-family:"Segoe UI",Tahoma,"Noto Sans Arabic",Arial,sans-serif}
+.app{position:relative;width:1920px;height:1080px;background:#0a1124;direction:ltr}
+.top{position:absolute;top:0;left:64px;right:64px;height:120px;display:flex;align-items:center;direction:rtl;border-bottom:1px solid #151f3a}
+.brand{font-size:38px;font-weight:700;color:#fff}.brand b{font-weight:300;color:#aab3cc;margin-right:6px}
+.nav{display:flex;gap:52px;margin-right:88px}
+.nav span{position:relative;font-size:28px;color:#7f8aa8;padding:10px 0}
+.nav span.on{color:#fff;font-weight:700}
+.nav span.on::after{content:"";position:absolute;bottom:0;right:0;width:36px;height:3px;background:#d4b06a}
+.tag{z-index:2;position:absolute;top:46px;left:64px;font-size:20px;color:#8995b2;direction:rtl}
+.h{font-size:22px;color:#8995b2;margin-bottom:20px}
+.groups{position:absolute;top:176px;left:64px;width:232px;direction:rtl}
+.g{position:relative;font-size:30px;line-height:72px;color:#7f8aa8;padding-right:24px}
+.g.on{color:#fff;font-weight:700}
+.g.on::before{content:"";position:absolute;right:0;top:26px;width:4px;height:20px;background:#d4b06a}
+.vsep{position:absolute;top:176px;left:316px;width:1px;height:760px;background:#151f3a}
+.channels{position:absolute;top:176px;left:340px;width:568px;direction:rtl}
+.c{position:relative;display:flex;align-items:center;gap:24px;height:84px;padding:0 28px;font-size:32px;color:#c3cbe0;border-bottom:1px solid #131c35}
+.c i{font-style:normal;font-size:24px;color:#8995b2;width:40px}
+.c.play{color:#fff}
+.c.play::after{content:"يُعرض الآن";margin-right:12px;font-size:22px;color:#d4b06a}
+.c.focus{background:#18244b;color:#fff;font-weight:700;border-bottom-color:#0a1124}
+.c.focus::before{content:"";position:absolute;right:0;top:0;bottom:0;width:6px;background:#d4b06a}
+.c.focus i{color:#aab3cc}
+.video{position:absolute;top:176px;left:940px;width:916px;height:516px;background:#0e1834;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;direction:rtl}
+.pl{width:0;height:0;border-left:34px solid #6c779a;border-top:22px solid transparent;border-bottom:22px solid transparent}
+.video p{font-size:28px;color:#7f8aa8}
+.meta{position:absolute;top:728px;left:940px;width:916px;direction:rtl}
+.meta h2{font-size:48px;font-weight:700;color:#fff}
+.meta div{font-size:26px;color:#7f8aa8;margin-top:12px}
+.foot{position:absolute;bottom:0;left:64px;right:64px;height:104px;border-top:1px solid #151f3a;display:flex;gap:56px;align-items:center;justify-content:center;font-size:24px;color:#7f8aa8;direction:rtl}
+.foot b{color:#fff;font-weight:700;margin-left:12px}
+/* B */
+.b .vsep{display:none}
+.b .groups{left:64px;width:844px;height:80px;display:flex;align-items:center;gap:40px;border-bottom:1px solid #151f3a}
+.b .groups .h{margin:0 0 0 8px}
+.b .g{line-height:80px;padding:0;font-size:29px}
+.b .g.on::before{top:auto;bottom:-1px;width:100%;height:3px}
+.b .groups em{font-style:normal;font-size:22px;color:#8995b2;margin-right:auto}
+.b .g:not(.on){display:none}.b .channels{top:284px;left:64px;width:844px}
+.b .channels .h{display:none}
+.b .c{height:92px;font-size:34px;padding:0 32px}
+/* drawer */
+.dr .top,.dr .groups,.dr .channels,.dr .meta,.dr .vsep{display:none}
+.dr .video{top:0;left:0;width:1920px;height:1080px}
+.drawer{display:none}
+.dr .drawer{display:block;position:absolute;top:0;left:0;bottom:0;width:640px;background:#0a1124;border-right:1px solid #1c2746;padding:64px 48px;direction:rtl}
+.drawer .h{margin:0}
+.drawer h3{font-size:46px;font-weight:700;color:#fff;margin:8px 0 6px}
+.drawer .n{font-size:22px;color:#8995b2;margin-bottom:28px}
+.dr .tag{left:auto;right:64px;top:40px}
+.dr .foot{left:0;right:auto;width:640px;height:136px;padding:16px 48px;background:#0a1124;border-top:1px solid #151f3a;gap:10px 24px;font-size:20px;flex-wrap:wrap;justify-content:flex-start;align-content:center}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+ <div class="top"><div class="brand">LG<b>Stream</b></div>
+  <div class="nav"><span>بحث</span><span>مفضلة</span><span class="on">بث</span><span>أفلام</span><span>مسلسلات</span><span>إعدادات</span></div></div>
+ <div class="tag">تصور تصميم · بيانات تجريبية</div>
+ <div class="groups"><div class="h">المجموعات</div>
+  <div class="g on">رياضة</div><div class="g">أخبار</div><div class="g">منوعات</div><div class="g">أطفال</div><div class="g">وثائقيات</div><em id="gc"></em></div>
+ <div class="vsep"></div>
+ <div class="channels"><div class="h">قنوات رياضة</div><div id="list"></div></div>
+ <div class="video"><div class="pl"></div><p>مساحة البث · رياضة 2</p></div>
+ <div class="meta"><h2>رياضة 2</h2><div>مجموعة رياضة · القناة 2 من 12</div></div>
+ <div class="drawer"><div class="h">المجموعة</div><h3>رياضة</h3><div class="n">12 قناة</div><div id="list2"></div></div>
+ <div class="foot" id="foot"></div>
+</div>
+<script>
+var q=new URLSearchParams(location.search),a=document.getElementById('app'),B=q.get('variant')==='b',D=q.get('screen')==='drawer';
+if(B)a.classList.add('b');if(D)a.classList.add('dr');
+function rows(n){var h='';for(var i=1;i<=n;i++)h+='<div class="c'+(i==2?' play':'')+(i==4?' focus':'')+'"><i>'+i+'</i>رياضة '+i+'</div>';return h}
+document.getElementById('list').innerHTML=rows(B?7:8);
+document.getElementById('list2').innerHTML=rows(8);
+if(B)document.getElementById('gc').textContent='← كل المجموعات';
+function k(x,t){return '<span><b>'+x+'</b>'+t+'</span>'}
+document.getElementById('foot').innerHTML=D
+ ?k('↑↓','تنقل')+k('OK','تشغيل')+k('OK على المشغّلة','ملء الشاشة')+k('→','التحكم')+k('رجوع','إخفاء القائمة')
+ :k('←','المجموعات')+k('OK','تشغيل مع بقاء القائمة')+k('OK على المشغّلة','ملء الشاشة')+k('→','التحكم')+k('رجوع','خروج');
+</script>
+</body>
+</html>

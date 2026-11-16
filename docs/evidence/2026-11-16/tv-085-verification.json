@@ -1,0 +1,128 @@
+{
+  "before": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  },
+  "initial": {
+    "theme": "editorial",
+    "lang": "ar",
+    "header": [
+      {
+        "id": "nav-settings",
+        "x": 42
+      },
+      {
+        "id": "setup-button",
+        "x": 229
+      }
+    ],
+    "geometry": [
+      {
+        "selector": ".groups-panel",
+        "x": 58,
+        "width": 360.953125,
+        "height": 738
+      },
+      {
+        "selector": ".channels-panel",
+        "x": 434.953125,
+        "width": 509.4375,
+        "height": 738
+      },
+      {
+        "selector": ".viewing-panel",
+        "x": 974.390625,
+        "width": 903.609375,
+        "height": 738
+      }
+    ]
+  },
+  "ui": {
+    "diag": true,
+    "back": "settings-info",
+    "headerFocus": "nav-settings",
+    "sameVideo": true,
+    "sameSource": true,
+    "advanced": 0
+  },
+  "drawer": [
+    {
+      "open": true,
+      "sameVideo": true
+    },
+    {
+      "open": true,
+      "sameVideo": true
+    },
+    {
+      "open": true,
+      "sameVideo": true
+    }
+  ],
+  "result": {
+    "elapsed": 61445,
+    "events": [
+      {
+        "type": "emptied",
+        "ms": 62,
+        "error": 0
+      },
+      {
+        "type": "waiting",
+        "ms": 99,
+        "error": 0
+      },
+      {
+        "type": "playing",
+        "ms": 1556,
+        "error": 0
+      },
+      {
+        "type": "waiting",
+        "ms": 1596,
+        "error": 0
+      },
+      {
+        "type": "playing",
+        "ms": 1672,
+        "error": 0
+      }
+    ],
+    "samples": 120,
+    "backwards": 0,
+    "maxFlat": 500,
+    "maxVideos": 1,
+    "error": 0,
+    "paused": false,
+    "size": [
+      1280,
+      720
+    ],
+    "metrics": {
+      "source-ms": "23 ms",
+      "metadata-ms": "1547 ms",
+      "playing-ms": "1561 ms",
+      "progress-ms": "2504 ms",
+      "stall-count": "1",
+      "stall-ms": "77 ms"
+    }
+  },
+  "after": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  }
+}
