@@ -16,6 +16,35 @@
     } catch (_) { return null; }
   }
 
+
+  function nativeHlsPlaylist(source) {
+    if (!validateSource(source)) return null;
+    try {
+      var playlist = new URL(source);
+      if (playlist.pathname !== '/get.php' || playlist.username || playlist.password || playlist.hash) return null;
+      if (playlist.searchParams.getAll('username').length !== 1 || playlist.searchParams.getAll('password').length !== 1) return null;
+      if (!playlist.searchParams.get('username') || !playlist.searchParams.get('password')) return null;
+      return playlist;
+    } catch (_) { return null; }
+  }
+
+  function nativeHlsSource(source, playlistSource) {
+    var playlist = nativeHlsPlaylist(playlistSource);
+    if (!playlist || !validateSource(source)) return source;
+    try {
+      var stream = new URL(source);
+      if (stream.origin !== playlist.origin || stream.username || stream.password || stream.search || stream.hash) return source;
+      var shortPath = stream.pathname.match(/^\/([^/]+)\/([^/]+)\/(\d+)$/);
+      var livePath = stream.pathname.match(/^\/live\/([^/]+)\/([^/]+)\/(\d+)\.ts$/);
+      var parts = shortPath || livePath;
+      if (!parts) return source;
+      if (decodeURIComponent(parts[1]) !== playlist.searchParams.get('username') ||
+          decodeURIComponent(parts[2]) !== playlist.searchParams.get('password')) return source;
+      stream.pathname = '/live/' + parts[1] + '/' + parts[2] + '/' + parts[3] + '.m3u8';
+      return stream.href;
+    } catch (_) { return source; }
+  }
+
   function qualityLabel(width, height) {
     var edge = Math.max(Number(width) || 0, Number(height) || 0);
     var shortEdge = Math.min(Number(width) || 0, Number(height) || 0);
@@ -270,5 +299,5 @@
     var matches = rules.filter(function (rule) { return rule[1].test(text); });
     return matches.length === 1 ? matches[0][0] : 'other';
   }
-  return { groupCategory: groupCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
