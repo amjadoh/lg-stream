@@ -30,6 +30,7 @@ async function main() {
       return route.abort();
     });
     await page.addInitScript(() => {
+      if (!localStorage.getItem('lg-stream-appearance-v1')) localStorage.setItem('lg-stream-appearance-v1', JSON.stringify({theme:'cinema',layout:'compact',controls:'compact'}));
       const states = new WeakMap();
       const state = video => {
         if (!states.has(video)) states.set(video, { paused: true, time: 0, source: '' });

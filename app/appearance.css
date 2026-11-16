@@ -1,0 +1,84 @@
+@font-face { font-family: Plex; src: url('assets/fonts/IBMPlexSansArabic-Regular.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: Plex; src: url('assets/fonts/IBMPlexSansArabic-SemiBold.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+:root { font-family: Plex, sans-serif; background: #211e19; }
+body { --surface: #211e19; --panel: #29251f; --line: #51483c; --text: #f3ece1; --muted: #c6bcad; --accent: #edb971; --focus: #f3ece1; background: var(--surface); color: var(--text); }
+body[data-theme="cinema"] { --surface: #100f0e; --panel: #1c1a17; --line: #49443d; --text: #efe7d6; --muted: #c4bdaf; --accent: #c9a24a; --focus: #efe7d6; }
+button, input, select, .tag, .primary-panel button span { font-family: Plex, sans-serif; }
+button { background: var(--panel); color: var(--text); border-radius: 5px; }
+button:hover { background: var(--line); }
+button:focus, button.active:focus, .group-button.active:focus, .channel-button.active:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--surface); outline: 3px solid var(--focus); outline-offset: 2px; }
+button:focus span, button:focus .channel-number { color: inherit; }
+input:focus, select:focus { outline-color: var(--focus); }
+button.primary, .quality-badge { background: var(--accent); color: var(--surface); }
+.tag, .footer-note, .list-count, .muted, .settings-grid span, .appearance-options span, .small-note { color: var(--muted); }
+.shell { padding: 28px 42px 20px; }
+header { margin-bottom: 20px; }
+main { margin-top: 94px; }
+.library-panel, .library-panel.primary-open { width: 47vw; flex-basis: 47vw; grid-template-columns: 0 minmax(180px, 30%) minmax(0, 1fr); gap: 16px; }
+.library-panel.content-mode, .library-panel.content-mode.primary-open { width: 27vw; flex-basis: 27vw; grid-template-columns: 0 minmax(0, 1fr) 0; }
+.primary-panel, .library-panel.primary-open .primary-panel { display: flex; position: fixed; top: 124px; left: 42px; right: 42px; height: 74px; flex-direction: row; direction: ltr; align-items: stretch; gap: 18px; padding: 0; border-bottom: 1px solid var(--line); }
+.primary-mark { display: none; }
+.primary-panel button { width: auto; padding: 12px 20px; display: flex; direction: rtl; gap: 10px; background: transparent; border-radius: 3px; font-size: 25px; }
+.primary-panel button span { font-size: 27px; }
+.primary-panel button.active { border-color: transparent; border-bottom: 3px solid var(--accent); color: var(--accent); background: transparent; }
+.groups-panel, .channels-panel { background: transparent; border: 0; border-radius: 0; padding: 8px; }
+.groups-panel { border-right: 1px solid var(--line); }
+.group-button, .channel-button { background: transparent; border-radius: 3px; }
+.group-button.active, .channel-button.active { background: transparent; border-color: transparent; color: var(--accent); }
+.group-button.active { border-right: 4px solid var(--accent); }
+.channel-button.active .channel-number { color: var(--accent); }
+.channel-label { font-size: 30px; font-weight: 600; }
+.channel-number { color: var(--muted); }
+.group-list, .channel-list { gap: 4px; }
+.channel-row { border-bottom: 1px solid var(--line); }
+.favorite-button { background: transparent; color: var(--muted); }
+.viewing-panel { border: 0; border-radius: 3px; }
+.playback-bar, .media-controls, .setup-card, .diagnostics, .sort-menu, .movie-heading, .empty-state { background: var(--panel); color: var(--text); border-color: var(--line); box-shadow: none; }
+.movie-browser { background: var(--surface); }
+.movie-card { background: var(--panel); border-radius: 5px; }
+.movie-card::before, #status, #track-status, #seek-status { color: var(--accent); }
+.appearance-options [aria-pressed="true"], [data-controls][aria-pressed="true"], [data-theme-choice][aria-pressed="true"], [data-language][aria-pressed="true"], #category-shortcuts [aria-pressed="true"] { border-color: var(--accent); background: var(--panel); color: var(--accent); }
+.theme-options { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.theme-options button { text-align: start; white-space: normal; }
+.theme-options span { display: block; font-size: 22px; color: var(--muted); margin-top: 8px; }
+body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 130px minmax(160px, 25%) minmax(0, 1fr); }
+body[data-theme="cinema"] .library-panel.content-mode, body[data-theme="cinema"] .library-panel.content-mode.primary-open { grid-template-columns: 130px minmax(0, 1fr) 0; }
+body[data-theme="cinema"] .library-panel .primary-panel { position: static; height: auto; flex-direction: column; gap: 8px; border: 0; grid-row: 1 / 3; }
+body[data-theme="cinema"] .library-panel .primary-panel button { display: grid; width: 100%; padding: 12px 4px; }
+body[data-theme="cinema"] .library-panel .primary-panel button span { font-size: 23px; }
+body[data-theme="cinema"] .library-panel .primary-panel button.active { border-bottom: 0; border-right: 3px solid var(--accent); }
+body.watch-mode.watch-channels .library-panel { left: 0; top: 0; bottom: 0; width: 600px; max-width: 38vw; }
+body.watch-channels .channels-panel { background: var(--surface); padding: 32px 24px; }
+body.watch-channels .primary-panel { display: none !important; }
+.fullscreen-hint, .channel-empty { background: var(--panel); color: var(--text); border-color: var(--line); }
+html[dir="ltr"] .setup-card, html[dir="ltr"] .media-controls, html[dir="ltr"] .viewing-panel { direction: ltr; }
+html[dir="ltr"] .settings-grid button, html[dir="ltr"] .appearance-options button { text-align: left; }
+@media (max-width: 1400px) {
+  .shell { padding: 18px 26px 14px; }
+  header { min-height: 60px; margin-bottom: 12px; }
+  main { margin-top: 72px; gap: 18px; }
+  .primary-panel, .library-panel.primary-open .primary-panel { top: 88px; left: 26px; right: 26px; height: 58px; gap: 8px; }
+  .primary-panel button { padding: 8px 14px; font-size: 22px; }
+  .primary-panel button span { font-size: 22px; }
+  .library-panel, .library-panel.primary-open { width: 49vw; flex-basis: 49vw; grid-template-columns: 0 minmax(160px, 32%) minmax(0, 1fr); gap: 8px; }
+  body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 100px 165px minmax(0, 1fr); }
+  body[data-theme="cinema"] .library-panel .primary-panel { height: auto; gap: 4px; }
+  body[data-theme="cinema"] .library-panel .primary-panel button { padding: 8px 2px; }
+  body[data-theme="cinema"] .library-panel .primary-panel button span { font-size: 19px; }
+  .channel-label { font-size: 24px; }
+  .group-button { font-size: 23px; }
+  .theme-options span { font-size: 18px; }
+  body.watch-channels .channels-panel { padding: 20px 16px; }
+}
+
+.primary-panel button:focus, .primary-panel button.active:focus { background: var(--focus); color: var(--surface); border-color: var(--focus); }
+body[data-theme="cinema"] .library-panel .primary-panel button:focus { background: var(--focus); color: var(--surface); }
+.theme-options button:focus, .appearance-options button:focus, [data-controls]:focus, [data-language]:focus { background: var(--focus); color: var(--surface); }
+.theme-options button:focus span, .appearance-options button:focus span { color: inherit; }
+.channel-label { line-height: 1.5; }
+body[data-theme="cinema"] .library-panel .primary-panel { grid-row: 1; }
+body[data-theme="cinema"][data-layout="tabs"] .library-panel .primary-panel { grid-row: 1 / 3; }
+body:not([data-layout="tabs"]) .library-panel { grid-template-rows: minmax(0, 1fr); }
+.primary-panel .nav-icon { width: 28px; height: 28px; flex: 0 0 auto; }
+input, .search-section, .speed-connection, .speed-results li, .group-switch { background: var(--panel); color: var(--text); border-color: var(--line); }
+.search-section h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }

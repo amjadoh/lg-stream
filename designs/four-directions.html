@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>معاينة تصميم — أربعة اتجاهات</title>
+<style>
+@font-face{font-family:Plex;src:url(fonts/IBMPlexSansArabic-Regular.woff2) format("woff2");font-weight:400}
+@font-face{font-family:Plex;src:url(fonts/IBMPlexSansArabic-SemiBold.woff2) format("woff2");font-weight:600}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden}
+body{font-family:Plex,sans-serif;font-size:26px;position:relative;direction:rtl}
+.abs{position:absolute}
+.ltr{direction:ltr}
+.rtl{direction:rtl}
+.tag{position:absolute;bottom:14px;right:24px;font-size:22px;opacity:.7;z-index:9}
+.vid{position:absolute;overflow:hidden}
+.vid svg{width:100%;height:100%;display:block}
+.vcap{position:absolute;top:18px;right:22px;font-size:22px;padding:4px 14px}
+.row{display:flex;align-items:center;gap:16px;direction:rtl}
+.ch{display:flex;align-items:center;gap:18px;height:78px;padding:0 26px;font-size:28px;direction:rtl}
+.dot{width:12px;height:12px;border-radius:50%;flex:none}
+.num{font-size:24px;min-width:44px;text-align:center}
+.nav span{font-size:26px}
+.sec{font-weight:600;font-size:32px}
+.sub{font-size:22px}
+.card{position:absolute;padding:28px;display:flex;flex-direction:column;justify-content:space-between}
+.card b{font-size:30px;font-weight:600}
+.ic{width:40px;height:40px}
+/* V1 warm editorial */
+.v1{background:#f3ece1;color:#2a2018}
+.v1 .top{background:#2a2018;color:#f3ece1}
+.v1 .top .on{border-bottom:4px solid #d9893b;color:#fff}
+.v1 .grp{background:#e7dccb}
+.v1 .grp .on{background:#2a2018;color:#f3ece1}
+.v1 .f{background:#d9893b;color:#1c140d;font-weight:600}
+.v1 .dot{background:#b2381f}
+.v1 .card{background:#e7dccb}
+.v1 .card.f{background:#d9893b}
+.v1 .vcap{background:#2a2018;color:#f3ece1}
+.v1 .drw{background:#f3ece1}
+/* V2 cinema */
+.v2{background:#0e0d0c;color:#efe7d6}
+.v2 .rail{background:#171513}
+.v2 .rail .on{background:#efe7d6;color:#0e0d0c}
+.v2 .f{background:#efe7d6;color:#0e0d0c;font-weight:600}
+.v2 .dot{background:#c9a24a}
+.v2 .gsel{border:2px solid #4a443c}
+.v2 .card{background:#1b1916}
+.v2 .card.f{background:#efe7d6;color:#0e0d0c}
+.v2 .vcap{background:#0e0d0c;color:#efe7d6}
+.v2 .drw{background:#141210}
+/* V3 midnight */
+.v3{background:#0b1430;color:#e4ebff}
+.v3 .gt{color:#fff}
+.v3 .num{color:#7f93c9}
+.v3 .f{background:#3d6bff;color:#fff;font-weight:600}
+.v3 .f .num{color:#dfe7ff}
+.v3 .dot{background:#ff5a5a}
+.v3 .bnav{background:#081028;border-top:2px solid #1d2b57}
+.v3 .bnav .on{color:#fff;border-top:5px solid #3d6bff}
+.v3 .card{background:#13204a}
+.v3 .card.f{background:#3d6bff;color:#fff}
+.v3 .vcap{background:#081028;color:#e4ebff}
+.v3 .drw{background:#0b1430}
+.v3 .lines .ch{border-bottom:1px solid #1d2b57}
+/* V4 deep green */
+.v4{background:#0f2a22;color:#e2efe7}
+.v4 .snav .on{color:#b8f0a0;font-weight:600}
+.v4 .snav .on::before{content:"";display:inline-block;width:8px;height:30px;background:#b8f0a0;margin-left:14px;vertical-align:middle}
+.v4 .chip{border:2px solid #3e6656;border-radius:30px;padding:6px 22px;font-size:24px}
+.v4 .chip.on{background:#e2efe7;color:#0f2a22;border-color:#e2efe7}
+.v4 .f{background:#b8f0a0;color:#0f2a22;font-weight:600}
+.v4 .dot{background:#f2c14e}
+.v4 .card{background:#163a2f}
+.v4 .card.f{background:#b8f0a0;color:#0f2a22}
+.v4 .vcap{background:#0f2a22;color:#e2efe7}
+.v4 .drw{background:#0f2a22}
+.drw{position:absolute;left:0;top:0;width:600px;height:1080px;padding:60px 0 0}
+.drw .h{font-size:26px;padding:0 30px 24px;opacity:.85}
+
+/* Codex review: cohesive continuous surfaces, legibility, no square home grid. */
+.v1{background:#211e19;color:#f3ece1}.v1 .top{background:#211e19;border-bottom:1px solid #51483c}.v1 .grp{background:transparent;border-right:1px solid #51483c}.v1 .grp .on{background:transparent;color:#edb971;border-right:5px solid #edb971}.v1 .drw{background:#211e19}.v1 .f{background:#f3ece1;color:#211e19}.v1 .dot{background:#edb971}
+.ch{font-size:32px;font-weight:600;height:88px}.sub{font-size:24px}.tag{font-size:22px;opacity:1;color:#d8d8d8;background:#171a19;padding:4px 14px}.vcap{font-weight:600;font-size:24px}.drw .h{font-size:40px;padding-bottom:32px}.drw .ch{height:108px;padding:0 40px}.drw .foot{position:absolute;bottom:90px;left:40px;right:40px;font-size:24px;line-height:1.9;border-top:1px solid #777;padding-top:24px}.meta{position:absolute;direction:rtl;line-height:1.8}.meta h2{font-size:40px}.meta p{font-size:24px;color:inherit;opacity:.85}.mark{font-size:22px;letter-spacing:5px;direction:ltr;display:block;margin-bottom:24px}
+.home .card{background:transparent!important;border-bottom:1px solid #666;padding:16px 24px;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;gap:26px}.home .card.f{background:var(--home-focus,#eee)!important;color:#152019!important;border-bottom-color:transparent}.home .card b{font-size:36px}.home .ic{width:34px;height:34px}.v1{--home-focus:#edb971}.v2{--home-focus:#efe7d6}.v3{--home-focus:#9fbcff}.v4{--home-focus:#b8f0a0}
+
+.v1{--home-focus:#f3ece1}.v3{--home-focus:#3155c7}.v3 .f,.v3.home .card.f{background:#3155c7!important;color:#fff!important}.v3 .dot{background:#f2c14e}.v2 .rail .on{background:transparent;color:#efe7d6;border-right:5px solid #c9a24a}.drw .foot{font-size:26px}.card .arrow{font-size:32px;opacity:.65}
+</style>
+</head>
+<body>
+<script>
+const P=new URLSearchParams(location.search);
+const V=+(P.get('v')||1), S=P.get('s')||'home';
+document.body.className='v'+V;
+const SEC=['البحث','المفضلة','مباشر','الأفلام','المسلسلات','الإعدادات'];
+const ICO={
+'البحث':'<circle cx="17" cy="17" r="10" fill="none" stroke="currentColor" stroke-width="3"/><path d="M25 25l9 9" stroke="currentColor" stroke-width="3"/>',
+'المفضلة':'<path d="M20 33L8 21a7 7 0 0112-9 7 7 0 0112 9z" fill="none" stroke="currentColor" stroke-width="3"/>',
+'مباشر':'<rect x="5" y="10" width="30" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="20" cy="20" r="4" fill="currentColor"/>',
+'الأفلام':'<rect x="7" y="6" width="26" height="28" fill="none" stroke="currentColor" stroke-width="3"/><path d="M7 14h26M7 26h26" stroke="currentColor" stroke-width="3"/>',
+'المسلسلات':'<rect x="5" y="9" width="24" height="18" fill="none" stroke="currentColor" stroke-width="3"/><path d="M11 32h24V15" fill="none" stroke="currentColor" stroke-width="3"/>',
+'الإعدادات':'<circle cx="20" cy="20" r="6" fill="none" stroke="currentColor" stroke-width="3"/><path d="M20 4v6M20 30v6M4 20h6M30 20h6M9 9l4 4M27 27l4 4M9 31l4-4M27 13l4-4" stroke="currentColor" stroke-width="3"/>'};
+const ic=n=>`<svg class="ic" viewBox="0 0 40 40">${ICO[n]}</svg>`;
+const GR=['الرياضة','رياضة عربية','رياضة عالمية','الأخبار','الأطفال','الوثائقي','المنوعات'];
+const CH=['الرياضة 1','الرياضة 2','الرياضة 3','الرياضة 4','الرياضة 5','الرياضة 6'];
+const FIELD=(c1,c2,l)=>`<svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice"><rect width="160" height="90" fill="${c1}"/><g fill="none" stroke="${l}" stroke-width=".7"><rect x="10" y="8" width="140" height="74"/><path d="M80 8v74"/><circle cx="80" cy="45" r="11"/><rect x="10" y="27" width="18" height="36"/><rect x="132" y="27" width="18" height="36"/></g><rect x="0" y="0" width="160" height="90" fill="${c2}" opacity=".18"/></svg>`;
+const PAL={1:['#5f7a4a','#2a2018','#efe4cf'],2:['#2c3a2a','#000','#cfc6b0'],3:['#1f4a4a','#081028','#bcd2ff'],4:['#2f6a46','#0f2a22','#dcefe2']}[V];
+const video=(x,y,w,h,cap)=>`<div class="vid" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${FIELD(...PAL)}<span class="vcap">${cap}</span></div>`;
+const TAG='<div class="tag">معاينة تصميم · بيانات تجريبية</div>';
+const chs=(focus=3,play=1,numbered=false)=>CH.map((c,i)=>`<div class="ch ${i==focus?'f':''}">${numbered?`<span class="num">${String(i+1).padStart(2,'0')}</span>`:''}<span>${c}</span>${i==play?'<span class="dot" title="قيد التشغيل"></span>':''}</div>`).join('');
+const demo='';
+let h='';
+// Layout constants per variant: video bounds identical across home/live
+if(V==1){
+ const top=`<div class="abs top ltr" style="left:0;top:0;width:1920px;height:96px;display:flex;align-items:center;justify-content:flex-end;gap:46px;padding:0 60px"><div class="row nav" style="gap:46px">${SEC.map(s=>`<span style="padding:24px 0" class="${(S=='live'?'مباشر':'البحث')==s?'on':''}">${s}</span>`).join('')}</div></div>`;
+ if(S=='home'){h=top+`<div class="abs" style="left:60px;top:140px;width:860px"><div class="sec" style="font-size:44px">الرئيسية</div><div class="sub" style="margin-top:8px">اختر قسماً للمتابعة</div></div>`;
+  SEC.forEach((s,i)=>{const x=60+(i%2)*440,y=270+Math.floor(i/2)*230;h+=`<div class="card ${i==2?'f':''}" style="left:${x}px;top:${y}px;width:420px;height:210px">${ic(s)}<b>${s}</b></div>`});
+  h+=video(1000,140,860,484,'معاينة · مباشر')+`<div class="abs" style="left:1000px;top:660px;width:860px"><div class="sec">آخر قناة</div><div style="margin-top:10px">الرياضة 2</div><div class="sub" style="margin-top:6px;opacity:.75">اضغط موافق للمتابعة</div></div>`;}
+ if(S=='live'){h=top+`<div class="abs grp" style="left:60px;top:140px;width:300px;height:860px;padding-top:20px">${GR.map((g,i)=>`<div class="ch ${i==0?'on':''}" style="font-size:26px;height:72px">${g}</div>`).join('')}</div><div class="abs" style="left:380px;top:140px;width:560px"><div class="sec" style="padding:10px 26px 18px">الرياضة</div>${chs()}${demo}</div>`+video(1000,140,860,484,'الرياضة 2 · قيد التشغيل');}
+}
+if(V==2){
+ const rail=`<div class="abs rail" style="left:0;top:0;width:150px;height:1080px;padding-top:120px">${SEC.map(s=>`<div class="${(S=='live'?'مباشر':'الأفلام')==s&&S=='live'?'on':''}" style="height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">${ic(s)}<span class="sub">${s}</span></div>`).join('')}</div>`;
+ if(S=='home'){h=rail+`<div class="abs" style="left:210px;top:90px;width:640px"><div class="sec" style="font-size:48px">مساء الخير</div><div class="sub" style="margin-top:10px;opacity:.75">الأقسام</div></div>`;
+  SEC.forEach((s,i)=>{h+=`<div class="card ${i==2?'f':''}" style="left:210px;top:${240+i*128}px;width:640px;height:110px;flex-direction:row;align-items:center;justify-content:flex-start;gap:24px">${ic(s)}<b>${s}</b></div>`});
+  h+=video(920,160,940,529,'معاينة · مباشر')+`<div class="abs" style="left:920px;top:730px;width:940px"><div class="sec">متابعة: الرياضة 2</div></div>`;}
+ if(S=='live'){h=rail+`<div class="abs gsel row" style="left:210px;top:70px;width:640px;height:76px;padding:0 26px;justify-content:space-between"><span class="sec">الرياضة</span><span class="sub">تغيير المجموعة ▾</span></div><div class="abs" style="left:210px;top:180px;width:640px">${chs()}${demo}</div>`+video(920,160,940,529,'الرياضة 2 · قيد التشغيل');}
+}
+if(V==3){
+ const nav=`<div class="abs bnav ltr" style="left:0;top:960px;width:1920px;height:120px;display:flex;justify-content:center;gap:70px">${SEC.map(s=>`<div class="row ${(S=='live'?'مباشر':'المفضلة')==s?'on':''}" style="padding-top:34px;font-size:26px">${ic(s)}<span>${s}</span></div>`).join('')}</div>`;
+ if(S=='home'){h=nav+`<div class="abs" style="left:70px;top:70px;width:820px"><div class="sub" style="opacity:.7">البث</div><div class="gt sec" style="font-size:60px">الواجهة الرئيسية</div></div>`;
+  SEC.forEach((s,i)=>{const x=70+(i%3)*275,y=300+Math.floor(i/3)*300;h+=`<div class="card ${i==1?'f':''}" style="left:${x}px;top:${y}px;width:255px;height:280px">${ic(s)}<b>${s}</b></div>`});
+  h+=video(960,70,890,500,'معاينة · مباشر')+`<div class="abs" style="left:960px;top:610px;width:890px"><div class="sec">الرياضة 2</div><div class="sub" style="opacity:.7;margin-top:8px">آخر قناة شوهدت</div></div>`;}
+ if(S=='live'){h=nav+`<div class="abs" style="left:70px;top:60px;width:820px"><div class="sub" style="opacity:.7">المجموعة · ‹ ›</div><div class="gt sec" style="font-size:60px">الرياضة</div></div><div class="abs lines" style="left:70px;top:210px;width:820px">${chs(3,1,true)}${demo}</div>`+video(960,70,890,500,'الرياضة 2 · قيد التشغيل');}
+}
+if(V==4){
+ const snav=`<div class="abs snav" style="left:40px;top:80px;width:280px">${SEC.map(s=>`<div class="${(S=='live'?'مباشر':'البحث')==s?'on':''}" style="height:84px;display:flex;align-items:center;font-size:28px">${s}</div>`).join('')}</div>`;
+ if(S=='home'){h=snav+`<div class="abs" style="left:350px;top:80px;width:560px"><div class="sec" style="font-size:44px">أهلاً</div><div class="sub" style="opacity:.7;margin-top:8px">ابدأ من أحد الأقسام</div></div>`;
+  ['مباشر','المفضلة','الأفلام','المسلسلات'].forEach((s,i)=>{h+=`<div class="card ${i==0?'f':''}" style="left:350px;top:${210+i*170}px;width:560px;height:150px;flex-direction:row;align-items:center;justify-content:flex-start;gap:24px">${ic(s)}<b>${s}</b></div>`});
+  h+=video(960,80,900,506,'معاينة · مباشر')+`<div class="abs" style="left:960px;top:620px;width:900px"><div class="sec">الرياضة 2</div></div>`;}
+ if(S=='live'){h=snav+`<div class="abs row" style="left:350px;top:80px;width:580px;flex-wrap:wrap;gap:12px">${GR.slice(0,3).map((g,i)=>`<span class="chip ${i==0?'on':''}">${g}</span>`).join('')}<span class="chip">المزيد +4</span></div><div class="abs" style="left:350px;top:200px;width:580px">${chs()}${demo}</div>`+video(960,80,900,506,'الرياضة 2 · قيد التشغيل');}
+}
+if(S=='drawer'){
+ h=video(0,0,1920,1080,'ملء الشاشة · الرياضة 2')+`<div class="drw"><div class="h sec">الرياضة</div>${chs(3,1,V==3)}${V==4||V==1?demo:''}</div>`;
+}
+
+document.body.innerHTML=h+TAG;document.body.classList.add(S);
+if(S==='home'){
+ document.querySelectorAll('.nav .on,.bnav .on,.snav .on').forEach(e=>e.classList.remove('on'));
+ const cards=[...document.querySelectorAll('.card')];
+ if(V===1)cards.forEach((e,i)=>Object.assign(e.style,{left:'60px',top:(260+i*112)+'px',width:'860px',height:'100px'}));
+ if(V===3)cards.forEach((e,i)=>Object.assign(e.style,{left:'70px',top:(230+i*110)+'px',width:'820px',height:'98px'}));
+ if(V===4)cards.forEach((e,i)=>Object.assign(e.style,{left:'350px',top:(250+i*144)+'px',width:'560px',height:'120px'}));
+}
+if(S==='home'){
+ const groups=['الرياضة','الأخبار','الأطفال','الوثائقي','المنوعات','كل القنوات'];
+ document.querySelectorAll('.card').forEach((e,i)=>{e.classList.toggle('f',i===0);e.innerHTML='<span class="arrow">‹</span><b>'+groups[i]+'</b>';});
+ document.querySelectorAll('.sec').forEach(e=>{if(['الرئيسية','مساء الخير','الواجهة الرئيسية','أهلاً'].includes(e.textContent))e.textContent='مجموعاتك';});
+ document.querySelectorAll('.sub').forEach(e=>{if(['اختر قسماً للمتابعة','الأقسام','ابدأ من أحد الأقسام','البث'].includes(e.textContent))e.textContent='مباشر · اختر مجموعة للمشاهدة';});
+}
+if(S==='live'){
+ const box=document.createElement('section');box.className='meta';const bounds={1:[1000,680,860],2:[920,745,940],3:[960,625,890],4:[960,645,900]}[V];
+ Object.assign(box.style,{left:bounds[0]+'px',top:bounds[1]+'px',width:bounds[2]+'px'});
+ box.innerHTML='<span class="mark">LG STREAM</span><h2>الرياضة 2</h2><p>القناة المشغّلة · تصفّح دون مقاطعة المشاهدة</p><p>موافق للتشغيل · الأسهم للتنقل</p>';document.body.appendChild(box);
+}
+if(S==='drawer')document.querySelector('.drw').insertAdjacentHTML('beforeend','<div class="foot">موافق: تشغيل القناة<br>موافق على المشغّلة: ملء الشاشة<br>يمين: خيارات التشغيل · رجوع: إغلاق</div>');
+
+</script>
+</body>
+</html>
