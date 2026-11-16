@@ -158,6 +158,12 @@ test('measures intent-to-start/progress including switch delay and aborts a stal
     now: () => time, onState: next => { state = next; }, timers
   });
   player.start('https://example.test/live', 1, 0);
+  assert.equal(state.sourceMs, 120);
+  assert.equal(state.metadataMs, null);
+  time = 130; video.fire('loadedmetadata');
+  assert.equal(state.metadataMs, 130);
+  time = 135; video.fire('loadedmetadata');
+  assert.equal(state.metadataMs, 130);
   assert.equal(timers.entries[0].delay, 15000);
   time = 140; video.fire('waiting'); assert.equal(state.stalls, 0);
   time = 520; video.fire('playing'); assert.equal(state.playingMs, 520);

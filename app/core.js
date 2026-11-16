@@ -136,6 +136,8 @@
         channel: entry.channel,
         state: entry.state,
         playingMs: entry.playingMs,
+        sourceMs: entry.sourceMs,
+        metadataMs: entry.metadataMs,
         progressMs: entry.progressMs,
         firstFrameMs: entry.firstFrameMs,
         frameApi: entry.frameApi,
@@ -204,6 +206,7 @@
       var entry = {
         video: video, channel: channel, state: 'loading', started: started, playingMs: null,
         requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
+        sourceMs: null, metadataMs: null,
         progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0, playRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
         frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, seekInProgress: false, seekMediaTime: null, errorCode: 0
@@ -251,7 +254,10 @@
         clearStartup(entry); finishWait(entry); entry.state = 'paused'; notify(entry);
       });
       on('ended', function () { clearStartup(entry); finishWait(entry); entry.state = 'ended'; notify(entry); });
-      on('loadedmetadata', function () { notify(entry); });
+      on('loadedmetadata', function () {
+        if (entry.metadataMs === null) entry.metadataMs = Math.round(now() - entry.requested);
+        notify(entry);
+      });
       on('resize', function () { notify(entry); });
       on('error', function () {
         var code = video.error && video.error.code;
@@ -260,6 +266,7 @@
       });
       options.mountVideo(video);
       video.src = valid;
+      entry.sourceMs = Math.round(now() - entry.requested);
       if (entry.frameApi) {
         entry.frameHandle = video.requestVideoFrameCallback(function () {
           if (!validEntry()) return;

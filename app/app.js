@@ -449,6 +449,8 @@
       }
       if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && !extraDialog() && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
+      $('source-ms').textContent = state.sourceMs == null ? '—' : state.sourceMs + ' ms';
+      $('metadata-ms').textContent = state.metadataMs == null ? '—' : state.metadataMs + ' ms';
       $('progress-ms').textContent = state.progressMs === null || state.progressMs === undefined ? '—' : state.progressMs + ' ms';
       $('frame-ms').textContent = state.firstFrameMs === null || state.firstFrameMs === undefined ? (state.frameApi ? 'بانتظار الإشارة' : 'غير متاح') : state.firstFrameMs + ' ms';
       $('stall-count').textContent = state.stalls || 0;
@@ -606,7 +608,12 @@
     if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
-  function cancelSwitch() { switchPending = false; scheduler.cancel(); }
+  function cancelSwitch() {
+    switchPending = false; scheduler.cancel();
+    clearTimeout(hintTimer);
+    $('fullscreen-hint').hidden = true;
+    $('fullscreen-hint').classList.remove('channel-announcement');
+  }
   var lastConfirmIndex = null;
   var lastConfirmAt = 0;
   function activateChannel(index) {
@@ -618,6 +625,16 @@
   }
   function requestChannel(index, coalesce, retry) {
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
+    if (watchMode && coalesce && sources[index]) {
+      clearTimeout(hintTimer);
+      $('fullscreen-hint').textContent = sources[index].name || 'المصدر ' + (index + 1);
+      $('fullscreen-hint').classList.add('channel-announcement');
+      $('fullscreen-hint').hidden = false;
+      hintTimer = setTimeout(function () {
+        $('fullscreen-hint').hidden = true;
+        $('fullscreen-hint').classList.remove('channel-announcement');
+      }, 3000);
+    }
     switchPending = !!coalesce; if (coalesce) scheduler.request(intent); else scheduler.immediate(intent);
   }
   function stop() {
@@ -642,6 +659,8 @@
     document.body.classList.toggle('watch-mode', enabled);
     clearTimeout(hintTimer);
     $('fullscreen-hint').hidden = !enabled;
+    $('fullscreen-hint').textContent = 'موافق للتحكم · رجوع للخروج';
+    $('fullscreen-hint').classList.remove('channel-announcement');
     if (enabled) {
       document.body.tabIndex = -1;
       document.body.focus();
@@ -758,6 +777,7 @@
   function retryablePlayback() { return playingIndex !== null && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(lastState) >= 0; }
   function showPlaybackControls() {
     if (!$('track-picker').hidden) return;
+    if (switchPending && playingIndex !== null) selected = playingIndex;
     cancelSwitch();
     $('seek-status').textContent = ''; $('track-status').textContent = '';
     $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
