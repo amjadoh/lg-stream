@@ -13,6 +13,10 @@ button.primary, .quality-badge { background: var(--accent); color: var(--surface
 .tag, .footer-note, .list-count, .muted, .settings-grid span, .appearance-options span, .small-note { color: var(--muted); }
 .shell { padding: 28px 42px 20px; }
 header { margin-bottom: 20px; }
+.header-actions { direction: ltr; }
+.header-actions button { direction: rtl; }
+.header-settings { display: flex; align-items: center; gap: 10px; }
+.header-settings .nav-icon { width: 26px; height: 26px; }
 main { margin-top: 94px; }
 .library-panel, .library-panel.primary-open { width: 47vw; flex-basis: 47vw; grid-template-columns: 0 minmax(240px, 40%) minmax(0, 1fr); gap: 16px; }
 .library-panel.content-mode, .library-panel.content-mode.primary-open { width: 27vw; flex-basis: 27vw; grid-template-columns: 0 minmax(0, 1fr) 0; }

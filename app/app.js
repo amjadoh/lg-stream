@@ -924,7 +924,7 @@
     cancelSwitch();
     setWatchMode(false);
     diagnostics.hidden = true;
-    $('diagnostics-button').setAttribute('aria-expanded', 'false');
+    $('settings-info').setAttribute('aria-expanded', 'false');
     $('playlist-url').value = '';
     inputs.forEach(function (input, index) { input.value = sourceMode === 'manual' && sources[index] ? sources[index].url : ''; });
     LGI18n.text($('playlist-status'), sourceMode === 'playlist' ? 'القائمة الحالية محفوظة محليًا. يمكنك تحديثها أو لصق رابط جديد.' : '');
@@ -949,8 +949,8 @@
   }
   function closeDiagnostics() {
     diagnostics.hidden = true;
-    $('diagnostics-button').setAttribute('aria-expanded', 'false');
-    if (!returnToSettings()) $('diagnostics-button').focus();
+    $('settings-info').setAttribute('aria-expanded', 'false');
+    if (!returnToSettings()) $('nav-settings').focus();
   }
   $('source-form').addEventListener('submit', function (event) {
     event.preventDefault();
@@ -1154,12 +1154,12 @@
   $('setup-button').addEventListener('click', openSetup);
   $('start-button').addEventListener('click', openSetup);
   $('close-setup').addEventListener('click', closeSetup);
-  $('diagnostics-button').addEventListener('click', function () {
+  function openDiagnostics() {
     cancelSwitch();
     diagnostics.hidden = !diagnostics.hidden;
-    $('diagnostics-button').setAttribute('aria-expanded', String(!diagnostics.hidden));
+    $('settings-info').setAttribute('aria-expanded', String(!diagnostics.hidden));
     if (!diagnostics.hidden) $('close-diagnostics').focus();
-  });
+  }
   $('close-diagnostics').addEventListener('click', closeDiagnostics);
   $('toggle-button').addEventListener('click', function () { cancelSwitch(); player.toggle(); });
   $('retry-button').addEventListener('click', function () { if (playingIndex !== null) requestChannel(playingIndex, false, true); });
@@ -1181,23 +1181,23 @@
   function closeSpeed() {
     cancelSpeed();
     speedPanel.hidden = true;
-    $('speed-button').setAttribute('aria-expanded', 'false');
-    if (!returnToSettings()) $('speed-button').focus();
+    $('settings-speed').setAttribute('aria-expanded', 'false');
+    if (!returnToSettings()) $('nav-settings').focus();
   }
-  $('speed-button').addEventListener('click', function () {
+  function openSpeed() {
     cancelSwitch(); setWatchMode(false);
     if (!setup.hidden) closeSetup();
     diagnostics.hidden = true;
-    $('diagnostics-button').setAttribute('aria-expanded', 'false');
+    $('settings-info').setAttribute('aria-expanded', 'false');
     speedConnection = null;
     $('speed-wired').setAttribute('aria-pressed', 'false');
     $('speed-wifi').setAttribute('aria-pressed', 'false');
     speedControls(false);
     LGI18n.text($('speed-status'), 'اختر نوع الاتصال لبدء الاختبار.');
     speedPanel.hidden = false;
-    $('speed-button').setAttribute('aria-expanded', 'true');
+    $('settings-speed').setAttribute('aria-expanded', 'true');
     $('speed-wired').focus();
-  });
+  }
   ['wired', 'wifi'].forEach(function (connection) {
     $('speed-' + connection).addEventListener('click', function () {
       if (speedRunning) return;
@@ -1261,7 +1261,7 @@
   function closeExtraDialog() {
     var panel = extraDialog(); if (!panel) return;
     panel.hidden = true;
-    if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(true); $('nav-settings').focus(); }
+    if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
     else if (panel.id === 'category-picker') focusCategoryReturn();
     else if (panel.id === 'display-picker') {
@@ -1333,8 +1333,8 @@
     $(id).addEventListener('click', function () {
       settingsReturn = id; $('settings-home').hidden = true;
       if (id === 'settings-sources') openSetup();
-      else if (id === 'settings-speed') $('speed-button').click();
-      else if (id === 'settings-info') $('diagnostics-button').click();
+      else if (id === 'settings-speed') openSpeed();
+      else if (id === 'settings-info') openDiagnostics();
       else if (id === 'settings-appearance') { $('appearance-panel').hidden = false; $('appearance-panel').querySelector('[data-theme-choice="' + appearance.theme + '"]').focus(); }
     });
   });
@@ -1464,6 +1464,19 @@
       if (isInput && key !== 'ArrowUp' && key !== 'ArrowDown') return;
       if (/^Arrow/.test(key)) { moveFocus(dialog, key); event.preventDefault(); }
       return;
+    }
+    if (document.activeElement.closest && document.activeElement.closest('.header-actions')) {
+      var headerButtons = visibleControls(document.querySelector('.header-actions'));
+      var headerPosition = headerButtons.indexOf(document.activeElement);
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        var headerNext = headerPosition + (key === 'ArrowRight' ? 1 : -1);
+        if (headerButtons[headerNext]) headerButtons[headerNext].focus();
+        event.preventDefault(); return;
+      }
+      if (key === 'ArrowDown') { setPrimary(true); $('nav-search').focus(); event.preventDefault(); return; }
+    }
+    if (key === 'ArrowUp' && document.activeElement.closest && document.activeElement.closest('.primary-panel') && (appearance.theme === 'editorial' || document.activeElement === $('nav-search'))) {
+      $('nav-settings').focus(); event.preventDefault(); return;
     }
     if (appearance.theme === 'editorial' && document.activeElement.closest && document.activeElement.closest('.primary-panel')) {
       var mainButtons = visibleControls(document.querySelector('.primary-panel'));
