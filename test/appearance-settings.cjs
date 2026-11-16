@@ -30,6 +30,7 @@ async function main() {
       return route.abort();
     });
     await page.addInitScript(() => {
+      if (!localStorage.getItem('lg-stream-appearance-v1')) localStorage.setItem('lg-stream-appearance-v1', JSON.stringify({theme:'cinema',layout:'compact',controls:'compact'}));
       const states = new WeakMap();
       const state = video => {
         if (!states.has(video)) states.set(video, { paused: true, time: 0, source: '' });
@@ -85,11 +86,11 @@ async function main() {
     }
     // Starting on a channel, every settings card is reachable with the remote.
     await key('ArrowLeft'); await key('ArrowLeft'); await key('ArrowLeft');
-    await key('ArrowDown'); await key('ArrowDown'); await key('ArrowDown', 'nav-settings');
+    await key('ArrowUp'); await key('ArrowUp'); await key('ArrowUp', 'nav-settings');
     await key('Enter', 'manage-groups-button');
     assert.equal(await page.locator('#setup-panel').isVisible(), false);
     await page.screenshot({ animations: 'disabled', path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
-    assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series', 'nav-settings']);
+    assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series']);
     await key('ArrowLeft', 'settings-sources');
     await key('Enter');
     assert.equal(await page.evaluate(() => document.activeElement.tagName), 'FORM', 'Sources does not open the keyboard automatically');
@@ -103,7 +104,7 @@ async function main() {
       await page.locator(`[data-layout="${layout}"]`).click();
       assert.equal(await page.locator('body').getAttribute('data-layout'), layout);
       assert.equal(await page.evaluate(() => document.querySelector('video') === window.__originalVideo), true);
-      await key('Escape'); await key('Escape'); await key('ArrowRight');
+      await key('Escape'); await key('Escape'); await key('ArrowDown', 'nav-search'); await key('ArrowRight');
       if (layout === 'vertical') {
         await key('ArrowUp');
         assert.equal(await page.evaluate(() => document.activeElement.dataset.category), 'other', 'Up from first group returns through vertical shortcuts');
@@ -140,7 +141,7 @@ async function main() {
     }
     await page.locator('[data-controls="comfortable"]').click();
     await key('Escape', 'settings-appearance'); await key('Escape', 'nav-settings');
-    await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
+    await key('ArrowDown', 'nav-search'); await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
     await key('Enter'); await key('ArrowDown'); await key('Enter', 'groups-filter');
     assert.match(await page.locator('#groups-filter').innerText(), /رياضة/);
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
@@ -161,7 +162,7 @@ async function main() {
     await key('Escape', 'manage-groups-button');
     await page.locator('#settings-appearance').click();
     await page.locator('[data-layout="tabs"]').click(); await key('Escape'); await key('Escape');
-    await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
+    await key('ArrowDown', 'nav-search'); await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
     await page.locator('#category-shortcuts [data-category="sports"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 0);
     await page.locator('#category-shortcuts [data-category="all"]').click();

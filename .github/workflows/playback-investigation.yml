@@ -1,0 +1,30 @@
+name: Playback regression investigation
+on:
+  push:
+    branches: ['codex/investigate-playback-regression']
+    paths: ['investigations/**', '.github/workflows/playback-investigation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: f2dc0794d699ff2e315435e3edd6e6bd5aa99f24
+          path: baseline074
+      - uses: actions/checkout@v4
+        with:
+          ref: 82531107885d97c3e288cf208aa37372f2ebbfb0
+          path: baseline075
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node investigations/tv-playback-probe.test.cjs
+      - run: npx playwright install --with-deps chromium
+      - run: node investigations/playback-idle.cjs baseline074 baseline075 .

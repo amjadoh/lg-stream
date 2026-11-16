@@ -31,7 +31,13 @@ async function main() {
     });
     await page.addInitScript(() => {
       window.__navigationMediaStarts = 0;
-      HTMLMediaElement.prototype.play = function () { window.__navigationMediaStarts++; return Promise.resolve(); };
+      const mediaSources = new WeakMap();
+      Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get() { return mediaSources.get(this) || ''; }, set(value) { mediaSources.set(this, value); } });
+      HTMLMediaElement.prototype.play = function () {
+        window.__navigationMediaStarts++;
+        queueMicrotask(() => { if (this.isConnected) this.dispatchEvent(new Event('playing')); });
+        return Promise.resolve();
+      };
       HTMLMediaElement.prototype.pause = function () {};
       HTMLMediaElement.prototype.load = function () {};
       window.fetch = async () => {
@@ -126,6 +132,24 @@ async function main() {
     for (let step = 0; step < 10 && await page.locator('#channels .channel-button').first().getAttribute('data-index') !== '0'; step++) await wheelAtBoundary('#channels', false);
     assert.equal(await page.locator('#channels .channel-button').first().getAttribute('data-index'), '0', 'Wheel returns to the first channel window');
 
+    assert.equal(await page.evaluate(() => window.__navigationMediaStarts), 0, 'Catalogue browsing never starts playback');
+    await page.locator('#channels [data-index="0"]').click();
+    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.keyboard.press('Enter');
+    await page.evaluate(() => { window.__drawerVideo = document.querySelector('video'); });
+    for (let index = 1; index <= 45; index++) await page.keyboard.press('ArrowDown');
+    await focusedIndex(45);
+    assert.ok(await page.locator('#channels .channel-button').count() <= 40);
+    assert.equal(await page.evaluate(() => document.querySelector('video') === window.__drawerVideo), true, 'Drawer browsing keeps the current player');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true, 'Drawer Back returns to its group');
+    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.keyboard.press('Enter'); await focusedIndex(0);
+    for (let index = 1; index <= 45; index++) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape'); await page.keyboard.press('ArrowRight');
+    await focusedIndex(45);
+
     for (const [section, group, base] of [['movies', 'أفلام الاختبار', 95], ['series', 'حلقات الاختبار', 140]]) {
       await chooseSection(section, group);
       await focusedIndex(base, 'movie-card');
@@ -187,7 +211,7 @@ async function main() {
       assert.ok(detailsWidth > 600, 'Content without a poster uses the full details width, not the 240px poster column');
       await page.keyboard.press('Escape');
     }
-    assert.equal(await page.evaluate(() => window.__navigationMediaStarts), 0, 'Browsing and navigating never starts playback');
+    assert.equal(await page.evaluate(() => window.__navigationMediaStarts), 2, 'Only two explicit channel selections start playback; drawer and catalogue browsing do not');
     assert.deepEqual(errors, [], 'Navigation must not raise browser errors');
     assert.equal(unexpectedRequests, 0, 'Navigation checks do not download external media or assets');
     console.log('Navigation regressions passed: 95 channels, 45 movies, 45 episodes; both virtual-window directions, wheel access, sort navigation, active-group return, and poster-free details. No TV playback tested.');

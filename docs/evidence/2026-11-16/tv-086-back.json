@@ -1,0 +1,102 @@
+{
+  "before": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  },
+  "vod": [
+    {
+      "section": "movies",
+      "initial": true,
+      "group": true,
+      "primary": "movies",
+      "prompt": true,
+      "cancel": true
+    },
+    {
+      "section": "series",
+      "initial": true,
+      "group": true,
+      "primary": "series",
+      "prompt": true,
+      "cancel": true
+    }
+  ],
+  "liveGroup": true,
+  "liveSection": "tv",
+  "livePrompt": true,
+  "liveSame": {
+    "video": true,
+    "source": true
+  },
+  "drawer": {
+    "group": true,
+    "watch": false,
+    "sameVideo": true
+  },
+  "result": {
+    "elapsed": 31216,
+    "events": [
+      {
+        "type": "emptied",
+        "ms": 30,
+        "error": 0
+      },
+      {
+        "type": "waiting",
+        "ms": 65,
+        "error": 0
+      },
+      {
+        "type": "playing",
+        "ms": 1370,
+        "error": 0
+      },
+      {
+        "type": "waiting",
+        "ms": 1379,
+        "error": 0
+      },
+      {
+        "type": "playing",
+        "ms": 1578,
+        "error": 0
+      }
+    ],
+    "sameVideo": true,
+    "sameSource": true,
+    "advanced": 19.066999999999997,
+    "paused": false,
+    "error": 0,
+    "videos": 1,
+    "colors": {
+      "surface": "#060b16",
+      "accent": "#d9a441"
+    },
+    "metrics": {
+      "source-ms": "12 ms",
+      "metadata-ms": "1366 ms",
+      "playing-ms": "1387 ms",
+      "progress-ms": "2489 ms",
+      "stall-count": "1",
+      "stall-ms": "199 ms"
+    }
+  },
+  "after": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0
+  }
+}
