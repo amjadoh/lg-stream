@@ -98,7 +98,6 @@ async function main() {
     await page.screenshot({ path: path.join(root, 'artifacts/ui-live-columns-1080.png') });
     async function watch(index) {
       await page.locator(`#channels [data-index="${index}"]`).click();
-      await page.locator('#display-button').click();
       await page.locator('#display-fullscreen').click();
     }
     async function current(index) {
@@ -119,6 +118,7 @@ async function main() {
       await page.waitForFunction(() => ['error', 'ended', 'play-rejected', 'startup-timeout'].includes(document.body.dataset.state));
       assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), true, kind);
       assert.equal(await page.locator('#status').isVisible(), true, kind);
+      if (kind !== 'ended') assert.equal(await page.locator('#quality-badge').innerText(), 'غير متاحة', 'A released failed video has no current measured quality');
       assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
       await page.keyboard.press('ArrowDown');
       await current(kind === 'error' || kind === 'ended' ? 2 : 4);
@@ -158,7 +158,7 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHeldOK + 2, 'Back discards the highlighted channel without playing it');
     assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), false);
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true);
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter');
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.locator('#media-controls').isVisible(), true);
@@ -186,12 +186,24 @@ async function main() {
     // Highlighting another channel must not change the anchor for live arrows.
     await page.locator('#channels [data-index="0"]').click();
     await page.locator('#channels [data-index="4"]').focus();
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowDown'); await current(2);
     const beforeBurst = await page.evaluate(() => window.__mediaStarts);
-    await keys('ArrowDown', 'ArrowDown', 'ArrowDown'); await current(5);
-    assert.equal(await page.locator('#fullscreen-hint').innerText(), 'عنصر 5');
+    await keys('ArrowDown', 'ArrowDown', 'ArrowDown');
+    assert.equal(await page.locator('#watch-quality-value').innerText(), 'بانتظار القياس', 'A pending target never advertises the old channel resolution');
+    await current(5);
+    assert.equal(await page.locator('#watch-channel-name').innerText(), 'عنصر 5');
     assert.equal(await page.locator('#fullscreen-hint').isVisible(), true);
+    assert.equal(await page.locator('#watch-quality-value').innerText(), 'FHD · 1920×1080');
+    assert.equal(await page.locator('#watch-channel-number').innerText(), '4');
+    const numberBox = await page.locator('#watch-channel-number').boundingBox();
+    const nameBox = await page.locator('#watch-channel-name').boundingBox();
+    assert.ok(numberBox.x > nameBox.x, 'Arabic channel number is physically to the right of the name');
+    await page.waitForTimeout(3200);
+    assert.equal(await page.locator('#fullscreen-hint').isVisible(), true, 'Announcement remains beyond the former three seconds');
+    await page.waitForFunction(() => document.getElementById('fullscreen-hint').hidden, { timeout: 4000 });
+    await page.keyboard.press('ArrowUp'); await current(4);
+    await page.keyboard.press('ArrowDown'); await current(5);
     await page.evaluate(() => { document.body.dataset.state = 'loading'; });
     const announcementLayout = await page.evaluate(() => {
       const hint = document.getElementById('fullscreen-hint').getBoundingClientRect();
@@ -201,13 +213,13 @@ async function main() {
     assert.ok(announcementLayout.bottom < announcementLayout.barTop, 'Channel name leaves the loading/status bar readable');
     await page.evaluate(() => { document.body.dataset.state = 'playing'; });
     await page.screenshot({ path: path.join(root, 'artifacts/ui-channel-switch-1080.png') });
-    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 1, 'A burst opens only the final live source');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 3, 'A burst opens only the final live source');
     await page.keyboard.press('ArrowDown'); await page.waitForTimeout(160);
-    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 1, 'Last live channel does not wrap');
+    assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 3, 'Last live channel does not wrap');
     await page.keyboard.press('Escape');
     await page.locator('#groups [data-group="مجموعة الاختبار"]').focus();
     assert.equal(await page.locator('#fullscreen-hint').isVisible(), false);
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.locator('#media-controls').isVisible(), true, 'A playing channel outside the visible group leaves controls accessible');
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
@@ -233,7 +245,7 @@ async function main() {
     assert.deepEqual(await page.locator('#channels .channel-button').evaluateAll(nodes => nodes.map(node => Number(node.dataset.index))), [0, 2, 4], 'Live drawer excludes VOD from mixed favorites');
     assert.equal(await page.locator('#fullscreen-hint').isVisible(), false);
     await page.keyboard.press('Escape');
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowDown'); await current(2);
     await page.keyboard.press('ArrowDown'); await current(4);
     await page.keyboard.press('ArrowUp'); await current(2);
@@ -296,7 +308,6 @@ async function main() {
     await page.locator('#channels [data-index="1"]').click();
     await current(1);
     assert.equal(await page.locator('video').evaluate(video => video.src), 'https://provider.example.test/live/user/pass/43.m3u8');
-    await page.locator('#display-button').click();
     await page.locator('#display-fullscreen').click();
     await page.keyboard.press('ArrowUp');
     await current(0);

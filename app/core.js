@@ -192,6 +192,19 @@
     quality.forEach(function (value) { name = name.replace(new RegExp('\\b' + value + '\\b', 'gi'), ' '); });
     return name;
   }
+  function channelTitle(name) {
+    return stripCatalogQuality(name || '', catalogQuality(name || '')).replace(/\(\s*[\/|,-]*\s*\)|\[\s*[\/|,-]*\s*\]/g, ' ').replace(/^[\s|:\/_-]+|[\s|:\/_-]+$/g, '').replace(/\s+/g, ' ');
+  }
+  function pictureScale(mode, videoWidth, videoHeight, hostWidth, hostHeight) {
+    if (mode === 'contain') return 1;
+    var cover = 1;
+    if (videoWidth > 0 && videoHeight > 0 && hostWidth > 0 && hostHeight > 0) {
+      var relativeAspect = (videoWidth / videoHeight) / (hostWidth / hostHeight);
+      cover = Math.max(relativeAspect, 1 / relativeAspect);
+    }
+    var zoom = mode === 'zoom125' ? 1.25 : mode === 'zoom135' ? 1.35 : 1;
+    return Math.min(4, cover * zoom);
+  }
   function compactChannelName(name, group) {
     var match = catalogBrandPattern.exec(name || '');
     if (!match) return arabicCatalogName(name);
@@ -554,5 +567,5 @@
     if (/(?:^|[^\p{L}\p{N}])(?:mbc|[إا]م\s+بي\s+سي)[ ._-]*(?:2|max|action|bollywood|ماكس|أكشن|بوليوود)(?=$|[^\p{L}\p{N}])/iu.test(text) || /روتانا\s+سينما/i.test(text)) return 'movies';
     return null;
   }
-  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

@@ -12,6 +12,11 @@
   "غير مصنّف": "Uncategorized",
   "ملائم": "Fit",
   "ملء": "Fill",
+  "ملاءمة العرض": "Picture fit",
+  "تكبير 125%": "Zoom 125%",
+  "تكبير 135%": "Zoom 135%",
+  "الجودة الفعلية": "Actual quality",
+  "بانتظار القياس": "Awaiting measurement",
   "تمديد": "Stretch",
   "جاهز": "Ready",
   "جارٍ فتح البث…": "Opening stream…",
@@ -281,7 +286,7 @@
   var originals = new WeakMap();
   var arabicProviderText = new WeakMap();
   var attributes = new WeakMap();
-  var protectedNodes = '[data-provider-text="true"],#fullscreen-hint.channel-announcement,.group-button[data-group]:not([data-group=""]),[data-language]';
+  var protectedNodes = '[data-provider-text="true"],.group-button[data-group]:not([data-group=""]),[data-language]';
   var keys = Object.keys(dictionary).sort(function(a,b){return b.length-a.length;});
   var pattern = new RegExp(keys.map(function(k){return Array.from(k).map(function(c){return String.fromCharCode(92)+'u'+c.charCodeAt(0).toString(16).padStart(4,'0');}).join('');}).join('|'),'g');
   function t(value) {

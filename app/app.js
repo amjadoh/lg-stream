@@ -19,7 +19,6 @@
   var categories = [['all', 'الكل'], ['sports', 'رياضة'], ['movies', 'قنوات أفلام'], ['news', 'أخبار'], ['kids', 'أطفال'], ['documentary', 'وثائقي'], ['other', 'غير مصنّف']];
   var appearance = { theme: 'editorial', layout: 'compact', controls: 'compact' };
   var settingsReturn = null;
-  var displayReturn = null;
   var categoryReturn = 'header';
   var activeGroup = '';
   var activeSection = 'tv';
@@ -41,8 +40,10 @@
   var watchChannels = null;
   var watchChannelsWindow = 0;
   var hintTimer = null;
+  var announcementIndex = null;
+  var announcementQualityReady = false;
   var fitIndex = 0;
-  var fitModes = [{ value: 'contain', label: 'ملائم' }, { value: 'cover', label: 'ملء' }, { value: 'fill', label: 'تمديد' }];
+  var fitModes = [{ value: 'contain', label: 'ملائم' }, { value: 'cover', label: 'ملء' }, { value: 'zoom125', label: 'تكبير 125%' }, { value: 'zoom135', label: 'تكبير 135%' }];
   var setup = $('setup-panel');
   var searchPanel = $('search-panel');
   var diagnostics = $('diagnostics-panel');
@@ -152,7 +153,7 @@
   }
   function contentMaxStart(length) { return Math.max(0, Math.ceil(Math.max(0, length - contentWindowSize) / 4) * 4); }
   function setPrimary(open) {
-    document.querySelector('.library-panel').classList.toggle('primary-open', open);
+    document.querySelector('.library-panel').classList.toggle('primary-open', open); applyPictureFit();
   }
   function closeSearch() {
     clearTimeout(searchTimer); searchTimer = null;
@@ -185,7 +186,7 @@
   }
   function openSearch() { cancelSwitch(); setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
   function renderPrimary() {
-    document.querySelector('.library-panel').classList.toggle('content-mode', activeSection === 'movies' || activeSection === 'series');
+    document.querySelector('.library-panel').classList.toggle('content-mode', activeSection === 'movies' || activeSection === 'series'); applyPictureFit();
     Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
       button.classList.toggle('active', button.dataset.section === activeSection);
     });
@@ -451,13 +452,15 @@
     },
     mountVideo: function (video) {
       $('video-host').appendChild(video);
+      ['loadedmetadata', 'resize'].forEach(function (name) { video.addEventListener(name, applyPictureFit); });
+      requestAnimationFrame(applyPictureFit);
       ['loadedmetadata', 'durationchange', 'timeupdate', 'progress'].forEach(function (name) { video.addEventListener(name, function () { if (video.parentNode && !$('media-controls').hidden) updatePlaybackControls(); }); });
       [video.audioTracks, video.textTracks].forEach(function (tracks) {
         if (tracks && tracks.addEventListener) ['addtrack', 'removetrack', 'change'].forEach(function (name) { tracks.addEventListener(name, function () { if (video.parentNode && !$('media-controls').hidden) updateTrackOptions(); }); });
       });
       updateTrackOptions();
     },
-    unmountVideo: function (video) { cancelSeek(); closeTrackPicker(false); if (!$('display-picker').hidden) closeExtraDialog(); video.remove(); },
+    unmountVideo: function (video) { cancelSeek(); closeTrackPicker(false); video.remove(); },
     onState: function (state) {
       lastState = state.state;
       document.body.dataset.state = state.state;
@@ -469,6 +472,7 @@
       $('stop-button').disabled = state.state === 'idle';
       $('retry-button').disabled = playingIndex === null;
       $('display-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
+      $('display-fullscreen').disabled = $('display-button').disabled;
       updateChannelStates();
       if (['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
         if (playingIndex === null) { stop(); focusSelected(); LGI18n.text($('status'), labels[state.state]); return; }
@@ -487,9 +491,19 @@
       $('stall-count').textContent = state.stalls || 0;
       $('stall-ms').textContent = (state.stallMs || 0) + ' ms';
       $('video-size').textContent = state.width ? state.width + ' × ' + state.height : '—';
-      var quality = api.qualityLabel(state.width, state.height);
-      $('quality-badge').textContent = quality;
-      $('quality-badge').hidden = !quality;
+      var failed = ['error', 'play-rejected', 'startup-timeout'].indexOf(state.state) >= 0;
+      var quality = failed ? '' : measuredQuality(state.width, state.height);
+      LGI18n.text($('quality-badge'), quality || (failed || state.state === 'idle' ? 'غير متاحة' : 'بانتظار القياس'));
+      $('actual-quality').hidden = playingIndex === null;
+      if (watchMode && announcementIndex === playingIndex && !switchPending && quality) {
+        LGI18n.text($('watch-quality-value'), quality);
+        if (!announcementQualityReady) {
+          announcementQualityReady = true;
+          $('fullscreen-hint').hidden = false;
+          $('fullscreen-hint').classList.add('channel-announcement');
+          scheduleAnnouncementHide();
+        }
+      }
       $('error-code').textContent = state.errorCode || '—';
     }
   });
@@ -634,7 +648,8 @@
     playingIndex = index;
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
-    LGI18n.provider($('channel-title'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index, ''));
+    var title = api.channelTitle(sources[index].name);
+    LGI18n.provider($('channel-title'), title, 'المصدر ' + (index + 1), entrySection(index) === 'tv' ? api.compactChannelName(title, '') : '');
     if (!watchMode && activeSection === 'tv') focusChannel(index);
     var playbackSource = sources[index].url;
     if (liveTransport === 'hls' && sourceMode === 'playlist' && entrySection(index) === 'tv') {
@@ -649,6 +664,7 @@
     clearTimeout(hintTimer);
     $('fullscreen-hint').hidden = true;
     $('fullscreen-hint').classList.remove('channel-announcement');
+    announcementIndex = null; announcementQualityReady = false;
   }
   var lastConfirmIndex = null;
   var lastConfirmAt = 0;
@@ -667,16 +683,31 @@
   function requestChannel(index, coalesce, retry) {
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
     if (watchMode && coalesce && sources[index]) {
-      clearTimeout(hintTimer);
+      announcementIndex = index; announcementQualityReady = false;
       $('fullscreen-hint').classList.add('channel-announcement');
-      LGI18n.provider($('fullscreen-hint'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index, ''));
+      var title = api.channelTitle(sources[index].name);
+      LGI18n.provider($('watch-channel-name'), title, 'المصدر ' + (index + 1), api.compactChannelName(title, ''));
+      var position = visibleIndexes().indexOf(index);
+      $('watch-channel-number').textContent = position >= 0 ? String(position + 1) : '';
+      $('watch-channel-number').hidden = position < 0;
+      var video = $('video-host').querySelector('video');
+      var quality = index === playingIndex && video ? measuredQuality(video.videoWidth, video.videoHeight) : '';
+      announcementQualityReady = !!quality;
+      LGI18n.text($('watch-quality-value'), quality || 'بانتظار القياس');
+      $('watch-quality-row').hidden = false;
       $('fullscreen-hint').hidden = false;
-      hintTimer = setTimeout(function () {
-        $('fullscreen-hint').hidden = true;
-        $('fullscreen-hint').classList.remove('channel-announcement');
-      }, 3000);
+      scheduleAnnouncementHide();
     }
     switchPending = !!coalesce; if (coalesce) scheduler.request(intent); else scheduler.immediate(intent);
+  }
+  function measuredQuality(width, height) { var label = api.qualityLabel(width, height); return label ? label + ' · ' + width + '×' + height : ''; }
+  function scheduleAnnouncementHide() {
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () {
+      $('fullscreen-hint').hidden = true;
+      $('fullscreen-hint').classList.remove('channel-announcement');
+      if (announcementQualityReady) announcementIndex = null;
+    }, 6000);
   }
   function stop() {
     cancelSwitch();
@@ -695,14 +726,16 @@
     closeWatchChannels();
     cancelSeek();
     closeTrackPicker(false);
-    $('display-picker').hidden = true;
     watchMode = enabled;
     $('media-controls').hidden = true;
     document.body.classList.toggle('watch-mode', enabled);
     clearTimeout(hintTimer);
     $('fullscreen-hint').hidden = !enabled;
     $('fullscreen-hint').classList.remove('channel-announcement');
-    LGI18n.provider($('fullscreen-hint'), '', isOnDemand() ? 'موافق للتحكم · رجوع للخروج' : 'موافق للقنوات · يمين للتحكم');
+    announcementIndex = null; announcementQualityReady = false;
+    $('watch-channel-number').hidden = true; $('watch-quality-row').hidden = true;
+    LGI18n.provider($('watch-channel-name'), '', isOnDemand() ? 'موافق للتحكم · رجوع للخروج' : 'موافق للقنوات · يمين للتحكم');
+    requestAnimationFrame(applyPictureFit);
     if (enabled) {
       document.body.tabIndex = -1;
       document.body.focus();
@@ -1275,7 +1308,7 @@
 
 
   function extraDialog() {
-    return ['exit-confirm', 'display-picker', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['exit-confirm', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   var exitReturn = null;
   function focusSection() {
@@ -1322,10 +1355,6 @@
     else if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
     else if (panel.id === 'category-picker') focusCategoryReturn();
-    else if (panel.id === 'display-picker') {
-      if (displayReturn && displayReturn.offsetParent && !displayReturn.disabled) displayReturn.focus();
-      else if (watchMode) showPlaybackControls(); else focusSelected();
-    }
   }
   function renderAppearance() {
     document.body.dataset.theme = appearance.theme; document.body.dataset.layout = appearance.layout; document.body.dataset.controls = appearance.controls;
@@ -1336,6 +1365,7 @@
     if (appearance.layout === 'tabs') document.querySelector('.library-panel').appendChild(shortcuts);
     else $('groups-filter').after(shortcuts);
     renderCategories();
+    requestAnimationFrame(applyPictureFit);
   }
   function renderCategories() {
     var live = activeSection === 'tv';
@@ -1378,14 +1408,30 @@
     });
     $('category-picker').hidden = false; $('category-list').querySelector('[aria-pressed="true"]').focus();
   }
-  function openDisplay() {
-    cancelSwitch(); displayReturn = document.activeElement;
-    LGI18n.text($('display-fullscreen'), watchMode ? 'العودة للقائمة' : 'ملء الشاشة');
-    Array.prototype.forEach.call($('display-picker').querySelectorAll('[data-fit]'), function (button) { button.setAttribute('aria-pressed', String(Number(button.dataset.fit) === fitIndex)); });
-    $('display-picker').hidden = false; $('display-fullscreen').focus();
+  function applyPictureFit() {
+    var host = $('video-host'); var video = host.querySelector('video');
+    if (!video) return;
+    var mode = fitModes[fitIndex].value;
+    var hostWidth = host.clientWidth; var hostHeight = host.clientHeight; var width = hostWidth; var height = hostHeight;
+    var videoWidth = video.videoWidth; var videoHeight = video.videoHeight;
+    if (videoWidth > 0 && videoHeight > 0 && hostWidth > 0 && hostHeight > 0) {
+      // webOS ignores object-fit, so the element itself gets the source aspect ratio (uniform scale, centred).
+      var fit = Math.min(hostWidth / videoWidth, hostHeight / videoHeight) * api.pictureScale(mode, videoWidth, videoHeight, hostWidth, hostHeight);
+      width = videoWidth * fit; height = videoHeight * fit;
+    }
+    video.style.width = width + 'px'; video.style.height = height + 'px';
+    video.style.left = ((hostWidth - width) / 2) + 'px'; video.style.top = ((hostHeight - height) / 2) + 'px';
   }
+  function cyclePictureFit() {
+    if (switchPending && playingIndex !== null) selected = playingIndex;
+    cancelSwitch(); fitIndex = (fitIndex + 1) % fitModes.length;
+    $('video-host').dataset.fit = fitModes[fitIndex].value;
+    ['display-button', 'media-display'].forEach(function (id) { LGI18n.text($(id), 'ملاءمة العرض · ' + fitModes[fitIndex].label); });
+    applyPictureFit();
+  }
+  window.addEventListener('resize', applyPictureFit);
   $('groups-filter').addEventListener('click', openCategories);
-  ['close-settings', 'close-appearance', 'close-category', 'close-display'].forEach(function (id) { $(id).addEventListener('click', closeExtraDialog); });
+  ['close-settings', 'close-appearance', 'close-category'].forEach(function (id) { $(id).addEventListener('click', closeExtraDialog); });
   ['settings-sources', 'settings-speed', 'settings-info', 'settings-appearance', 'manage-groups-button'].forEach(function (id) {
     $(id).addEventListener('click', function () {
       settingsReturn = id; $('settings-home').hidden = true;
@@ -1403,13 +1449,10 @@
       catch (_) { LGI18n.text($('appearance-status'), 'تغيّر المظهر لهذه الجلسة؛ تعذر حفظ الاختيار.'); }
     });
   });
-  ['display-button', 'media-display'].forEach(function (id) { $(id).addEventListener('click', openDisplay); });
+  ['display-button', 'media-display'].forEach(function (id) { $(id).addEventListener('click', cyclePictureFit); });
   $('display-fullscreen').addEventListener('click', function () {
     if (watchMode) { exitPlayback(); return; }
     setWatchMode(true);
-  });
-  Array.prototype.forEach.call($('display-picker').querySelectorAll('[data-fit]'), function (button) {
-    button.addEventListener('click', function () { fitIndex = Number(button.dataset.fit); $('video-host').dataset.fit = fitModes[fitIndex].value; closeExtraDialog(); });
   });
   try {
     var savedAppearance = JSON.parse(localStorage.getItem('lg-stream-appearance-v1') || 'null');
@@ -1664,7 +1707,7 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
@@ -1672,7 +1715,7 @@
   });
   window.addEventListener('pageshow', function () { unloading = false; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
-    unloading = true; ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker', 'display-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
+    unloading = true; ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
     if (!automaticReleasedView && sourceMode === 'playlist' && sources.length) automaticReleasedView = captureRuntimeView();
     catalogViewRevision += 1; favoritesRevision += 1; sources = []; favorites = {}; activeGroup = ''; activeSection = 'tv'; selected = 0; contentWindowStart = 0; channelWindowStart = 0; renderPrimary(); renderGroups(); renderChannels();
     $('playlist-url').value = ''; inputs.forEach(function (input) { input.value = ''; });

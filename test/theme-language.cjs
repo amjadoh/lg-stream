@@ -209,7 +209,7 @@ async function main() {
     assert.equal(await page.locator('#channels .channel-label').first().innerText(), 'beIN 1');
     await page.locator('#channels .channel-button').first().click();
     const arabicStarts = await page.evaluate(() => { window.__arabicVideo = document.querySelector('video'); return window.__mediaStarts; });
-    assert.equal(await page.locator('#channel-title').innerText(), 'beIN 1 FHD');
+    assert.equal(await page.locator('#channel-title').innerText(), 'beIN 1');
     assert.match(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'), /beIN 1/);
     assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
     await page.locator('#nav-settings').click();
@@ -225,7 +225,7 @@ async function main() {
     await page.locator('#nav-settings').click();
     await page.locator('[data-language="en"]').click();
     assert.equal(await page.locator('#channels .channel-label').first().innerText(), 'beIN SPORTS 1 FHD');
-    assert.equal(await page.locator('#channel-title').innerText(), 'beIN SPORTS 1 FHD');
+    assert.equal(await page.locator('#channel-title').innerText(), 'beIN SPORTS 1');
     await page.locator('[data-language="ar"]').click();
     assert.equal(await page.evaluate(() => document.querySelector('video') === window.__arabicVideo), true);
     assert.equal(await page.evaluate(() => window.__mediaStarts), arabicStarts);

@@ -1,0 +1,31 @@
+{
+  "installedVersion": "0.8.8",
+  "observationMs": 35026,
+  "samples": 141,
+  "affectedChannel": {
+    "attemptsWithMediaError4": 5,
+    "metadataReceivedInFailedAttempts": false,
+    "decodedDimensionsInFailedAttempts": [0, 0]
+  },
+  "neighborChannel": {
+    "successfulStarts": 2,
+    "decodedDimensions": [1280, 720]
+  },
+  "separateBoundedFetchWhenVideoAbsent": {
+    "status": 403,
+    "contentType": "text/html; charset=UTF-8",
+    "bodyRetained": false
+  },
+  "oneManualNativeRetry": {
+    "stateAfter4Seconds": "playing",
+    "nativeNetworkResponsesExposedByInspector": 0,
+    "playbackCodeChanged": false,
+    "followupMs": 10002,
+    "mediaTimeAdvancedSeconds": 10.034,
+    "sameVideo": true,
+    "decodedDimensions": [1280, 720],
+    "errorCode": 0,
+    "bufferAheadSeconds": 41.696
+  },
+  "conclusion": "Transient source-delivery or native-source acceptance issue is supported. The separate fetch response cannot establish the HTTP status of the native player's failed requests. Root cause of all reported interruptions remains unconfirmed."
+}
