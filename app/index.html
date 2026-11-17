@@ -46,17 +46,17 @@
           <p id="movie-count" class="list-count"></p><div id="movie-grid" class="movie-grid"></div>
         </section>
         <div id="empty-state" class="empty-state"><span class="play-symbol" aria-hidden="true">▷</span><h2 id="empty-title">شاشتك، وبثك المفضّل</h2><p id="empty-description">أضف حتى ثلاثة مصادر، ثم اختر قناة لبدء المشاهدة.</p><button id="start-button" class="primary" type="button">إضافة مصدر</button></div>
-        <p id="fullscreen-hint" class="fullscreen-hint" hidden>موافق للتحكم · رجوع للخروج</p>
+        <div id="fullscreen-hint" class="fullscreen-hint" hidden><div class="announcement-heading"><span id="watch-channel-number" class="watch-channel-number" dir="ltr" hidden></span><span id="watch-channel-name" dir="auto">موافق للتحكم · رجوع للخروج</span></div><div id="watch-quality-row" class="watch-quality-row" hidden><span>الجودة الفعلية</span><strong id="watch-quality-value" dir="ltr"></strong></div></div>
         <section id="media-controls" class="media-controls" aria-label="التحكم بالمشاهدة" hidden>
           <div id="seek-controls"><button id="seek-back" type="button">رجوع 30 ثانية</button><div class="timeline"><p id="playback-time" dir="ltr">—</p><input id="seek-position" type="range" min="0" max="0" step="10" aria-label="موضع التشغيل"></div><button id="seek-forward" type="button">تقديم 30 ثانية</button><p id="seek-status" role="status"></p></div>
-          <div class="media-actions"><div class="form-actions"><button id="media-toggle" type="button">إيقاف مؤقت</button><button id="media-display" type="button" aria-haspopup="dialog">العرض</button><button id="media-close" type="button">إخفاء التحكم</button><button id="media-exit" type="button">الخروج من المشاهدة</button></div>
+          <div class="media-actions"><div class="form-actions"><button id="media-toggle" type="button">إيقاف مؤقت</button><button id="media-display" type="button">ملاءمة العرض · ملائم</button><button id="media-close" type="button">إخفاء التحكم</button><button id="media-exit" type="button">الخروج من المشاهدة</button></div>
           <div class="track-options"><button id="audio-language" type="button" aria-haspopup="dialog" aria-controls="track-picker" aria-expanded="false">لغة الصوت</button><button id="subtitle-language" type="button" aria-haspopup="dialog" aria-controls="track-picker" aria-expanded="false">الترجمة</button></div></div>
           <p id="track-status" role="status"></p>
         </section>
-        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><span id="quality-badge" class="quality-badge" hidden></span><span id="status" role="status" aria-live="polite">جاهز</span></div>
+        <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><div id="actual-quality" class="actual-quality" hidden><span>الجودة الفعلية</span><strong id="quality-badge" class="quality-badge" dir="ltr"></strong></div><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="display-button" type="button" aria-haspopup="dialog" disabled>العرض</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
   </div>
   <section id="exit-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="exit-title" hidden>
     <div class="setup-card"><h2 id="exit-title">هل تريد الخروج من التطبيق؟</h2><div class="form-actions"><button id="exit-cancel" type="button">إلغاء</button><button id="exit-accept" type="button">خروج</button></div></div>
@@ -80,9 +80,6 @@
   </section>
   <section id="category-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="category-title" hidden>
     <div class="setup-card track-card"><h2 id="category-title">فلتر المجموعات</h2><p class="small-note">حسب اسم القناة، ويُستخدم اسم المجموعة عند غموضه. «الكل» يعرض جميع القنوات.</p><div id="category-list" class="track-list"></div><button id="close-category" type="button">رجوع</button></div>
-  </section>
-  <section id="display-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="display-title" hidden>
-    <div class="setup-card track-card"><h2 id="display-title">العرض</h2><div class="track-list"><button id="display-fullscreen" type="button">ملء الشاشة</button><button data-fit="0" type="button">ملائم · الصورة كاملة</button><button data-fit="1" type="button">تكبير مع قص الأطراف</button><button data-fit="2" type="button">تمديد</button></div><button id="close-display" type="button">رجوع</button></div>
   </section>
   <section id="track-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="track-picker-title" hidden>
     <div class="setup-card track-card"><h2 id="track-picker-title">لغة الصوت</h2><div id="track-list" class="track-list"></div><button id="close-track-picker" type="button">رجوع</button></div>

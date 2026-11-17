@@ -71,9 +71,8 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .channel-empty span { color: #9baabd; font-size: 20px; }
 .viewing-panel { background: #000; flex: 1; min-width: 0; position: relative; overflow: hidden; border-radius: 20px; border: 1px solid #2b394d; }
 .video-host, .video-host video { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+.video-host { overflow: hidden; }
 .video-host video { object-fit: contain; background: #000; }
-.video-host[data-fit="cover"] video { object-fit: cover; }
-.video-host[data-fit="fill"] video { object-fit: fill; }
 .movie-browser { position: absolute; inset: 0; z-index: 1; overflow: auto; scrollbar-width: none; padding: 34px 38px 110px; background: radial-gradient(circle at top right, #20394b, #0d151f 58%); }
 .movie-browser::-webkit-scrollbar { display: none; }
 .movie-heading { position: sticky; z-index: 3; top: -34px; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: -4px 0 24px; padding: 8px 0 12px; background: #12202c; }
@@ -95,12 +94,21 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 #channel-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 #status { color: #f6d28a; font-size: 20px; text-align: left; margin-right: auto; }
 .quality-badge { direction: ltr; color: #161006; background: #d9a441; border-radius: 8px; padding: 4px 10px; font: bold 17px Arial, sans-serif; }
+.actual-quality { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.actual-quality > span { font-size: 14px; color: #a1aec1; }
 body[data-state="error"] #status, body[data-state="play-rejected"] #status, body[data-state="startup-timeout"] #status { color: #ffc6b5; }
 footer { min-height: 100px; padding-top: 24px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
 .footer-note { color: #a1aec1; font-size: 18px; }
 .fullscreen-hint { position: absolute; z-index: 2; top: 38px; left: 50%; transform: translateX(-50%); margin: 0; padding: 16px 30px; border: 1px solid #516374; border-radius: 12px; background: rgba(9,15,23,.94); color: #e2e9f2; white-space: nowrap; max-width: 85%; overflow: hidden; text-overflow: ellipsis; }
 body.watch-mode .viewing-panel { position: fixed; inset: 0; z-index: 5; border: 0; border-radius: 0; }
 .fullscreen-hint.channel-announcement { top: auto; bottom: 48px; left: auto; right: 48px; transform: none; min-width: 300px; max-width: 65%; padding: 24px 32px; border-right: 4px solid #e6b963; border-radius: 18px; font-size: 32px; text-align: right; }
+.fullscreen-hint.channel-announcement { white-space: normal; text-overflow: clip; }
+.announcement-heading { display: flex; align-items: center; gap: 18px; direction: ltr; }
+html[dir="rtl"] .announcement-heading, html[dir="rtl"] .watch-quality-row { direction: rtl; }
+#watch-channel-name { min-width: 0; overflow-wrap: anywhere; }
+.watch-channel-number { flex-shrink: 0; color: #d9a441; font-size: 28px; }
+.watch-quality-row { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 22px; direction: ltr; }
+.watch-quality-row > span { color: #a1aec1; font-size: 18px; }
 body.watch-mode:not([data-state="playing"]) .fullscreen-hint.channel-announcement { top: 48px; bottom: auto; }
 body.watch-mode header, body.watch-mode .library-panel, body.watch-mode footer, body.watch-mode .empty-state, body.watch-mode .movie-browser { display: none; }
 body.watch-mode.watch-channels .library-panel { display: flex; position: fixed; z-index: 6; left: 48px; top: 48px; bottom: 48px; width: 480px; max-width: 42vw; padding: 0; }

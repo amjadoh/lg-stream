@@ -211,12 +211,13 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.deepEqual(errors, [], 'Browser errors before the first playback request');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1);
-    assert.equal(await page.locator('#quality-badge').innerText(), 'FHD');
+    assert.equal(await page.locator('#quality-badge').innerText(), 'FHD · 1920×1080');
     const fitStarts = await page.evaluate(() => window.__mediaStarts);
     await page.locator('#display-button').click();
-    await page.locator('[data-fit="1"]').click();
     assert.equal(await page.locator('#video-host').getAttribute('data-fit'), 'cover');
     assert.equal(await page.evaluate(() => window.__mediaStarts), fitStarts, 'Changing picture fit must preserve the media element');
+    const fittedRectangle = await page.locator('video').evaluate(video => ({ width: parseFloat(video.style.width), height: parseFloat(video.style.height) }));
+    assert.ok(Math.abs(fittedRectangle.width / fittedRectangle.height - 1920 / 1080) < 0.001, 'The video rectangle itself preserves source aspect ratio on native renderers');
     await page.locator('#channels .channel-button').nth(1).focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts), 1, 'Selecting the current channel must not restart it');
@@ -232,7 +233,6 @@ async function main() {
     assert.equal(await page.locator('video').count(), 1);
 
     await page.evaluate(() => { window.__originalVideo = document.querySelector('video'); });
-    await page.locator('#display-button').click();
     await page.locator('#display-fullscreen').click();
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true);
     await page.keyboard.press('Escape');
@@ -265,7 +265,6 @@ async function main() {
     await pendingThen('nav-search');
     assert.equal(await page.locator('#search-panel').isVisible(), true);
     await page.keyboard.press('Escape');
-    await page.locator('#display-button').click();
     await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter');
     await pendingThen('media-toggle');
@@ -288,7 +287,6 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0, 'Leaving the app must release media');
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeHide, 'Returning must not automatically restart media');
     await page.locator('#channels .channel-button').first().click();
-    await page.locator('#display-button').click();
     await page.locator('#display-fullscreen').click();
     await setMediaTracks([{ language: 'ar', enabled: true }, { language: 'en', enabled: false }], [{ kind: 'captions', language: 'en', mode: 'disabled' }]);
     await page.keyboard.press('ArrowRight');
@@ -699,8 +697,9 @@ async function main() {
     await page.locator('#details-trailer').click();
     await page.keyboard.press('Enter'); await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
-    await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
-    assert.equal(await page.locator('video').count(), 0, 'The display-menu exit releases provider trailers too');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('video').count(), 0, 'Leaving fullscreen releases provider trailers too');
     assert.equal(await page.locator('#movie-browser').isVisible(), true);
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
@@ -761,10 +760,11 @@ async function main() {
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-toggle');
     await page.keyboard.press('ArrowLeft');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
+    const previousFit = await page.locator('#video-host').getAttribute('data-fit') || 'contain';
     await page.keyboard.down('Enter'); await page.keyboard.down('Enter'); await page.keyboard.up('Enter');
-    assert.equal(await page.locator('#display-picker').isVisible(), true, 'Holding OK must not immediately activate the new display menu');
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
+    const nextFit = { contain: 'cover', cover: 'zoom125', zoom125: 'zoom135', zoom135: 'contain' };
+    assert.equal(await page.locator('#video-host').getAttribute('data-fit'), nextFit[previousFit], 'Holding OK advances picture fit only once');
+    assert.equal(await page.locator('#media-controls').isVisible(), true, 'Picture fit stays directly in playback controls');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-display');
     await page.keyboard.press('Escape');
     await setMediaTracks([{ language: 'ar', enabled: true }, { language: 'en', enabled: false }], [{ kind: 'metadata', mode: 'hidden' }, { kind: 'subtitles', language: 'ar', mode: 'disabled' }]);

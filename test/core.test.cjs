@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nativeHlsPlaylist, nativeHlsSource, validateSource, qualityLabel, buildSectionIndex, orderedCatalogGroups, arabicCatalogName, arabicGroupName, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { nativeHlsPlaylist, nativeHlsSource, validateSource, qualityLabel, channelTitle, pictureScale, buildSectionIndex, orderedCatalogGroups, arabicCatalogName, arabicGroupName, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -382,4 +382,18 @@ test('native HLS resolves only matching provider live paths and preserves all ot
   const encoded = 'https://provider.example.test/u%2Bser/p%26ass/42';
   const encodedList = 'https://provider.example.test/get.php?username=u%2Bser&password=p%26ass';
   assert.equal(nativeHlsSource(encoded, encodedList), 'https://provider.example.test/live/u%2Bser/p%26ass/42.m3u8');
+});
+
+test('presentation removes provider quality and scales the same native video rectangle', () => {
+  assert.equal(channelTitle('beIN SPORTS 1 FHD'), 'beIN SPORTS 1');
+  assert.equal(channelTitle('SSC 1 [HD]'), 'SSC 1');
+  assert.equal(channelTitle('SSC 1 (HD/FHD)'), 'SSC 1');
+  assert.equal(channelTitle('MBC2'), 'MBC2');
+  assert.equal(channelTitle('Sport 4K HEVC BACKUP'), 'Sport BACKUP');
+  assert.equal(pictureScale('contain', 1920, 800, 1920, 1080), 1);
+  assert.equal(pictureScale('cover', 1920, 800, 1920, 1080), 1.35);
+  assert.equal(pictureScale('cover', 1440, 1080, 1920, 1080), 4 / 3);
+  assert.equal(pictureScale('zoom125', 1920, 1080, 1920, 1080), 1.25);
+  assert.equal(pictureScale('zoom135', 1920, 1080, 1920, 1080), 1.35);
+  assert.equal(pictureScale('cover', 0, 0, 0, 0), 1);
 });

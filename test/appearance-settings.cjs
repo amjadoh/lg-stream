@@ -225,7 +225,7 @@ async function main() {
         assert.ok(box.height <= height * 0.4 && box.y + box.height <= height, 'Comfortable controls fit without covering half the screen');
         await page.screenshot({ animations: 'disabled', path: path.join(root, `artifacts/ui-controls-comfortable-${height}.png`) });
       }
-      await key('ArrowLeft', 'media-display'); await key('Enter', 'display-fullscreen'); await key('Enter');
+      await key('ArrowLeft', 'media-display'); await key('Enter', 'media-display'); await key('Escape'); await key('Escape');
       assert.equal(await page.locator('video').count(), 0, 'Returning to VOD list stops audio and releases the video');
       assert.equal(await page.locator('#movie-browser').isVisible(), true);
       await key('Enter'); await key('Enter');

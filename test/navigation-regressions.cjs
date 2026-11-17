@@ -134,7 +134,7 @@ async function main() {
 
     assert.equal(await page.evaluate(() => window.__navigationMediaStarts), 0, 'Catalogue browsing never starts playback');
     await page.locator('#channels [data-index="0"]').click();
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter');
     await page.evaluate(() => { window.__drawerVideo = document.querySelector('video'); });
     for (let index = 1; index <= 45; index++) await page.keyboard.press('ArrowDown');
@@ -143,7 +143,7 @@ async function main() {
     assert.equal(await page.evaluate(() => document.querySelector('video') === window.__drawerVideo), true, 'Drawer browsing keeps the current player');
     await page.keyboard.press('Escape');
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('group-button')), true, 'Drawer Back returns to its group');
-    await page.locator('#display-button').click(); await page.locator('#display-fullscreen').click();
+    await page.locator('#display-fullscreen').click();
     await page.keyboard.press('Enter'); await focusedIndex(0);
     for (let index = 1; index <= 45; index++) await page.keyboard.press('ArrowDown');
     await page.keyboard.press('Enter');
