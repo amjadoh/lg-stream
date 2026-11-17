@@ -16,7 +16,7 @@
   var managedWindowStart = 0;
   var activeCategory = 'all';
   var categoryPositions = {};
-  var categories = [['all', 'الكل · ترتيب المزوّد'], ['sports', 'رياضة'], ['movies', 'قنوات أفلام'], ['news', 'أخبار'], ['kids', 'أطفال'], ['documentary', 'وثائقي'], ['other', 'غير مصنّف']];
+  var categories = [['all', 'الكل'], ['sports', 'رياضة'], ['movies', 'قنوات أفلام'], ['news', 'أخبار'], ['kids', 'أطفال'], ['documentary', 'وثائقي'], ['other', 'غير مصنّف']];
   var appearance = { theme: 'editorial', layout: 'compact', controls: 'compact' };
   var settingsReturn = null;
   var displayReturn = null;
@@ -103,13 +103,18 @@
     var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeCategory].join('\u0001');
     if (cacheKey === sectionCacheKey) return sectionCache;
     var groupCategories = new Map();
-    function matchesCategory(group) {
+    function matchesCategory(entry) {
+      var category = api.channelCategory(entry.name);
+      if (category) return category === activeCategory;
+      var group = entry.group;
       if (!groupCategories.has(group)) groupCategories.set(group, api.groupCategory(group));
       return groupCategories.get(group) === activeCategory;
     }
-    sectionCache = api.buildSectionIndex(sources, function (_, index) {
-      return entryVisible(index) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(sources[index].group)) && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection);
+    sectionCache = api.buildSectionIndex(sources, function (entry, index) {
+      return entryVisible(index) && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(entry));
     });
+    sectionCache.orderedGroups = api.orderedCatalogGroups(sectionCache.groups);
+    sectionCache.groupLabels = api.groupDisplayNames(sectionCache.groups);
     sectionCacheKey = cacheKey; return sectionCache;
   }
   function visibleIndexes() {
@@ -153,7 +158,7 @@
       var box = document.createElement('section'); box.className = 'search-section';
       var title = document.createElement('h3'); LGI18n.text(title, section[1] + ' (' + count + ')'); box.appendChild(title);
       matches.forEach(function (index) {
-        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر');
+        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر', arabicChannelName(index));
         button.addEventListener('click', function () { closeSearch(); if (section[0] !== 'tv') stop(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
@@ -171,7 +176,8 @@
   function saveViewState(detailsOpen) {
     if (!activeCatalogRevision || !sources.length) return;
     try {
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, groupIndex: sectionGroups().indexOf(activeGroup), sort: contentSort, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
+      // Persist the provider-order index so existing saved views survive display reordering.
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, filterVersion: 2, groupIndex: sectionIndex().groups.indexOf(activeGroup), sort: contentSort, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
     } catch (_) {}
   }
   function scheduleViewSave() { if (unloading) return; clearTimeout(viewTimer); viewTimer = setTimeout(function () { saveViewState(detailsIndex !== null); }, 120); }
@@ -191,7 +197,8 @@
     if (state && Array.isArray(state.favorites)) state.favorites.forEach(function (index) { if (sources[index]) favorites[index] = true; });
     activeCategory = state && categories.some(function (item) { return item[0] === state.category; }) ? state.category : 'all';
     categoryPositions = {};
-    var groups = sectionGroups(); activeGroup = state && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
+    var groups = sectionIndex().groups;
+    activeGroup = state && (activeCategory === 'all' || state.filterVersion === 2) && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
     contentSort = state && ['provider', 'year', 'rating', 'added', 'alpha'].indexOf(state.sort) >= 0 ? state.sort : 'provider';
     selected = state ? Number(state.selected) || 0 : 0; channelWindowStart = state ? Number(state.channelWindowStart) || 0 : 0; contentWindowStart = state ? Number(state.contentWindowStart) || 0 : 0;
     pendingViewState = state; renderPrimary(); renderGroups(); renderChannels();
@@ -254,8 +261,9 @@
     if (state.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
   }
   function sectionGroups() {
-    return sectionIndex().groups;
+    return sectionIndex().orderedGroups;
   }
+  function arabicChannelName(index) { return entrySection(index) === 'tv' ? api.arabicCatalogName(sources[index].name) : ''; }
   function setHiddenGroups(value) {
     ['tv', 'movies', 'series'].forEach(function (section) {
       hiddenGroups[section] = new Set(value && Array.isArray(value[section]) ? value[section].filter(function (name) { return typeof name === 'string'; }) : []);
@@ -268,7 +276,9 @@
       if (entrySection(index) !== managedSection) return;
       var name = entry.group || ''; counts.set(name, (counts.get(name) || 0) + 1);
     });
-    managedGroups = Array.from(counts, function (item) { return { name: item[0], count: item[1] }; });
+    var groups = api.orderedCatalogGroups(Array.from(counts.keys()));
+    var names = api.groupDisplayNames(groups);
+    managedGroups = groups.map(function (name) { return { name: name, label: names.get(name), count: counts.get(name) }; });
     managedWindowStart = 0;
   }
   function renderManagedGroups() {
@@ -279,7 +289,7 @@
       button.dataset.position = managedWindowStart + offset; button.setAttribute('role', 'switch');
       var enabled = !hiddenGroups[managedSection].has(item.name);
       button.setAttribute('aria-checked', String(enabled)); button.disabled = groupSettingsSaving;
-      var label = document.createElement('span'); label.className = 'group-switch-name'; LGI18n.provider(label, item.name, 'بدون مجموعة');
+      var label = document.createElement('span'); label.className = 'group-switch-name'; LGI18n.provider(label, item.name, 'بدون مجموعة', item.label);
       var count = document.createElement('span'); count.className = 'group-switch-count'; LGI18n.text(count, item.count + ' عنصر');
       var state = document.createElement('span'); state.className = 'switch-state'; LGI18n.text(state, enabled ? 'ON · ظاهر' : 'OFF · مخفي');
       button.appendChild(label); button.appendChild(count); button.appendChild(state);
@@ -346,7 +356,7 @@
     $('groups').replaceChildren();
     items.slice(groupWindowStart, groupWindowStart + groupWindowSize).forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'group-button' + (item[0] === activeGroup ? ' active' : '');
-      button.dataset.group = item[0]; LGI18n.text(button, item[1]);
+      button.dataset.group = item[0]; LGI18n.provider(button, item[0], item[1], sectionIndex().groupLabels.get(item[0]));
       button.addEventListener('focus', function (event) {
         event.currentTarget.scrollIntoView({ block: 'nearest' });
         if (activeGroup === event.currentTarget.dataset.group) return;
@@ -497,7 +507,8 @@
       var number = document.createElement('span');
       number.className = 'channel-number'; number.textContent = String(index + 1);
       var label = document.createElement('span');
-      label.className = 'channel-label'; LGI18n.provider(label, sources[index].name, 'المصدر ' + (index + 1));
+      var name = sources[index].name; var arabic = arabicChannelName(index);
+      label.className = 'channel-label'; LGI18n.provider(label, name, 'المصدر ' + (index + 1), arabic);
       button.appendChild(number); button.appendChild(label);
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest' }); });
@@ -505,7 +516,7 @@
       var favorite = document.createElement('button');
       favorite.type = 'button'; favorite.className = 'favorite-button'; favorite.dataset.favoriteIndex = index;
       favorite.textContent = favorites[index] ? '★' : '☆'; favorite.setAttribute('aria-pressed', String(!!favorites[index]));
-      LGI18n.attribute(favorite, 'aria-label', (favorites[index] ? 'إزالة من المفضلة: ' : 'إضافة إلى المفضلة: ') + (sources[index].name ? '' : 'القناة'), sources[index].name || '');
+      LGI18n.attribute(favorite, 'aria-label', (favorites[index] ? 'إزالة من المفضلة: ' : 'إضافة إلى المفضلة: ') + (name ? '' : 'القناة'), name, arabic);
       favorite.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.favoriteIndex); event.currentTarget.scrollIntoView({ block: 'nearest' }); });
       favorite.addEventListener('click', function (event) {
         var ownIndex = Number(event.currentTarget.dataset.favoriteIndex);
@@ -605,7 +616,7 @@
     playingIndex = index;
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
-    LGI18n.provider($('channel-title'), sources[index].name, 'المصدر ' + (index + 1));
+    LGI18n.provider($('channel-title'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index));
     if (!watchMode && activeSection === 'tv') focusChannel(index);
     var playbackSource = sources[index].url;
     if (liveTransport === 'hls' && sourceMode === 'playlist' && entrySection(index) === 'tv') {
@@ -639,8 +650,8 @@
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
     if (watchMode && coalesce && sources[index]) {
       clearTimeout(hintTimer);
-      $('fullscreen-hint').textContent = sources[index].name || 'المصدر ' + (index + 1);
       $('fullscreen-hint').classList.add('channel-announcement');
+      LGI18n.provider($('fullscreen-hint'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index));
       $('fullscreen-hint').hidden = false;
       hintTimer = setTimeout(function () {
         $('fullscreen-hint').hidden = true;
@@ -673,7 +684,7 @@
     clearTimeout(hintTimer);
     $('fullscreen-hint').hidden = !enabled;
     $('fullscreen-hint').classList.remove('channel-announcement');
-    LGI18n.text($('fullscreen-hint'), isOnDemand() ? 'موافق للتحكم · رجوع للخروج' : 'موافق للقنوات · يمين للتحكم');
+    LGI18n.provider($('fullscreen-hint'), '', isOnDemand() ? 'موافق للتحكم · رجوع للخروج' : 'موافق للقنوات · يمين للتحكم');
     if (enabled) {
       document.body.tabIndex = -1;
       document.body.focus();

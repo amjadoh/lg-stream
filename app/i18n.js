@@ -4,7 +4,6 @@
   "هل تريد الخروج من التطبيق؟": "Do you want to exit the app?",
   "خروج": "Exit",
   "إلغاء": "Cancel",
-  "الكل · ترتيب المزوّد": "All · Provider order",
   "رياضة": "Sports",
   "قنوات أفلام": "Movie channels",
   "أخبار": "News",
@@ -225,7 +224,7 @@
   "أزرار أوسع": "Wider buttons",
   "اختيار المظهر لا يوقف المشاهدة.": "Changing the appearance doesn't stop playback.",
   "فلتر المجموعات": "Group filter",
-  "اختياري، حسب اسم المجموعة. «الكل» يحفظ ترتيب المزوّد.": "Optional, by group name. “All” keeps the provider order.",
+  "حسب اسم القناة، ويُستخدم اسم المجموعة عند غموضه. «الكل» يعرض جميع القنوات.": "By channel name, falling back to the group name when unclear. “All” shows every channel.",
   "ملائم · الصورة كاملة": "Fit · Full picture",
   "تكبير مع قص الأطراف": "Zoom and crop edges",
   "بحث شامل": "Global search",
@@ -280,6 +279,7 @@
   var language = 'ar';
   try { if (localStorage.getItem('lg-stream-language-v1') === 'en') language = 'en'; } catch (_) {}
   var originals = new WeakMap();
+  var arabicProviderText = new WeakMap();
   var attributes = new WeakMap();
   var protectedNodes = '[data-provider-text="true"],#fullscreen-hint.channel-announcement,.group-button[data-group]:not([data-group=""]),[data-language]';
   var keys = Object.keys(dictionary).sort(function(a,b){return b.length-a.length;});
@@ -297,6 +297,10 @@
   }
   function excluded(element) { return !element || element.closest('script,style,' + protectedNodes); }
   function translateNode(node) {
+    if (arabicProviderText.has(node)) {
+      node.nodeValue = language === 'ar' ? arabicProviderText.get(node) : originals.get(node);
+      return;
+    }
     if (excluded(node.parentElement)) return;
     var raw = originals.has(node) ? originals.get(node) : node.nodeValue;
     originals.set(node, raw);
@@ -308,7 +312,7 @@
     (root || document.body).querySelectorAll('[aria-label],[placeholder],[title]').forEach(function(element){
       if (excluded(element)) return;
       var values = attributes.get(element) || {};
-      ['aria-label','placeholder','title'].forEach(function(name){if(element.hasAttribute(name)){if(!(name in values)) values[name]=element.getAttribute(name);var value=values[name];element.setAttribute(name,typeof value==='string'?t(value):t(value.raw)+value.provider);}});
+      ['aria-label','placeholder','title'].forEach(function(name){if(element.hasAttribute(name)){if(!(name in values)) values[name]=element.getAttribute(name);var value=values[name];element.setAttribute(name,typeof value==='string'?t(value):providerAttribute(value));}});
       attributes.set(element, values);
     });
   }
@@ -320,11 +324,19 @@
     return value;
   }
   function html(element, value) { element.innerHTML = value; apply(element); return value; }
-  function provider(element, value, fallback) { element.dataset.providerText = value ? 'true' : 'false'; return text(element, value || fallback); }
-  function attribute(element, name, raw, provider) {
+  function provider(element, value, fallback, arabic) {
+    element.dataset.providerText = value ? 'true' : 'false';
+    text(element, value || fallback);
+    if (value && arabic && arabic !== value) {
+      arabicProviderText.set(element.firstChild, arabic);
+      translateNode(element.firstChild);
+    }
+  }
+  function providerAttribute(value) { return t(value.raw) + ((language === 'ar' && value.arabic) || value.provider); }
+  function attribute(element, name, raw, provider, arabic) {
     var values = attributes.get(element) || {};
-    values[name] = {raw:raw, provider:provider || ''}; attributes.set(element, values);
-    element.setAttribute(name, t(raw) + (provider || ''));
+    values[name] = {raw:raw, provider:provider || '', arabic:arabic}; attributes.set(element, values);
+    element.setAttribute(name, providerAttribute(values[name]));
   }
   function original(element) { return element.firstChild && originals.has(element.firstChild) ? originals.get(element.firstChild) : element.textContent; }
   function sync() {

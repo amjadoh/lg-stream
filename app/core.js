@@ -71,17 +71,113 @@
     return { all: all, groups: groups, byGroup: byGroup };
   }
 
+  var catalogBrandPattern = /(?:^|[^\p{L}\p{N}])(?:(?<bein>be[._-]?in(?:[ ._-]*(?:sports?|movies))?|be\s+in[ ._-]+sports?|بي(?:\s+[إأا]|[إأ])ن(?:\s+(?:سبورتس?|موفيز))?)|(?<ssc>ssc|[إا]س\s+[إا]س\s+سي)|(?<mbc>mbc|[إا]م\s+بي\s+سي))(?=$|[^\p{L}])/iu;
+  var catalogBrandWords = {
+    movies: 'موفيز', movie: 'موفيز', sport: 'سبورت', sports: 'سبورت', premium: 'بريميوم',
+    max: 'ماكس', news: 'الإخبارية', extra: 'إكسترا', action: 'أكشن', drama: 'دراما',
+    masr: 'مصر', iraq: 'العراق', bollywood: 'بوليوود'
+  };
+  var catalogGroupLabels = {
+    sport: 'رياضة', sports: 'رياضة', news: 'أخبار', kids: 'أطفال', movies: 'أفلام',
+    series: 'مسلسلات', documentary: 'وثائقي', documentaries: 'وثائقي'
+  };
+
+  function catalogBrand(match) { return match.groups.bein ? 'bein' : match.groups.ssc ? 'ssc' : 'mbc'; }
+
+  function arabicCatalogName(name) {
+    var match = catalogBrandPattern.exec(name || '');
+    if (!match) return '';
+    var brand = catalogBrand(match);
+    var spelling = match.groups[brand];
+    if (/[\u0600-\u06ff]/.test(spelling)) return '';
+    var end = match.index + match[0].length;
+    var space = brand === 'bein' && /\d/.test(name.charAt(end)) ? ' ' : '';
+    var label = brand === 'bein' ? 'بي إن' : spelling;
+    if (brand === 'bein' && /sports?/i.test(spelling)) label += ' سبورت';
+    if (brand === 'bein' && /movies/i.test(spelling)) label += ' موفيز';
+    var suffix = name.slice(end).replace(/[a-z]+/gi, function (word) {
+      var key = word.toLowerCase();
+      return Object.prototype.hasOwnProperty.call(catalogBrandWords, key) ? catalogBrandWords[key] : word;
+    });
+    return name.slice(0, end - spelling.length) + label + space + suffix;
+  }
+
+  function arabicGroupName(name) {
+    var brand = arabicCatalogName(name);
+    if (brand) return brand;
+    var match = name.match(/^(sports?|news|kids|movies|series|documentar(?:y|ies))((?:[\s|:/_-]+(?:SD|HD|FHD|UHD|4K|HEVC))*)$/i);
+    return match ? catalogGroupLabels[match[1].toLowerCase()] + match[2] : '';
+  }
+
+  function groupDisplayNames(groups) {
+    var names = new Map(); var counts = new Map();
+    groups.forEach(function (group) {
+      var label = arabicGroupName(group) || group;
+      names.set(group, label); counts.set(label, (counts.get(label) || 0) + 1);
+    });
+    names.forEach(function (label, group) {
+      if (label !== group && counts.get(label) > 1) names.set(group, label + ' · ' + group);
+    });
+    return names;
+  }
+
+  function groupFamilyName(name) {
+    return name.toLocaleLowerCase().replace(/\b(?:sd|hd|fhd|uhd|4k|8k|hevc)\b/g, '').replace(/[\s|:/_-]+/g, ' ').trim();
+  }
+
+  function orderedCatalogGroups(groups) {
+    var families = new Map();
+    var runs = [];
+    groups.forEach(function (group) {
+      var match = catalogBrandPattern.exec(group);
+      // Remove quality tokens only. Country, language and content words keep their identity.
+      var prefix = match ? groupFamilyName(group.slice(0, match.index)) : '';
+      var family = match ? 'brand:' + prefix + ':' + catalogBrand(match) : 'name:' + (groupFamilyName(group) || group);
+      if (!families.has(family)) {
+        var run = [];
+        families.set(family, run);
+        runs.push(run);
+      }
+      families.get(family).push(group);
+    });
+    return runs.flatMap(function (run) {
+      if (run.length < 2) return run;
+      var versions = new Map();
+      run.forEach(function (group) {
+        var key = groupFamilyName(group);
+        if (!versions.has(key)) versions.set(key, []);
+        versions.get(key).push(group);
+      });
+      return Array.from(versions.values()).flat();
+    });
+  }
+
   function searchCatalog(entries, query, sectionForIndex, limit) {
     var counts = { tv: 0, movies: 0, series: 0 };
     var matches = { tv: [], movies: [], series: [] };
+    var searchArabic = /[\u0600-\u06ff]/.test(query);
+    var normalizedQuery = normalizeCatalogSearch(query);
     entries.forEach(function (entry, index) {
-      if ((entry.name || '').toLocaleLowerCase().indexOf(query) < 0) return;
-      var section = sectionForIndex(index);
+      var name = entry.name || '';
+      var originalMatch = name.toLocaleLowerCase().indexOf(query) >= 0;
+      var section;
+      if (!originalMatch) {
+        // Skip alias matching for ordinary titles in the large catalogue.
+        if (!searchArabic || !/be[._-]?in|be\s+in|ssc|mbc|بي(?:\s+[إأا]|[إأ])ن|[إا]م\s+بي|[إا]س\s+[إا]س/i.test(name)) return;
+        section = sectionForIndex(index);
+        if (section !== 'tv') return;
+        var arabic = arabicCatalogName(name) || name;
+        if (normalizeCatalogSearch(arabic).indexOf(normalizedQuery) < 0) return;
+      } else section = sectionForIndex(index);
       if (!matches[section]) return;
       counts[section] += 1;
       if (matches[section].length < limit) matches[section].push(index);
     });
     return { counts: counts, matches: matches };
+  }
+
+  function normalizeCatalogSearch(value) {
+    return value.toLocaleLowerCase().replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/[٠-٩]/g, function (digit) { return String(digit.charCodeAt(0) - 0x0660); }).replace(/[\u064b-\u065f]/g, '').replace(/سبورتس/g, 'سبورت');
   }
 
   function youtubeSearchTarget(name, year) {
@@ -299,12 +395,20 @@
       toggle: function () { if (active) { if (active.video.paused) this.resume(); else this.pause(); } }
     };
   }
-  function groupCategory(name) {
+  var categoryRules = [['sports', /(?:^|[\s|:_-])(?:(?:ال)?رياض(?:ة|ية)|سبورتس?)(?=$|[\s|:_\d-])|\bsports?(?=\b|\d)/], ['movies', /أفلام|افلام|سينما|موفيز|\bmovies?(?=\b|\d)|\bcinema\b/], ['news', /أخبار|اخبار|الإخبارية|\bnews\b/], ['kids', /أطفال|اطفال|كرتون|\bkids?\b|\bchildren\b/], ['documentary', /وثائق|\bdocumentar(?:y|ies)\b/]];
+  function nameCategory(name) {
     var text = String(name || '').toLowerCase();
-    // Conservative group-name hints only; provider brands/countries are not genres.
-    var rules = [['sports', /(?:^|[\s|:_-])(?:ال)?رياض(?:ة|ية)(?=$|[\s|:_-])|\bsports?\b/], ['movies', /أفلام|افلام|سينما|\bmovies?\b|\bcinema\b/], ['news', /أخبار|اخبار|\bnews\b/], ['kids', /أطفال|اطفال|كرتون|\bkids?\b|\bchildren\b/], ['documentary', /وثائق|\bdocumentar(?:y|ies)\b/]];
-    var matches = rules.filter(function (rule) { return rule[1].test(text); });
-    return matches.length === 1 ? matches[0][0] : 'other';
+    var matches = categoryRules.filter(function (rule) { return rule[1].test(text); });
+    return matches.length === 1 ? matches[0][0] : matches.length ? 'other' : null;
   }
-  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  function groupCategory(name) { return nameCategory(name) || 'other'; }
+  function channelCategory(name) {
+    var category = nameCategory(name);
+    if (category) return category === 'other' ? null : category;
+    var text = String(name || '');
+    if (/(?:^|[^\p{L}\p{N}])(?:ssc(?:[ ._-]*extra)?|be[._-]?in|بي(?:\s+[إأا]|[إأ])ن|[إا]س\s+[إا]س\s+سي)[ ._-]*\d+(?=$|[^\p{L}])/iu.test(text)) return 'sports';
+    if (/(?:^|[^\p{L}\p{N}])(?:mbc|[إا]م\s+بي\s+سي)[ ._-]*(?:2|max|action|bollywood|ماكس|أكشن|بوليوود)(?=$|[^\p{L}\p{N}])/iu.test(text) || /روتانا\s+سينما/i.test(text)) return 'movies';
+    return null;
+  }
+  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
