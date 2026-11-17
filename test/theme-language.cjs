@@ -254,11 +254,10 @@ async function main() {
       return saved.entries.filter(entry => entry.group === 'BEIN SPORTS FHD').map(entry => entry.name);
     });
     assert.deepEqual(storedLabels, ['beIN SPORTS 1 FHD']);
-    await page.evaluate(() => {
+    await page.addInitScript(() => {
       const state = JSON.parse(localStorage.getItem('lg-stream-view-v1'));
       state.category = 'sports'; state.groupIndex = 2; delete state.filterVersion;
       localStorage.setItem('lg-stream-view-v1', JSON.stringify(state));
-      window.addEventListener('pagehide', event => event.stopImmediatePropagation(), { capture: true, once: true });
     });
     await page.reload();
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
