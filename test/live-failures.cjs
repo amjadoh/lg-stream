@@ -204,13 +204,17 @@ async function main() {
     await page.waitForFunction(() => document.getElementById('fullscreen-hint').hidden, { timeout: 4000 });
     await page.keyboard.press('ArrowUp'); await current(4);
     await page.keyboard.press('ArrowDown'); await current(5);
+    const playingAnnouncement = await page.locator('#fullscreen-hint').boundingBox();
     await page.evaluate(() => { document.body.dataset.state = 'loading'; });
     const announcementLayout = await page.evaluate(() => {
       const hint = document.getElementById('fullscreen-hint').getBoundingClientRect();
       const bar = document.querySelector('.playback-bar').getBoundingClientRect();
-      return { bottom: hint.bottom, barTop: bar.top };
+      return { top: hint.top, right: hint.right, bottom: hint.bottom, barTop: bar.top };
     });
     assert.ok(announcementLayout.bottom < announcementLayout.barTop, 'Channel name leaves the loading/status bar readable');
+    assert.equal(announcementLayout.top, 48, 'Announcement is anchored to the top');
+    assert.equal(announcementLayout.top, playingAnnouncement.y, 'Starting playback does not move the announcement');
+    assert.equal(announcementLayout.right, playingAnnouncement.x + playingAnnouncement.width, 'Announcement stays at the same right edge');
     await page.evaluate(() => { document.body.dataset.state = 'playing'; });
     await page.screenshot({ path: path.join(root, 'artifacts/ui-channel-switch-1080.png') });
     assert.equal(await page.evaluate(() => window.__mediaStarts), beforeBurst + 3, 'A burst opens only the final live source');
