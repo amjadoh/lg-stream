@@ -70,6 +70,10 @@ async function main() {
           lines.push(`#EXTINF:-1 group-title="مختلط",${name}`);
           lines.push(`https://media.example.test/live/mixed${i}.m3u8`);
         }
+        for (const [i, group] of ['JORDAN الأردن', 'Jordan', 'الأردن'].entries()) {
+          lines.push(`#EXTINF:-1 group-title="${group}",قناة بلد ${i}`);
+          lines.push(`https://media.example.test/live/country${i}.m3u8`);
+        }
         for (const kind of ['movie', 'series']) { lines.push('#EXTINF:-1 group-title="فيديو" year="2024" rating="8.4" description="وصف المزود",فيديو الاختبار'); lines.push(`https://media.example.test/${kind}/1.m3u8`); }
         for(let i=2;i<=5;i++){lines.push('#EXTINF:-1 group-title="فيديو",فيلم '+i);lines.push('https://media.example.test/movie/'+i+'.m3u8');}
         return new Response(lines.join('\n'));
@@ -193,7 +197,8 @@ async function main() {
     }
     await page.locator('.primary-button[data-section="tv"]').click();
     const orderedGroups = await page.locator('#groups [data-group]').evaluateAll(nodes => nodes.map(node => node.dataset.group));
-    assert.equal(orderedGroups.indexOf('BEIN SPORTS FHD'), orderedGroups.indexOf('beIN') + 1);
+    const beinPositions = orderedGroups.map((group,index) => /be.?in/i.test(group) ? index : -1).filter(index => index >= 0);
+    assert.equal(beinPositions[beinPositions.length - 1] - beinPositions[0] + 1, beinPositions.length);
     await page.locator('#nav-settings').click();
     await page.locator('[data-language="ar"]').click();
     await page.keyboard.press('Escape');
@@ -206,6 +211,16 @@ async function main() {
     const arabicStarts = await page.evaluate(() => { window.__arabicVideo = document.querySelector('video'); return window.__mediaStarts; });
     assert.equal(await page.locator('#channel-title').innerText(), 'beIN 1 FHD');
     assert.match(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'), /beIN 1/);
+    assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
+    await page.locator('#nav-settings').click();
+    await page.locator('#manage-groups-button').click();
+    const countryFirst = page.locator('#managed-groups .group-switch').filter({ has: page.locator('.group-switch-name', { hasText: /^الأردن \(1\)$/ }) });
+    assert.equal(await page.locator('#managed-groups .group-switch-name').filter({ hasText: /^الأردن \(2\)$/ }).count(), 1);
+    await countryFirst.click();
+    await page.waitForFunction(() => !document.querySelector('#managed-groups .group-switch:disabled'));
+    await page.locator('#close-group-manager').click();
+    await page.locator('#close-settings').click();
+    assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
     await page.screenshot({ path: path.join(root, 'artifacts/catalog-arabic-1080.png') });
     await page.locator('#nav-settings').click();
     await page.locator('[data-language="en"]').click();
@@ -249,6 +264,7 @@ async function main() {
     await page.locator('#groups-filter').click();
     await page.locator('#category-list [data-category="all"]').click();
     await page.locator('#groups [data-group="BEIN SPORTS FHD"]').click();
+    assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
     await page.reload();
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.waitForFunction(() => document.querySelector('#groups [data-group="BEIN SPORTS FHD"].active'));
@@ -260,7 +276,7 @@ async function main() {
     assert.deepEqual(storedLabels, ['beIN SPORTS 1 FHD']);
     await page.addInitScript(() => {
       const state = JSON.parse(localStorage.getItem('lg-stream-view-v1'));
-      state.category = 'sports'; state.groupIndex = 2; delete state.filterVersion;
+      state.category = 'sports'; state.groupIndex = 2; state.filterVersion = 2;
       localStorage.setItem('lg-stream-view-v1', JSON.stringify(state));
     });
     await page.reload();

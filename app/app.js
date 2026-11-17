@@ -74,6 +74,8 @@
   var visibleCache = [];
   var sectionCacheKey = '';
   var sectionCache = null;
+  var groupLabelCacheKey = '';
+  var groupLabelCache = new Map();
   var searchTimer = null;
   var searchLiveRevision = -1;
   var searchLiveIndexes = [];
@@ -105,6 +107,7 @@
     var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeCategory].join('\u0001');
     if (cacheKey === sectionCacheKey) return sectionCache;
     var groupCategories = new Map();
+    var allGroups = new Set();
     function matchesCategory(entry) {
       var category = api.channelCategory(entry.name);
       if (category) return category === activeCategory;
@@ -113,11 +116,18 @@
       return groupCategories.get(group) === activeCategory;
     }
     sectionCache = api.buildSectionIndex(sources, function (entry, index) {
-      return entryVisible(index) && (activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(entry));
+      var ownSection = activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection;
+      if (ownSection) allGroups.add(entry.group || '');
+      return ownSection && entryVisible(index) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(entry));
     });
     sectionCache.orderedGroups = api.orderedCatalogGroups(sectionCache.groups);
-    sectionCache.groupLabels = api.groupDisplayNames(sectionCache.groups);
+    sectionCache.groupLabels = groupLabels(activeSection, Array.from(allGroups));
     sectionCacheKey = cacheKey; return sectionCache;
+  }
+  function groupLabels(section, groups) {
+    var key = [catalogViewRevision, section, section === 'favorites' ? favoritesRevision : 0].join('\u0001');
+    if (key !== groupLabelCacheKey) { groupLabelCache = api.groupDisplayNames(groups); groupLabelCacheKey = key; }
+    return groupLabelCache;
   }
   function visibleIndexes() {
     if (watchChannels !== null) return watchChannels;
@@ -184,7 +194,7 @@
     if (!activeCatalogRevision || !sources.length) return;
     try {
       // Persist the provider-order index so existing saved views survive display reordering.
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, filterVersion: 2, groupIndex: sectionIndex().groups.indexOf(activeGroup), sort: contentSort, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, filterVersion: 3, groupIndex: sectionIndex().groups.indexOf(activeGroup), sort: contentSort, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
     } catch (_) {}
   }
   function scheduleViewSave() { if (unloading) return; clearTimeout(viewTimer); viewTimer = setTimeout(function () { saveViewState(detailsIndex !== null); }, 120); }
@@ -205,7 +215,7 @@
     activeCategory = state && categories.some(function (item) { return item[0] === state.category; }) ? state.category : 'all';
     categoryPositions = {};
     var groups = sectionIndex().groups;
-    activeGroup = state && (activeCategory === 'all' || state.filterVersion === 2) && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
+    activeGroup = state && (activeSection !== 'tv' || activeCategory === 'all' || state.filterVersion === 3) && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
     contentSort = state && ['provider', 'year', 'rating', 'added', 'alpha'].indexOf(state.sort) >= 0 ? state.sort : 'provider';
     selected = state ? Number(state.selected) || 0 : 0; channelWindowStart = state ? Number(state.channelWindowStart) || 0 : 0; contentWindowStart = state ? Number(state.contentWindowStart) || 0 : 0;
     pendingViewState = state; renderPrimary(); renderGroups(); renderChannels();
@@ -283,8 +293,9 @@
       if (entrySection(index) !== managedSection) return;
       var name = entry.group || ''; counts.set(name, (counts.get(name) || 0) + 1);
     });
-    var groups = api.orderedCatalogGroups(Array.from(counts.keys()));
-    var names = api.groupDisplayNames(groups);
+    var originalGroups = Array.from(counts.keys());
+    var groups = api.orderedCatalogGroups(originalGroups);
+    var names = groupLabels(managedSection, originalGroups);
     managedGroups = groups.map(function (name) { return { name: name, label: names.get(name), count: counts.get(name) }; });
     managedWindowStart = 0;
   }
