@@ -62,9 +62,13 @@ async function main() {
 
       window.fetch = async () => {
         const lines = ['#EXTM3U'];
-        for (const [i, group] of ['رياضة', 'قنوات أفلام', 'أخبار', 'الرياضة العالمية · جودة عالية', 'beIN', 'أطفال'].entries()) {
-          lines.push(`#EXTINF:-1 group-title="${group}",${i===0?"المفضلة":"قناة "+i}`);
+        for (const [i, group] of ['رياضة', 'قنوات أفلام', 'أخبار', 'الرياضة العالمية · جودة عالية', 'beIN', 'أطفال', 'NEWS HD', 'BEIN SPORTS FHD', 'SSC HD', 'BEIN SPORTS HD', 'CUSTOM SPORTS HD', 'MBC MOVIES HD', 'CUSTOM SPORTS FHD', 'أطفال إضافية', 'MBC MOVIES FHD'].entries()) {
+          lines.push(`#EXTINF:-1 group-title="${group}",${i===0?"المفضلة":i===4||i===7||i===9?'beIN SPORTS 1 FHD':"قناة "+i}`);
           lines.push(`https://media.example.test/live/${i}.m3u8`);
+        }
+        for (const [i, name] of ['SSC1 FHD', 'MBC2', 'قناة غير واضحة'].entries()) {
+          lines.push(`#EXTINF:-1 group-title="مختلط",${name}`);
+          lines.push(`https://media.example.test/live/mixed${i}.m3u8`);
         }
         for (const kind of ['movie', 'series']) { lines.push('#EXTINF:-1 group-title="فيديو" year="2024" rating="8.4" description="وصف المزود",فيديو الاختبار'); lines.push(`https://media.example.test/${kind}/1.m3u8`); }
         for(let i=2;i<=5;i++){lines.push('#EXTINF:-1 group-title="فيديو",فيلم '+i);lines.push('https://media.example.test/movie/'+i+'.m3u8');}
@@ -187,6 +191,84 @@ async function main() {
       assert.equal(await page.locator('#exit-title').innerText(),'Do you want to exit the app?');
       await page.locator('#exit-cancel').click();assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),section);
     }
+    await page.locator('.primary-button[data-section="tv"]').click();
+    const orderedGroups = await page.locator('#groups [data-group]').evaluateAll(nodes => nodes.map(node => node.dataset.group));
+    assert.equal(orderedGroups.indexOf('BEIN SPORTS FHD'), orderedGroups.indexOf('beIN') + 1);
+    await page.locator('#nav-settings').click();
+    await page.locator('[data-language="ar"]').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#groups [data-group="beIN"]').innerText(), 'بي إن');
+    assert.equal(await page.locator('#groups [data-group="BEIN SPORTS FHD"]').innerText(), 'بي إن سبورت FHD');
+    assert.equal(await page.locator('#groups [data-group="NEWS HD"]').innerText(), 'أخبار HD');
+    await page.locator('#groups [data-group="BEIN SPORTS FHD"]').click();
+    assert.equal(await page.locator('#channels .channel-label').first().innerText(), 'بي إن سبورت 1 FHD');
+    await page.locator('#channels .channel-button').first().click();
+    const arabicStarts = await page.evaluate(() => { window.__arabicVideo = document.querySelector('video'); return window.__mediaStarts; });
+    assert.equal(await page.locator('#channel-title').innerText(), 'بي إن سبورت 1 FHD');
+    assert.match(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'), /بي إن سبورت 1 FHD/);
+    await page.screenshot({ path: path.join(root, 'artifacts/catalog-arabic-1080.png') });
+    await page.locator('#nav-settings').click();
+    await page.locator('[data-language="en"]').click();
+    assert.equal(await page.locator('#channels .channel-label').first().innerText(), 'beIN SPORTS 1 FHD');
+    assert.equal(await page.locator('#channel-title').innerText(), 'beIN SPORTS 1 FHD');
+    await page.locator('[data-language="ar"]').click();
+    assert.equal(await page.evaluate(() => document.querySelector('video') === window.__arabicVideo), true);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), arabicStarts);
+    await page.keyboard.press('Escape');
+    await page.locator('#nav-search').click();
+    await page.locator('#channel-search').fill('بي إن سبورت 1');
+    await page.waitForFunction(() => document.querySelectorAll('#search-results button').length === 3);
+    assert.equal(await page.locator('#search-results button').first().innerText(), 'بي إن سبورت 1 FHD');
+    await page.keyboard.press('Escape');
+    for (const language of ['ar', 'en']) {
+      await page.locator('#nav-settings').click();
+      await page.locator('[data-language="' + language + '"]').click();
+      await page.keyboard.press('Escape');
+      for (const [category, first, second, arabicLabel, mixedName] of [['sports', 'BEIN SPORTS FHD', 'BEIN SPORTS HD', 'بي إن سبورت FHD', 'SSC1 FHD'], ['movies', 'MBC MOVIES HD', 'MBC MOVIES FHD', 'MBC موفيز HD', 'MBC2']]) {
+        await page.locator('#groups-filter').click();
+        await page.locator('#category-list [data-category="' + category + '"]').click();
+        const groups = await page.locator('#groups [data-group]').evaluateAll(nodes => nodes.map(node => node.dataset.group));
+        assert.ok(groups.indexOf(first) > 0);
+        assert.equal(groups.indexOf(second), groups.indexOf(first) + 1);
+        if (category === 'sports') assert.equal(groups.indexOf('CUSTOM SPORTS FHD'), groups.indexOf('CUSTOM SPORTS HD') + 1);
+        assert.equal(await page.locator('#groups [data-group="' + first + '"]').innerText(), language === 'en' ? first : arabicLabel);
+        await page.locator('#groups [data-group="مختلط"]').click();
+        assert.equal(await page.locator('#channels .channel-button').count(), 1);
+        assert.equal(await page.locator('#channels .channel-label').innerText(), mixedName);
+        assert.equal(await page.evaluate(() => document.querySelector('video') === window.__arabicVideo), true);
+        assert.equal(await page.evaluate(() => window.__mediaStarts), arabicStarts);
+      }
+    }
+    await page.locator('#nav-settings').click();
+    await page.locator('[data-language="ar"]').click();
+    await page.keyboard.press('Escape');
+    await page.locator('#groups-filter').click();
+    await page.locator('#category-list [data-category="all"]').click();
+    await page.locator('#groups [data-group="BEIN SPORTS FHD"]').click();
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelector('#groups [data-group="BEIN SPORTS FHD"].active'));
+    assert.equal(await page.locator('#channels .channel-label').first().innerText(), 'بي إن سبورت 1 FHD');
+    const storedLabels = await page.evaluate(async () => {
+      const store = LGCatalogStore.createStore(); const saved = await store.load();
+      return saved.entries.filter(entry => entry.group === 'BEIN SPORTS FHD').map(entry => entry.name);
+    });
+    assert.deepEqual(storedLabels, ['beIN SPORTS 1 FHD']);
+    await page.evaluate(() => {
+      const state = JSON.parse(localStorage.getItem('lg-stream-view-v1'));
+      state.category = 'sports'; state.groupIndex = 2; delete state.filterVersion;
+      localStorage.setItem('lg-stream-view-v1', JSON.stringify(state));
+      window.addEventListener('pagehide', event => event.stopImmediatePropagation(), { capture: true, once: true });
+    });
+    await page.reload();
+    await page.locator('#launch-splash').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelector('#groups [data-group=""].active'));
+    assert.match(await page.locator('#groups-filter').innerText(), /رياضة/);
+    await page.locator('#nav-settings').click();
+    await page.locator('[data-language="en"]').click();
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
     await page.evaluate(()=>{window.__exitCalls=0;window.close=()=>{window.__exitCalls++}});
     await page.keyboard.press('Escape');await page.locator('#exit-accept').click();assert.equal(await page.evaluate(()=>window.__exitCalls),1);
     assert.deepEqual(errors,[]);assert.equal(unexpectedRequests,0);
