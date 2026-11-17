@@ -1,0 +1,60 @@
+{
+  "storageBefore": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0,
+    "language": "ar",
+    "section": "tv",
+    "category": "movies",
+    "videos": 1,
+    "chromium": "132"
+  },
+  "initial": {
+    "state": "playing",
+    "shown": true,
+    "top": 48,
+    "rightGap": 48
+  },
+  "afterStart": {
+    "state": "playing",
+    "shown": true,
+    "top": 48,
+    "rightGap": 48,
+    "time": 82.758,
+    "width": 1280,
+    "height": 720,
+    "error": 0
+  },
+  "end": {
+    "hidden": true,
+    "state": "playing",
+    "sameVideo": true,
+    "sameSource": true,
+    "emptied": 0,
+    "videos": 1,
+    "time": 88.778,
+    "error": 0
+  },
+  "storageAfter": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0,
+    "language": "ar",
+    "section": "tv",
+    "category": "movies",
+    "videos": 1,
+    "chromium": "132"
+  }
+}
