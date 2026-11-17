@@ -71,42 +71,115 @@
     return { all: all, groups: groups, byGroup: byGroup };
   }
 
-  var catalogBrandPattern = /(?:^|[^\p{L}\p{N}])(?:(?<bein>be[._-]?in(?:[ ._-]*(?:sports?|movies))?|be\s+in[ ._-]+sports?|بي(?:\s+[إأا]|[إأ])ن(?:\s+(?:سبورتس?|موفيز))?)|(?<ssc>ssc|[إا]س\s+[إا]س\s+سي)|(?<mbc>mbc|[إا]م\s+بي\s+سي))(?=$|[^\p{L}])/iu;
-  var catalogBrandWords = {
-    movies: 'موفيز', movie: 'موفيز', sport: 'سبورت', sports: 'سبورت', premium: 'بريميوم',
-    max: 'ماكس', news: 'الإخبارية', extra: 'إكسترا', action: 'أكشن', drama: 'دراما',
-    masr: 'مصر', iraq: 'العراق', bollywood: 'بوليوود'
+  var catalogBrands = [
+    ['bein', /be[._-]?in(?:[ ._-]*(?:sports?|movies))?|be\s+in[ ._-]+sports?|بي(?:\s+[إأا]|[إأ])ن(?:\s+(?:سبورتس?|موفيز))?/],
+    ['ssc', /ssc|[إا]س\s+[إا]س\s+سي/], ['mbc', /mbc|[إا]م\s+بي\s+سي/],
+    ['osn', /osn/], ['sky', /sky/], ['rotana', /rotana|روتانا/],
+    ['shahid', /shahid|شاهد/], ['starzplay', /starzplay|ستارزبلاي/],
+    ['jazeera', /(?:al[ ._-]+)?jazeera|الجزيرة/], ['shasha', /shasha|شاشا/]
+  ];
+  var catalogBrandPattern = new RegExp('(?:^|[^\\p{L}\\p{N}])(?:' + catalogBrands.map(function (brand) { return '(?<' + brand[0] + '>' + brand[1].source + ')'; }).join('|') + ')(?=$|[^\\p{L}])', 'iu');
+  var catalogWords = {
+    'BEIN SPORTS NEWS': 'beIN سبورت الإخبارية', 'BEIN SPORTS': 'beIN سبورت',
+    'BEIN SPORT': 'beIN سبورت', 'BEIN MOVIES': 'beIN موفيز',
+    'ENGLISH PREMIER LEAGUE': 'الدوري الإنجليزي الممتاز', 'PREMIER LEAGUE': 'الدوري الممتاز',
+    'UEFA CHAMPIONS LEAGUE': 'UEFA دوري أبطال أوروبا', 'CHAMPIONS LEAGUE': 'دوري الأبطال',
+    'COPA AMERICA': 'كوبا أمريكا', 'ALRABIAA SPORTS': 'الرابعة الرياضية',
+    'AL JAZEERA': 'الجزيرة', 'AL KASS': 'الكأس', 'AL FAJER NEWS': 'الفجر الإخبارية', 'AL FAJER': 'الفجر',
+    'ARABIC ENTERTAINMENT': 'ترفيه عربي', 'BBC WORLD NEWS': 'BBC وورلد نيوز',
+    'SKY SPORTS MAIN EVENT': 'SKY رياضة الحدث الرئيسي', 'SPORTS MAIN EVENT': 'رياضة الحدث الرئيسي',
+    'KANAL D': 'كانال D',
+    'NATIONAL GEOGRAPHIC': 'ناشيونال جيوغرافيك', 'ANIMAL PLANET': 'أنيمال بلانيت',
+    SPORTS: 'رياضة', SPORT: 'رياضة', NEWS: 'أخبار', KIDS: 'أطفال', MOVIES: 'أفلام', MOVIE: 'أفلام',
+    SERIES: 'مسلسلات', DOCUMENTARY: 'وثائقي', DOCUMENTARIES: 'وثائقي',
+    CINEMA: 'سينما', CINEMAX: 'سينماكس', FILMS: 'أفلام', FILM: 'أفلام', SINEMA: 'سينما',
+    PREMIUM: 'بريميوم', EXTRA: 'إكسترا', XTRA: 'إكسترا', ACTION: 'أكشن', DRAMA: 'دراما',
+    MASR: 'مصر', IRAQ: 'العراق', BOLLYWOOD: 'بوليوود', COMEDY: 'كوميديا',
+    ALRABIAA: 'الرابعة', RABIAA: 'الرابعة', SHASHA: 'شاشا', SHAHID: 'شاهد',
+    KASS: 'الكأس', JAZEERA: 'الجزيرة', THMANYAH: 'ثمانية', STARZPLAY: 'ستارزبلاي',
+    ROTANA: 'روتانا', SHOOF: 'شوف', ALWAN: 'ألوان', MAJESTIC: 'ماجستيك',
+    PLATINUM: 'بلاتينيوم', INTERNATIONAL: 'دولية', ENTERTAINMENT: 'ترفيه',
+    ARABIC: 'عربي', ARAB: 'عربي', ENGLISH: 'إنجليزي', FRANSA: 'فرنسا', FRENCH: 'فرنسي',
+    FRANCE: 'فرنسا', GERMANY: 'ألمانيا', GERMAN: 'ألماني', ITALY: 'إيطاليا', ITALIAN: 'إيطالي',
+    SPAIN: 'إسبانيا', SPANISH: 'إسباني', TURKEY: 'تركيا', TURKISH: 'تركي',
+    JORDAN: 'الأردن', OMAN: 'عمان', EGYPT: 'مصر', SAUDI: 'السعودية', KUWAIT: 'الكويت',
+    LEBANON: 'لبنان', SYRIA: 'سوريا', PALESTINE: 'فلسطين', MOROCCO: 'المغرب',
+    TUNISIA: 'تونس', ALGERIA: 'الجزائر', SUDAN: 'السودان', LIBYA: 'ليبيا',
+    BLUE: 'بلو', SOLO: 'سولو', MEDIA: 'ميديا', RELAX: 'ريلاكس', GLOBAL: 'جلوبال', MUSLIM: 'مسلم',
+    CHANNELS: 'قنوات', CHANNEL: 'قناة', MUSIC: 'موسيقى', FAMILY: 'عائلة',
+    DISCOVERY: 'ديسكفري', EUROSPORT: 'يوروسبورت', DISNEY: 'ديزني', NETFLIX: 'نتفليكس',
+    NICKELODEON: 'نيكلوديون', CARTOON: 'كرتون', NICK: 'نيك', BOOMERANG: 'بوميرانغ',
+    VIAPLAY: 'فيابلاي', VIASAT: 'فياسات', POLSAT: 'بولسات', PINK: 'بينك', ROYA: 'رؤيا',
+    ZIGGO: 'زيغو', SONY: 'سوني', PLUTO: 'بلوتو', TELEMUNDO: 'تيليموندو',
+    AMAZON: 'أمازون', PRIME: 'برايم', CANAL: 'كانال', KANAL: 'قناة', ARENA: 'أرينا',
+    LEAGUE: 'دوري', PREMIER: 'ممتاز', CHAMPIONS: 'أبطال', BUNDESLIGA: 'الدوري الألماني',
+    FOOTBALL: 'كرة القدم', BASKETBALL: 'كرة السلة', HANDBALL: 'كرة اليد', VOLLEYBALL: 'الكرة الطائرة',
+    LALIGA: 'الدوري الإسباني', LIGA: 'دوري', TENNIS: 'تنس', GOLF: 'غولف', RACING: 'سباقات',
+    EVENTS: 'فعاليات', EVENT: 'فعالية', LIVE: 'مباشر', WORLD: 'العالم', NETWORK: 'شبكة',
+    PLUS: 'بلس', SUPER: 'سوبر', SELECT: 'مختارة', PREMIERE: 'عرض أول', CLASSIC: 'كلاسيك',
+    HISTORY: 'تاريخ', CRIME: 'جريمة', WILD: 'برية', NATURE: 'طبيعة', SCIENCE: 'علوم',
+    INVESTIGATION: 'تحقيقات', ANIMATION: 'رسوم متحركة', JUNIOR: 'جونيور', BABY: 'بيبي',
+    RADIO: 'راديو', QURAN: 'قرآن', DOROS: 'دروس', FOOD: 'طبخ', BACKUP: 'احتياط'
   };
-  var catalogGroupLabels = {
-    sport: 'رياضة', sports: 'رياضة', news: 'أخبار', kids: 'أطفال', movies: 'أفلام',
-    series: 'مسلسلات', documentary: 'وثائقي', documentaries: 'وثائقي'
-  };
+  function catalogWordPattern(word) { return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '[ ._-]+'); }
+  var catalogTranslation = new RegExp('(^|[^\\p{L}])(' + Object.keys(catalogWords).sort(function (a, b) { return b.length - a.length; }).map(catalogWordPattern).join('|') + ')(?=$|[^\\p{L}])', 'giu');
 
-  function catalogBrand(match) { return match.groups.bein ? 'bein' : match.groups.ssc ? 'ssc' : 'mbc'; }
+  function catalogBrand(match) { return Object.keys(match.groups).find(function (brand) { return !!match.groups[brand]; }); }
+  function catalogPrefix(name, match) { return name.slice(0, match.index).replace(/^[\s|:_-]+|[\s|:_-]+$/g, ''); }
+  function shortCountryPrefix(prefix) { return /^(?:[A-Z]{2}|ARA|ENG|FRA|GER|SPA|TUR|KSA)(?:[\s|:_-]+(?:[A-Z]{2}|ARA|ENG|FRA|GER|SPA|TUR|KSA))*$/.test(prefix); }
+  function translatedCatalogText(value) {
+    return (value.match(/[a-z]+/gi) || []).every(function (word) { return word.length <= 3 || /^(?:bein|uefa|hevc)$/i.test(word) || /^[A-Z]{2,5}$/.test(word); });
+  }
 
   function arabicCatalogName(name) {
-    var match = catalogBrandPattern.exec(name || '');
-    if (!match) return '';
-    var brand = catalogBrand(match);
-    var spelling = match.groups[brand];
-    if (/[\u0600-\u06ff]/.test(spelling)) return '';
-    var end = match.index + match[0].length;
-    var space = brand === 'bein' && /\d/.test(name.charAt(end)) ? ' ' : '';
-    var label = brand === 'bein' ? 'بي إن' : spelling;
-    if (brand === 'bein' && /sports?/i.test(spelling)) label += ' سبورت';
-    if (brand === 'bein' && /movies/i.test(spelling)) label += ' موفيز';
-    var suffix = name.slice(end).replace(/[a-z]+/gi, function (word) {
-      var key = word.toLowerCase();
-      return Object.prototype.hasOwnProperty.call(catalogBrandWords, key) ? catalogBrandWords[key] : word;
+    name = name || '';
+    var translated = name.replace(catalogTranslation, function (match, prefix, word, offset) {
+      var key = word.toUpperCase().replace(/[ ._-]+/g, ' ');
+      var label = catalogWords[key];
+      return prefix + label + (/\d/.test(name.charAt(offset + match.length)) ? ' ' : '');
     });
-    return name.slice(0, end - spelling.length) + label + space + suffix;
+    return translated === name || !translatedCatalogText(translated) ? '' : translated;
   }
 
   function arabicGroupName(name) {
-    var brand = arabicCatalogName(name);
-    if (brand) return brand;
-    var match = name.match(/^(sports?|news|kids|movies|series|documentar(?:y|ies))((?:[\s|:/_-]+(?:SD|HD|FHD|UHD|4K|HEVC))*)$/i);
-    return match ? catalogGroupLabels[match[1].toLowerCase()] + match[2] : '';
+    var match = catalogBrandPattern.exec(name);
+    if (!match) {
+      var translated = arabicCatalogName(name);
+      return translated;
+    }
+    var brand = catalogBrand(match);
+    var spelling = match.groups[brand];
+    var suffix = name.slice(match.index + match[0].length);
+    if (brand === 'bein' && /movies|موفيز/i.test(spelling)) suffix = 'أفلام ' + suffix;
+    if (brand === 'bein' || brand === 'ssc') suffix = suffix.replace(/(?:^|[\s|:_-])(?:sports?|سبورتس?|رياضة|channels?)(?=$|[\s|:_-])/gi, ' ');
+    var quality = catalogQuality(name);
+    suffix = stripCatalogQuality(suffix, quality).replace(/^[\s|:_-]+|[\s|:_-]+$/g, '');
+    var label = (brand === 'bein' ? 'beIN' : (arabicCatalogName(spelling) || spelling)) + (suffix ? ' ' + (arabicCatalogName(suffix) || suffix) : '');
+    var prefix = stripCatalogQuality(catalogPrefix(name, match), quality).replace(/^[\s|:_-]+|[\s|:_-]+$/g, '');
+    if (prefix && !shortCountryPrefix(prefix)) label = (arabicCatalogName(prefix) || prefix) + ' · ' + label;
+    label = label.replace(/\s+/g, ' ');
+    return label + (quality.length ? ' · ' + quality.join('/') : '');
+  }
+
+  function catalogQuality(name) { return (name.match(/\b(?:SD|HD|FHD|UHD|4K|8K|HEVC)\b/gi) || []).map(function (value) { return value.toUpperCase(); }).filter(function (value, index, values) { return values.indexOf(value) === index; }); }
+  function stripCatalogQuality(name, quality) {
+    quality.forEach(function (value) { name = name.replace(new RegExp('\\b' + value + '\\b', 'gi'), ' '); });
+    return name;
+  }
+  function compactChannelName(name, group) {
+    var match = catalogBrandPattern.exec(name || '');
+    if (!match) return arabicCatalogName(name);
+    var brand = catalogBrand(match); var spelling = match.groups[brand];
+    var groupMatch = catalogBrandPattern.exec(group || '');
+    var ownGroup = groupMatch && catalogBrand(groupMatch) === brand;
+    var suffix = name.slice(match.index + match[0].length);
+    if (brand === 'bein' && /movies|موفيز/i.test(spelling)) suffix = 'أفلام ' + suffix;
+    var groupQuality = catalogQuality(group || '');
+    if (ownGroup && groupQuality.length === 1) suffix = stripCatalogQuality(suffix, groupQuality);
+    var prefix = catalogPrefix(name, match);
+    if (ownGroup && prefix === catalogPrefix(group, groupMatch)) prefix = '';
+    var label = [prefix, brand === 'bein' ? 'beIN' : (arabicCatalogName(spelling) || spelling), (arabicCatalogName(suffix) || suffix).trim()].filter(Boolean).join(' ').replace(/\s+/g, ' ');
+    return label === name ? '' : label;
   }
 
   function groupDisplayNames(groups) {
@@ -116,8 +189,15 @@
       names.set(group, label); counts.set(label, (counts.get(label) || 0) + 1);
     });
     names.forEach(function (label, group) {
-      if (label !== group && counts.get(label) > 1) names.set(group, label + ' · ' + group);
+      if (label !== group && counts.get(label) > 1) {
+        var match = catalogBrandPattern.exec(group);
+        var prefix = match && group.slice(0, match.index).replace(/^[\s|:_-]+|[\s|:_-]+$/g, '');
+        names.set(group, label + ' · ' + (prefix || group));
+      }
     });
+    var resolvedCounts = new Map();
+    names.forEach(function (label) { resolvedCounts.set(label, (resolvedCounts.get(label) || 0) + 1); });
+    names.forEach(function (label, group) { if (resolvedCounts.get(label) > 1) names.set(group, group); });
     return names;
   }
 
@@ -131,8 +211,7 @@
     groups.forEach(function (group) {
       var match = catalogBrandPattern.exec(group);
       // Remove quality tokens only. Country, language and content words keep their identity.
-      var prefix = match ? groupFamilyName(group.slice(0, match.index)) : '';
-      var family = match ? 'brand:' + prefix + ':' + catalogBrand(match) : 'name:' + (groupFamilyName(group) || group);
+      var family = match ? 'brand:' + catalogBrand(match) : 'name:' + (groupFamilyName(group) || group);
       if (!families.has(family)) {
         var run = [];
         families.set(family, run);
@@ -152,27 +231,43 @@
     });
   }
 
-  function searchCatalog(entries, query, sectionForIndex, limit) {
+  function searchCatalog(entries, query, sectionForIndex, limit, liveIndexes) {
     var counts = { tv: 0, movies: 0, series: 0 };
     var matches = { tv: [], movies: [], series: [] };
     var searchArabic = /[\u0600-\u06ff]/.test(query);
     var normalizedQuery = normalizeCatalogSearch(query);
-    entries.forEach(function (entry, index) {
-      var name = entry.name || '';
-      var originalMatch = name.toLocaleLowerCase().indexOf(query) >= 0;
-      var section;
-      if (!originalMatch) {
-        // Skip alias matching for ordinary titles in the large catalogue.
-        if (!searchArabic || !/be[._-]?in|be\s+in|ssc|mbc|بي(?:\s+[إأا]|[إأ])ن|[إا]م\s+بي|[إا]س\s+[إا]س/i.test(name)) return;
-        section = sectionForIndex(index);
-        if (section !== 'tv') return;
-        var arabic = arabicCatalogName(name) || name;
-        if (normalizeCatalogSearch(arabic).indexOf(normalizedQuery) < 0) return;
-      } else section = sectionForIndex(index);
+    var queryWords = normalizedQuery.match(/[\u0600-\u06ff]+/g) || [];
+    var compactBrand = catalogBrandPattern.exec(query);
+    var hints = searchArabic && normalizedQuery.length >= 2 ? Object.keys(catalogWords).filter(function (word) {
+      var labelWords = normalizeCatalogSearch(catalogWords[word]).match(/[\u0600-\u06ff]+/g) || [];
+      return queryWords.some(function (queryWord) { return labelWords.some(function (labelWord) { return labelWord.indexOf(queryWord) >= 0 || queryWord.indexOf(labelWord) >= 0; }); });
+    }) : [];
+    var patterns = hints.map(catalogWordPattern);
+    if (compactBrand) patterns.push(catalogBrands.find(function (brand) { return brand[0] === catalogBrand(compactBrand); })[1].source);
+    var aliasHint = patterns.length ? new RegExp(patterns.join('|'), 'iu') : null;
+    function collect(index, section) {
       if (!matches[section]) return;
       counts[section] += 1;
-      if (matches[section].length < limit) matches[section].push(index);
+      var list = matches[section];
+      if (list.length < limit || index < list[list.length - 1]) {
+        list.push(index); list.sort(function (a, b) { return a - b; });
+        if (list.length > limit) list.pop();
+      }
+    }
+    entries.forEach(function (entry, index) {
+      if ((entry.name || '').toLocaleLowerCase().indexOf(query) >= 0) collect(index, sectionForIndex(index));
     });
+    function matchAlias(index) {
+      var name = entries[index].name || '';
+      if (name.toLocaleLowerCase().indexOf(query) >= 0 || sectionForIndex(index) !== 'tv' || !aliasHint.test(name)) return;
+      var full = arabicCatalogName(name) || name;
+      var compact = compactChannelName(name, '') || name;
+      if (normalizeCatalogSearch(full).indexOf(normalizedQuery) >= 0 || normalizeCatalogSearch(compact).indexOf(normalizedQuery) >= 0) collect(index, 'tv');
+    }
+    if (aliasHint) {
+      if (liveIndexes) liveIndexes.forEach(matchAlias);
+      else entries.forEach(function (_, index) { matchAlias(index); });
+    }
     return { counts: counts, matches: matches };
   }
 
@@ -410,5 +505,5 @@
     if (/(?:^|[^\p{L}\p{N}])(?:mbc|[إا]م\s+بي\s+سي)[ ._-]*(?:2|max|action|bollywood|ماكس|أكشن|بوليوود)(?=$|[^\p{L}\p{N}])/iu.test(text) || /روتانا\s+سينما/i.test(text)) return 'movies';
     return null;
   }
-  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

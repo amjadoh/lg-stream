@@ -75,6 +75,8 @@
   var sectionCacheKey = '';
   var sectionCache = null;
   var searchTimer = null;
+  var searchLiveRevision = -1;
+  var searchLiveIndexes = [];
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
   var AUTO_UPDATE_IDLE_MS = 60000;
@@ -151,14 +153,19 @@
     var query = $('channel-search').value.trim().toLocaleLowerCase(); $('search-results').replaceChildren();
     if (query.length < 2) { LGI18n.text($('search-status'), 'اكتب حرفين على الأقل.'); return; }
     var sections = [['tv', 'البث المباشر'], ['movies', 'الأفلام'], ['series', 'المسلسلات']]; var total = 0;
-    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12);
+    if (searchLiveRevision !== catalogViewRevision) {
+      searchLiveIndexes = [];
+      sources.forEach(function (_, index) { if (entrySection(index) === 'tv') searchLiveIndexes.push(index); });
+      searchLiveRevision = catalogViewRevision;
+    }
+    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12, searchLiveIndexes);
     sections.forEach(function (section) {
       var matches = results.matches[section[0]]; var count = results.counts[section[0]];
       total += count;
       var box = document.createElement('section'); box.className = 'search-section';
       var title = document.createElement('h3'); LGI18n.text(title, section[1] + ' (' + count + ')'); box.appendChild(title);
       matches.forEach(function (index) {
-        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر', arabicChannelName(index));
+        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر', arabicChannelName(index, ''));
         button.addEventListener('click', function () { closeSearch(); if (section[0] !== 'tv') stop(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
         box.appendChild(button);
       });
@@ -263,7 +270,7 @@
   function sectionGroups() {
     return sectionIndex().orderedGroups;
   }
-  function arabicChannelName(index) { return entrySection(index) === 'tv' ? api.arabicCatalogName(sources[index].name) : ''; }
+  function arabicChannelName(index, group) { return entrySection(index) === 'tv' ? api.compactChannelName(sources[index].name, group === undefined ? activeGroup : group) : ''; }
   function setHiddenGroups(value) {
     ['tv', 'movies', 'series'].forEach(function (section) {
       hiddenGroups[section] = new Set(value && Array.isArray(value[section]) ? value[section].filter(function (name) { return typeof name === 'string'; }) : []);
@@ -388,7 +395,7 @@
     $('empty-state').hidden = cards || playingIndex !== null;
     if (!cards) return;
     LGI18n.text($('movie-count'), indexes.length + (activeSection === 'movies' ? ' فيلم' : ' حلقة أو فيديو'));
-    LGI18n.provider($('movie-title'), activeGroup, activeSection === 'movies' ? 'الأفلام' : 'المسلسلات');
+    LGI18n.provider($('movie-title'), activeGroup, activeSection === 'movies' ? 'الأفلام' : 'المسلسلات', sectionIndex().groupLabels.get(activeGroup));
     $('movie-grid').replaceChildren();
     contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
     indexes.slice(contentWindowStart, contentWindowStart + contentWindowSize).forEach(function (index) {
@@ -505,7 +512,7 @@
       button.className = 'channel-button' + (playingIndex === index ? ' active' : '');
       button.dataset.index = index;
       var number = document.createElement('span');
-      number.className = 'channel-number'; number.textContent = String(index + 1);
+      number.className = 'channel-number'; number.textContent = String(position + 1);
       var label = document.createElement('span');
       var name = sources[index].name; var arabic = arabicChannelName(index);
       label.className = 'channel-label'; LGI18n.provider(label, name, 'المصدر ' + (index + 1), arabic);
@@ -616,7 +623,7 @@
     playingIndex = index;
     $('movie-browser').hidden = true;
     $('empty-state').hidden = true;
-    LGI18n.provider($('channel-title'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index));
+    LGI18n.provider($('channel-title'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index, ''));
     if (!watchMode && activeSection === 'tv') focusChannel(index);
     var playbackSource = sources[index].url;
     if (liveTransport === 'hls' && sourceMode === 'playlist' && entrySection(index) === 'tv') {
@@ -651,7 +658,7 @@
     if (watchMode && coalesce && sources[index]) {
       clearTimeout(hintTimer);
       $('fullscreen-hint').classList.add('channel-announcement');
-      LGI18n.provider($('fullscreen-hint'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index));
+      LGI18n.provider($('fullscreen-hint'), sources[index].name, 'المصدر ' + (index + 1), arabicChannelName(index, ''));
       $('fullscreen-hint').hidden = false;
       hintTimer = setTimeout(function () {
         $('fullscreen-hint').hidden = true;
@@ -1330,7 +1337,6 @@
     var choices = appearance.layout === 'tabs' ? categories.slice(0, 3).concat([['more', 'المزيد ▾']]) : categories;
     choices.forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; LGI18n.text(button, item[1]); button.dataset.category = item[0];
-      if (item[0] === 'all') LGI18n.text(button, 'الكل');
       var moreActive = item[0] === 'more' && !categories.slice(0, 3).some(function (choice) { return choice[0] === activeCategory; });
       if (moreActive) LGI18n.text(button, label + ' ▾');
       button.setAttribute('aria-pressed', String(item[0] === activeCategory || moreActive));
