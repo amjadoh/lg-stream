@@ -135,10 +135,12 @@ async function main() {
 
     // Every channel remains reachable through the 40-row virtual window.
     await page.locator('#groups [data-group="مشتركة"]').click();
+    assert.equal(await page.locator('#channels .channel-number').first().innerText(), '1');
     await page.locator('#channels .favorite-button').first().click();
     await page.locator('#channels .channel-button').first().focus();
     for (let i = 0; i < 69; i++) await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '69');
+    assert.equal(await page.locator('#channels .channel-button[data-index="69"] .channel-number').innerText(), '70');
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index), '69');
     assert.ok(await page.locator('#channels .channel-button').count() <= 40);
@@ -207,6 +209,7 @@ async function main() {
     await chooseSection('tv');
     await page.locator('#groups [data-group="مجموعة 1"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
+    assert.equal(await page.locator('#channels .channel-number').innerText(), '1');
     assert.match(await page.locator('#channels').innerText(), /قناة مجموعة 1/);
     await page.locator('#channels .channel-button').click();
     assert.equal(await page.locator('video').count(), 1, 'An enabled group still plays normally');

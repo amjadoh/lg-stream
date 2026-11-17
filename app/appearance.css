@@ -17,8 +17,8 @@ header { margin-bottom: 20px; }
 .header-settings { display: flex; align-items: center; gap: 10px; }
 .header-settings .nav-icon { width: 26px; height: 26px; }
 main { margin-top: 94px; }
-.library-panel, .library-panel.primary-open { width: 47vw; flex-basis: 47vw; grid-template-columns: 0 minmax(240px, 40%) minmax(0, 1fr); gap: 16px; }
-.library-panel.content-mode, .library-panel.content-mode.primary-open { width: 27vw; flex-basis: 27vw; grid-template-columns: 0 minmax(0, 1fr) 0; }
+.library-panel, .library-panel.primary-open { width: 47vw; flex-basis: 47vw; grid-template-columns: 0 minmax(240px, 43%) minmax(0, 1fr); gap: 16px; }
+.library-panel.content-mode, .library-panel.content-mode.primary-open { width: calc(27vw + 20px); flex-basis: calc(27vw + 20px); grid-template-columns: 0 minmax(0, 1fr) 0; }
 .primary-panel, .library-panel.primary-open .primary-panel { display: flex; position: fixed; top: 124px; left: 42px; right: 42px; height: 74px; flex-direction: row; direction: ltr; align-items: stretch; gap: 18px; padding: 0; border-bottom: 1px solid var(--line); }
 .primary-mark { display: none; }
 .primary-panel button { width: auto; padding: 12px 20px; display: flex; direction: rtl; gap: 10px; background: transparent; border-radius: 3px; font-size: 25px; }
@@ -49,7 +49,7 @@ main { margin-top: 94px; }
 .theme-options { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .theme-options button { text-align: start; white-space: normal; }
 .theme-options span { display: block; font-size: 22px; color: var(--muted); margin-top: 8px; }
-body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 130px minmax(240px, 34%) minmax(0, 1fr); }
+body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 130px minmax(240px, 37%) minmax(0, 1fr); }
 body[data-theme="cinema"] .library-panel.content-mode, body[data-theme="cinema"] .library-panel.content-mode.primary-open { grid-template-columns: 130px minmax(0, 1fr) 0; }
 body[data-theme="cinema"] .library-panel .primary-panel { position: static; height: auto; flex-direction: column; gap: 8px; border: 0; grid-row: 1 / 3; }
 body[data-theme="cinema"] .library-panel .primary-panel button { display: grid; width: 100%; padding: 12px 4px; }
@@ -68,8 +68,8 @@ html[dir="ltr"] .settings-grid button, html[dir="ltr"] .appearance-options butto
   .primary-panel, .library-panel.primary-open .primary-panel { top: 88px; left: 26px; right: 26px; height: 58px; gap: 8px; }
   .primary-panel button { padding: 8px 14px; font-size: 22px; }
   .primary-panel button span { font-size: 22px; }
-  .library-panel, .library-panel.primary-open { width: 49vw; flex-basis: 49vw; grid-template-columns: 0 minmax(210px, 40%) minmax(0, 1fr); gap: 8px; }
-  body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 100px 210px minmax(0, 1fr); }
+  .library-panel, .library-panel.primary-open { width: 49vw; flex-basis: 49vw; grid-template-columns: 0 minmax(210px, 43%) minmax(0, 1fr); gap: 8px; }
+  body[data-theme="cinema"] .library-panel, body[data-theme="cinema"] .library-panel.primary-open { grid-template-columns: 100px 224px minmax(0, 1fr); }
   body[data-theme="cinema"] .library-panel .primary-panel { height: auto; gap: 4px; }
   body[data-theme="cinema"] .library-panel .primary-panel button { padding: 8px 2px; }
   body[data-theme="cinema"] .library-panel .primary-panel button span { font-size: 19px; }
