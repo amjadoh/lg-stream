@@ -1,0 +1,98 @@
+{
+  "version": "0.8.9",
+  "restored": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0,
+    "language": "ar",
+    "section": "tv",
+    "category": "movies",
+    "videos": 0,
+    "chromium": "132"
+  },
+  "catalog": {
+    "duplicateCleaned": true,
+    "sportsCode": true,
+    "acronymsPreserved": true,
+    "groupsOrdered": true,
+    "sequentialNumbers": true,
+    "filterAbove": true,
+    "directFit": true
+  },
+  "resumed": true,
+  "start": {
+    "ready": true,
+    "width": 1280,
+    "height": 720,
+    "state": "playing",
+    "titleClean": true
+  },
+  "fit": {
+    "values": [
+      {
+        "mode": "cover",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "mode": "zoom125",
+        "width": 2400,
+        "height": 1350
+      },
+      {
+        "mode": "zoom135",
+        "width": 2592,
+        "height": 1458
+      },
+      {
+        "mode": "contain",
+        "width": 1920,
+        "height": 1080
+      }
+    ],
+    "sameVideo": true,
+    "sameSource": true
+  },
+  "announcement": {
+    "shown": true,
+    "numberRight": true,
+    "number": 28,
+    "titleClean": true,
+    "measured": "HD · 1280×720",
+    "qualitySeparate": true
+  },
+  "visibleAfter3Seconds": true,
+  "hiddenAfter6Seconds": true,
+  "playback": {
+    "sameVideo": true,
+    "sameSource": true,
+    "emptied": 0,
+    "advanced": 7.023000000000003,
+    "elapsed": 7031,
+    "videos": 1,
+    "error": 0,
+    "state": "playing"
+  },
+  "after": {
+    "count": 331807,
+    "revision": "mwjoepjv-n7966h",
+    "hidden": {
+      "tv": 240,
+      "movies": 0,
+      "series": 0
+    },
+    "transport": "hls",
+    "favorites": 0,
+    "language": "ar",
+    "section": "tv",
+    "category": "movies",
+    "videos": 1,
+    "chromium": "132"
+  }
+}

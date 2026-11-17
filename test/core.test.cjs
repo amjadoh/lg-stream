@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { nativeHlsPlaylist, nativeHlsSource, validateSource, qualityLabel, buildSectionIndex, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
+const { nativeHlsPlaylist, nativeHlsSource, validateSource, qualityLabel, channelTitle, pictureScale, buildSectionIndex, orderedCatalogGroups, arabicCatalogName, arabicGroupName, searchCatalog, youtubeSearchTarget, createSwitchScheduler, createPlayer } = require('../app/core.js');
 
 test('accepts signed HTTP media URLs without rewriting and rejects non-network sources', () => {
   const source = 'https://example.test/a%2Fb.m3u8?token=a%2Bb&x=1';
@@ -25,6 +25,7 @@ test('collects groups from a full-size catalogue in one pass and preserves provi
   assert.equal(index.groups.length, 3000);
   assert.deepEqual(index.groups.slice(0, 4), ['مجموعة 0', 'مجموعة 2', 'مجموعة 4', 'مجموعة 6']);
   assert.deepEqual(index.byGroup['مجموعة 2'].slice(0, 3), [2, 6002, 12002]);
+  assert.deepEqual(orderedCatalogGroups(index.groups), index.groups);
   const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
   assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
   assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
@@ -36,6 +37,92 @@ test('builds a YouTube TV voice search with title and year exactly once', () => 
   assert.equal(target.searchParams.get('launch'), 'voice');
   assert.equal(target.searchParams.get('vq'), 'Search for فيلم تجريبي 2024 on YouTube');
   assert.equal(youtubeSearchTarget('', '2024'), null);
+});
+
+test('Arabic display names retain provider variants, numbers and unrecognized titles', () => {
+  assert.equal(arabicCatalogName('AR | beIN SPORTS 1 FHD'), 'AR | beIN سبورت 1 FHD');
+  assert.equal(arabicCatalogName('BEIN2 UHD BACKUP'), 'BEIN2 UHD احتياط');
+  assert.equal(arabicCatalogName('beIN MOVIES 1'), 'beIN موفيز 1');
+  assert.equal(arabicCatalogName('beIN SPORTS MAX 1 FHD BACKUP'), 'beIN سبورت MAX 1 FHD احتياط');
+  assert.equal(arabicCatalogName('MBC ACTION HD'), 'MBC أكشن HD');
+  assert.equal(arabicCatalogName('SSC 1 HD'), '');
+  assert.equal(arabicCatalogName('MBC2'), '');
+  for (const name of ['Being Human', 'BEINNING', 'UNBEIN', 'بي إن سبورت 1', 'المفضلة', 'قناة خاصة']) {
+    assert.equal(arabicCatalogName(name), '');
+  }
+  assert.equal(arabicGroupName('NEWS HD'), 'أخبار HD');
+  assert.equal(arabicGroupName('Documentary 4K'), 'وثائقي 4K');
+  assert.equal(arabicGroupName('Movies about news'), '');
+  const groups = ['رياضة', 'BEIN SPORTS HD', 'أخبار', 'SSC', 'MBC', 'BEIN SPORTS FHD', 'أطفال', 'بي إن سبورت 4K', 'SSC HD'];
+  const original = groups.slice();
+  const ordered = orderedCatalogGroups(groups);
+  assert.deepEqual(ordered, ['رياضة', 'BEIN SPORTS HD', 'BEIN SPORTS FHD', 'بي إن سبورت 4K', 'أخبار', 'SSC', 'SSC HD', 'MBC', 'أطفال']);
+  assert.deepEqual(groups, original);
+  assert.deepEqual(orderedCatalogGroups(ordered), ordered);
+  assert.deepEqual(orderedCatalogGroups(['CUSTOM HD', 'OTHER', 'CUSTOM FHD', 'CUSTOM 4K', 'CUSTOM UK HD']), ['CUSTOM HD', 'CUSTOM FHD', 'CUSTOM 4K', 'OTHER', 'CUSTOM UK HD']);
+  assert.deepEqual(orderedCatalogGroups(['', '4K', 'HD']), ['', '4K', 'HD']);
+  assert.deepEqual(orderedCatalogGroups(['BEIN SPORTS HD', 'BEIN MOVIES HD', 'BEIN SPORTS FHD']), ['BEIN SPORTS HD', 'BEIN SPORTS FHD', 'BEIN MOVIES HD']);
+  assert.deepEqual(orderedCatalogGroups(['AR BEIN SPORTS HD', 'أخبار', 'FR BEIN SPORTS FHD', 'MBC HD', 'UK MBC FHD']), ['AR BEIN SPORTS HD', 'FR BEIN SPORTS FHD', 'أخبار', 'MBC HD', 'UK MBC FHD']);
+  const {compactChannelName} = require('../app/core.js');
+  assert.equal(arabicGroupName('AR | BEIN SPORTS FHD 4K'), 'beIN · FHD/4K');
+  assert.equal(compactChannelName('AR | BEIN SPORTS 6 FHD', 'AR | BEIN SPORTS FHD'), 'beIN 6');
+  assert.equal(compactChannelName('FR | BEIN SPORTS 6 FHD', 'AR | BEIN SPORTS FHD'), 'FR beIN 6');
+  assert.equal(compactChannelName('AR | BEIN SPORTS 6 FHD', 'BEIN SPORTS FHD'), 'AR beIN 6');
+  assert.equal(compactChannelName('beIN SPORTS 6 PREMIUM FHD', 'BEIN SPORTS FHD'), 'beIN 6 بريميوم');
+  assert.equal(compactChannelName('beIN SPORTS 6 HD', 'BEIN SPORTS FHD'), 'beIN 6 HD');
+  assert.equal(compactChannelName('beIN SPORTS 6 FHD', 'BEIN SPORTS FHD 4K'), 'beIN 6 FHD');
+  assert.equal(compactChannelName('beIN SPORTS 6 4K', 'BEIN SPORTS FHD 4K'), 'beIN 6 4K');
+  assert.equal(arabicCatalogName('AL FAJER NEWS'), 'الفجر الإخبارية');
+  assert.equal(arabicGroupName('ARABIC ENTERTAINMENT HD'), 'ترفيه عربي HD');
+  assert.equal(arabicCatalogName('BBC WORLD NEWS'), 'BBC وورلد نيوز');
+  assert.equal(arabicCatalogName('KANAL D'), 'كانال D');
+  assert.equal(arabicCatalogName('PROGRAM HD'), 'برنامج HD');
+  assert.equal(arabicCatalogName('Custom News HD'), '');
+  assert.equal(arabicGroupName('مسلسلات رمضان | شاهد'), 'مسلسلات رمضان · شاهد');
+  assert.equal(arabicGroupName('MOVIES | OSN 4K'), 'أفلام · OSN · 4K');
+  assert.equal(arabicGroupName('SP | MBC HD'), 'MBC · رياضة · HD');
+  const resolved = require('../app/core.js').groupDisplayNames(['UK | SKY HD', 'UK | SKY SPORTS HD', 'UK | MBC MOVIE HD', 'UK | MBC MOVIES HD']);
+  assert.equal(new Set(resolved.values()).size,4);
+  assert.equal(arabicCatalogName('بيان HD'), '');
+  assert.equal(arabicCatalogName('MBC constructor HD'), '');
+  const displayNames = require('../app/core.js').groupDisplayNames(['SPORTS', 'Sport', 'رياضة']);
+  assert.equal(displayNames.get('SPORTS'), 'رياضة (1)');
+  assert.equal(displayNames.get('Sport'), 'رياضة (2)');
+  assert.equal(displayNames.get('رياضة'), 'رياضة (3)');
+  assert.equal(arabicCatalogName('JORDAN الأردن'), 'الأردن');
+  assert.equal(arabicCatalogName('أطفال اطفال'), 'أطفال');
+  assert.equal(arabicCatalogName('مصر - مصر HD'), 'مصر HD');
+  assert.equal(arabicCatalogName('مصر، مصر'), 'مصر');
+  assert.equal(arabicCatalogName('JORDAN (الأردن)'), 'الأردن');
+  assert.equal(arabicCatalogName('بي بي سي عربي'), '');
+  assert.equal(arabicCatalogName('سي إن إن'), '');
+  assert.equal(arabicCatalogName('إس إس سي 1'), '');
+  assert.equal(compactChannelName('إس إس سي 1', ''), 'SSC 1');
+  assert.equal(arabicCatalogName('MBC 1 1'), '');
+  assert.deepEqual(orderedCatalogGroups(['BEIN MOVIES HD', 'أخبار', 'SP | BEIN HD', 'AR | BEIN SPORTS FHD']), ['SP | BEIN HD', 'AR | BEIN SPORTS FHD', 'BEIN MOVIES HD', 'أخبار']);
+  assert.deepEqual(orderedCatalogGroups(['BEIN MOVIES HD', 'SP | BEIN NEWS HD', 'BEIN SPORTS HD']), ['SP | BEIN NEWS HD', 'BEIN SPORTS HD', 'BEIN MOVIES HD']);
+  const entries = [{ name: 'beIN SPORTS 1 FHD' }, { name: 'MBC2' }, { name: 'beIN SPORTS 1 film' }];
+  assert.deepEqual(searchCatalog(entries, 'سبورت 1', i => i === 2 ? 'movies' : 'tv', 12).matches.tv, [0]);
+  assert.deepEqual(searchCatalog(entries, 'سبورت', () => 'tv', 12).matches.tv, [0, 2]);
+  assert.deepEqual(searchCatalog(entries, 'سبورتس 1', () => 'tv', 12).matches.tv, [0, 2]);
+  assert.deepEqual(searchCatalog(entries, 'سبورتس ١', () => 'tv', 12).matches.tv, [0, 2]);
+  assert.equal(searchCatalog(entries, 'سبورت 1', i => i === 2 ? 'movies' : 'tv', 12).counts.movies, 0);
+  assert.deepEqual(searchCatalog(entries, 'bein sports 1', () => 'tv', 12).matches.tv, [0, 2]);
+  assert.deepEqual(searchCatalog(entries, 'bein 1', () => 'tv', 12).matches.tv, [0, 2]);
+  const compactEntries = [{name:'beIN SPORTS MAX 1'},{name:'beIN MOVIES 1'},{name:'أفلام 1'}];
+  assert.deepEqual(searchCatalog(compactEntries,'bein max',()=>'tv',12,[0,1,2]).matches.tv,[0]);
+  assert.deepEqual(searchCatalog(compactEntries,'أفلام 1',()=>'tv',12,[0,1,2]).matches.tv,[1,2]);
+});
+
+test('channel-name classification takes precedence over a mixed or misleading group', () => {
+  const {channelCategory, groupCategory} = require('../app/core.js');
+  for (const name of ['beIN SPORTS1 FHD', 'BEIN 2 HD', 'SSC1 FHD', 'بي إن سبورت 1']) assert.equal(channelCategory(name), 'sports');
+  for (const name of ['beIN MOVIES1', 'MBC2', 'MBC ACTION HD', 'إم بي سي ماكس', 'روتانا سينما']) assert.equal(channelCategory(name), 'movies');
+  assert.equal(channelCategory('BEIN'), null);
+  assert.equal(channelCategory('Sports News'), null);
+  assert.equal(channelCategory('قناة خاصة'), null);
+  assert.equal(groupCategory('SPORTS MOVIES'), 'other');
+  assert.equal(groupCategory('SP | قنوات مباشرة'), 'sports');
 });
 
 test('search omits hidden entries from both results and totals', () => {
@@ -236,6 +323,8 @@ assert.equal(require('../app/core.js').groupCategory('RU 4K'), 'other');
 assert.equal(require('../app/core.js').groupCategory('رياضة HD'), 'sports');
 assert.equal(require('../app/core.js').groupCategory('Sports / News'), 'other');
 assert.equal(require('../app/core.js').groupCategory('قنوات أفلام'), 'movies');
+assert.equal(require('../app/core.js').groupCategory('بي إن سبورت FHD'), 'sports');
+assert.equal(require('../app/core.js').groupCategory('بي إن موفيز HD'), 'movies');
 assert.equal(require('../app/core.js').groupCategory('الرياض'), 'other');
 
 
@@ -293,4 +382,18 @@ test('native HLS resolves only matching provider live paths and preserves all ot
   const encoded = 'https://provider.example.test/u%2Bser/p%26ass/42';
   const encodedList = 'https://provider.example.test/get.php?username=u%2Bser&password=p%26ass';
   assert.equal(nativeHlsSource(encoded, encodedList), 'https://provider.example.test/live/u%2Bser/p%26ass/42.m3u8');
+});
+
+test('presentation removes provider quality and scales the same native video rectangle', () => {
+  assert.equal(channelTitle('beIN SPORTS 1 FHD'), 'beIN SPORTS 1');
+  assert.equal(channelTitle('SSC 1 [HD]'), 'SSC 1');
+  assert.equal(channelTitle('SSC 1 (HD/FHD)'), 'SSC 1');
+  assert.equal(channelTitle('MBC2'), 'MBC2');
+  assert.equal(channelTitle('Sport 4K HEVC BACKUP'), 'Sport BACKUP');
+  assert.equal(pictureScale('contain', 1920, 800, 1920, 1080), 1);
+  assert.equal(pictureScale('cover', 1920, 800, 1920, 1080), 1.35);
+  assert.equal(pictureScale('cover', 1440, 1080, 1920, 1080), 4 / 3);
+  assert.equal(pictureScale('zoom125', 1920, 1080, 1920, 1080), 1.25);
+  assert.equal(pictureScale('zoom135', 1920, 1080, 1920, 1080), 1.35);
+  assert.equal(pictureScale('cover', 0, 0, 0, 0), 1);
 });
