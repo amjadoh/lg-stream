@@ -64,7 +64,6 @@
   <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
       <button id="manage-groups-button" type="button">إدارة المجموعات<span>إظهار أو إخفاء مجموعات البث والأفلام والمسلسلات</span></button>
-      <button id="settings-sources" type="button">مصادر البث والقوائم<span>إضافة قائمة M3U وتحديث القائمة المحفوظة</span></button>
       <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
       <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
@@ -92,21 +91,42 @@
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
-      <h2 id="setup-title">مصادر البث والقوائم</h2>
-      <p>ألصق رابط M3U الكامل لتحميل القنوات. بعد نجاح القائمة كاملة تُحفظ محليًا على التلفزيون وتعود عند فتح التطبيق.</p>
-      <label for="playlist-url">إضافة قائمة M3U</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+      <h2 id="setup-title">مصادر البث</h2>
+      <div id="source-card" class="source-card" hidden>
+        <div class="source-head"><strong id="source-name" dir="auto"></strong><span id="source-badge" class="source-badge"></span></div>
+        <p id="source-counts" class="source-counts"></p>
+        <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
+        <div class="form-actions source-actions"><button id="refresh-saved" type="button" class="primary">تحديث الآن</button><button id="cancel-playlist" type="button" disabled>إلغاء التحديث</button><button id="rename-source" type="button">إعادة تسمية</button><button id="toggle-source" type="button">إيقاف</button><button id="clear-sources" type="button">حذف</button><button id="live-transport" type="button" aria-pressed="false" hidden>البث المباشر: رابط القائمة الأصلي</button></div>
+        <div id="rename-row" class="rename-row" hidden><label for="source-name-input">اسم المصدر</label><input id="source-name-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"><div class="form-actions"><button id="save-source-name" type="button" class="primary">حفظ الاسم</button><button id="cancel-source-name" type="button">إلغاء</button></div></div>
+        <p id="transport-status" class="small-note" role="status"></p>
+      </div>
+      <div id="source-confirm" class="source-confirm" hidden><p id="source-confirm-text"></p><div class="form-actions"><button id="source-confirm-yes" type="button" class="primary">تأكيد</button><button id="source-confirm-no" type="button">إلغاء</button></div></div>
+      <div id="playlist-progress" class="playlist-progress" hidden><div id="playlist-progress-bar" class="playlist-progress-bar"></div></div>
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
-      <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
-      <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="refresh-saved" type="button" hidden>تحديث القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
-      <button id="live-transport" type="button" aria-pressed="false" hidden>البث المباشر: رابط القائمة الأصلي</button>
-      <p id="transport-status" class="small-note" role="status"></p>
-      <h3 class="setup-divider">أو روابط مباشرة</h3>
-      <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
-      <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
-      <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
+      <button id="add-source" type="button" aria-expanded="false">إضافة مصدر</button>
+      <div id="add-source-panel" class="add-source-panel" hidden>
+        <p class="small-note">مصدر واحد في هذه المرحلة: إضافة مصدر جديد تستبدل الحالي بعد نجاح تحميله.</p>
+        <div class="form-actions add-modes"><button type="button" data-add-mode="link" aria-pressed="true">رابط M3U</button><button type="button" data-add-mode="xtream" aria-pressed="false">اسم مستخدم وكلمة مرور</button><button type="button" data-add-mode="direct" aria-pressed="false">روابط مباشرة</button></div>
+        <div id="add-link" data-add-section="link">
+          <label for="playlist-url">رابط القائمة</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+          <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button></div>
+        </div>
+        <div id="add-xtream" data-add-section="xtream" hidden>
+          <label for="xtream-server">السيرفر</label><input id="xtream-server" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="512" placeholder="http://server:port">
+          <label for="xtream-username">اسم المستخدم</label><input id="xtream-username" type="text" dir="ltr" spellcheck="false" autocomplete="off" maxlength="256">
+          <label for="xtream-password">كلمة المرور</label><input id="xtream-password" type="password" dir="ltr" spellcheck="false" autocomplete="off" maxlength="256">
+          <div class="form-actions"><button id="load-xtream" type="button" class="primary">تسجيل الدخول وتحميل القائمة</button></div>
+        </div>
+        <div id="add-direct" data-add-section="direct" hidden>
+          <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+          <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+          <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
+          <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button></div>
+        </div>
+      </div>
       <p id="form-error" class="form-error" role="alert"></p>
-      <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
-      <p class="small-note">قد يمنع مزود القائمة التحميل من تطبيق التلفزيون؛ عندها تظهر رسالة واضحة ولا نرسل الرابط لأي وسيط. يبدأ التشغيل فقط عند اختيار قناة.</p>
+      <div class="form-actions"><button id="close-setup" type="button">رجوع</button></div>
+      <p class="small-note">لا يظهر رابط المصدر على الشاشة. القائمة الناجحة تُحفظ على التلفزيون وتتحدث تلقائيًا كل 24 ساعة أثناء التصفح فقط.</p>
     </form>
   </section>
   <section id="group-manager" class="modal group-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" hidden>

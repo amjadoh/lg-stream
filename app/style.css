@@ -276,3 +276,19 @@ body[data-layout="vertical"] #category-shortcuts button { flex-shrink: 0; width:
 
 .channel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; min-height: 62px; padding: 8px; border: 2px solid transparent; }
 .channel-heading h1, .channel-heading .list-count { margin: 0; }
+/* Sources screen */
+.source-card { border: 1px solid #3a4c63; border-radius: 12px; padding: 16px 20px; margin: 8px 0 14px; background: #0d1626; }
+.source-head { display: flex; align-items: center; gap: 14px; font-size: 28px; }
+.source-badge { font-size: 18px; padding: 2px 12px; border-radius: 999px; background: #1d4a2e; color: #bdf5cf; }
+.source-badge.stopped { background: #4a2a1d; color: #ffcfb5; }
+.source-counts { margin: 6px 0 0; font-size: 20px; color: #d8e2f0; }
+.source-actions { flex-wrap: wrap; }
+.rename-row, .source-confirm, .add-source-panel { margin-top: 12px; }
+.source-confirm { border: 1px solid #c9912f; border-radius: 10px; padding: 12px 16px; background: #2a2010; }
+.add-modes [aria-pressed="true"] { background: #33260f; border-color: #c9912f; color: #f6d28a; }
+.playlist-progress { height: 10px; border-radius: 6px; background: #1b2638; overflow: hidden; margin: 12px 0 0; }
+.playlist-progress-bar { height: 100%; width: 0; background: #c9912f; transition: width .25s linear; }
+.playlist-progress-bar.indeterminate { width: 35%; animation: progressSweep 1.4s linear infinite; }
+@keyframes progressSweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.new-badge { margin-inline-start: 10px; font-size: 15px; padding: 1px 8px; border-radius: 999px; background: #1d4a2e; color: #bdf5cf; flex: none; }
+.group-button.new-group { color: #bdf5cf; }

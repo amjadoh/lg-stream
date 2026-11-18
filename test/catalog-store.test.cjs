@@ -174,3 +174,38 @@ test('reopens IndexedDB after the platform closes the cached connection', async 
   assert.equal((await store.load()).state, 'complete');
   assert.equal(opens, 2, 'A close event from a connection that is no longer cached is ignored');
 });
+
+test('large saves are split into batches yet switch the active catalogue atomically', async () => {
+  const indexed = fakeIndexedDB({ commitDelay: 1 });
+  const yields = [];
+  const store = createStore({ indexedDB: indexed, batchChunks: 2, yieldTask: () => { yields.push(1); return Promise.resolve(); } });
+  const source = 'https://provider.invalid/list';
+  const first = Array.from({ length: 1200 }, (_, index) => ({ url: 'https://media.invalid/live/u/p/' + index + '.ts', name: 'C' + index }));
+  const progress = [];
+  const saved = await store.save(source, first, { onProgress: (done, total) => progress.push([done, total]), meta: [{ key: 'known-keys', source, keys: Float64Array.from([1, 2]) }] });
+  assert.equal(saved.state, 'complete');
+  assert.ok(yields.length >= 1, 'The store yields to the event loop between batches');
+  assert.deepEqual(progress.at(-1), [3, 3]);
+  assert.equal((await createStore({ indexedDB: indexed }).load()).entries.length, 1200);
+  assert.deepEqual(Array.from((await store.loadMeta(['known-keys'])).records['known-keys'].keys), [1, 2], 'Meta records commit with the catalogue');
+  // Cancelling between batches keeps the previous catalogue active.
+  let cancelAfterFirst = true;
+  const slow = createStore({ indexedDB: indexed, batchChunks: 1, yieldTask: () => { if (cancelAfterFirst) { cancelAfterFirst = false; slow.cancel(); } return Promise.resolve(); } });
+  const second = first.concat(first).map((entry, index) => ({ ...entry, name: 'N' + index }));
+  assert.equal((await slow.save(source, second)).state, 'cancelled');
+  const kept = await createStore({ indexedDB: indexed }).load();
+  assert.equal(kept.entries.length, 1200);
+  assert.equal(kept.entries[0].name, 'C0');
+});
+
+test('meta records for sources and customization survive clearCatalog but not clear', async () => {
+  const indexed = fakeIndexedDB({ commitDelay: 1 });
+  const store = createStore({ indexedDB: indexed });
+  await store.save('https://provider.invalid/list', [{ url: 'https://media.invalid/1', name: 'one' }]);
+  assert.equal((await store.saveMeta([{ key: 'sources', list: [{ id: 's1', name: 'Main', url: 'https://provider.invalid/list' }], activeId: 's1' }])).state, 'complete');
+  assert.equal((await store.clearCatalog()).state, 'complete');
+  assert.deepEqual(await store.load(), { state: 'empty' });
+  assert.equal((await store.loadMeta(['sources'])).records.sources.activeId, 's1');
+  await store.clear();
+  assert.equal((await store.loadMeta(['sources'])).records.sources, null);
+});

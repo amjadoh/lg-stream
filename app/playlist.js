@@ -84,6 +84,7 @@
     }
     return {
       push: push,
+      count: function () { return entries.length; },
       result: function () {
         if (!failure && (!header || metadata)) reject(metadata ? 'missing-uri' : 'invalid-format');
         return { entries: entries, truncated: !!failure, truncatedReason: failure };
@@ -108,6 +109,12 @@
       clearTimeout: function (handle) { clearTimeout(handle); }
     };
     var active = null;
+    // The network can deliver chunks faster than they are parsed; awaiting an
+    // already-resolved read keeps running in microtasks and starves remote
+    // input. Give the event loop a macrotask after each ~30ms of parsing.
+    var SLICE_MS = 30;
+    var now = options.now || function () { return typeof performance !== 'undefined' ? performance.now() : Date.now(); };
+    var yieldTask = options.yieldTask || function () { return new Promise(function (resolve) { setTimeout(resolve, 0); }); };
 
     function finish(entry, result) {
       if (entry.done) return;
@@ -149,6 +156,9 @@
         var parser = createM3UParser(response.url || url);
         function invalidResult() { var reason = parser.result().truncatedReason; return { state: /-limit$/.test(reason) ? 'limit' : 'invalid', reason: reason }; }
         var pending = '';
+        var total = 0;
+        try { total = Number(response.headers && response.headers.get && response.headers.get('content-length')) || 0; } catch (_) { total = 0; }
+        var sliceStart = now();
         while (!entry.done) {
           var chunk = await entry.reader.read();
           if (entry.done) return;
@@ -163,6 +173,10 @@
           for (var index = 0; index < lines.length; index += 1) {
             if (!parser.push(lines[index])) { finish(entry, invalidResult()); return; }
           }
+          if (now() - sliceStart >= SLICE_MS) {
+            if (entry.onProgress) { try { entry.onProgress({ bytes: entry.bytes, total: total, entries: parser.count() }); } catch (_) {} }
+            await yieldTask(); if (entry.done) return; sliceStart = now();
+          }
         }
         pending += decoder.decode(); if (pending) parser.push(pending);
         var parsed = parser.result();
@@ -171,7 +185,7 @@
     }
 
     return {
-      start: function (rawUrl) {
+      start: function (rawUrl, startOptions) {
         cancel();
         var url = resolveHttpUrl(rawUrl);
         if (!url) return Promise.resolve({ state: 'invalid' });
@@ -179,7 +193,7 @@
         var controller;
         try { controller = new Abort(); } catch (_) { return Promise.resolve({ state: 'unsupported' }); }
         return new Promise(function (resolve) {
-          var entry = { controller: controller, reader: null, timer: null, totalTimer: null, bytes: 0, done: false, resolve: resolve };
+          var entry = { controller: controller, reader: null, timer: null, totalTimer: null, bytes: 0, done: false, resolve: resolve, onProgress: startOptions && startOptions.onProgress };
           active = entry;
           armTimeout(entry);
           entry.totalTimer = timers.setTimeout(function () { finish(entry, { state: 'timeout' }); }, TOTAL_TIMEOUT_MS);

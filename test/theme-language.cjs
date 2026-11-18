@@ -82,7 +82,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://catalog.example.test/list');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://catalog.example.test/list');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     await page.locator('#channels .channel-button').first().click();
