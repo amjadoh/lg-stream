@@ -209,6 +209,11 @@ async function main() {
     await focusChannelNamed('Two 9'); await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => window.__mediaStarts || 0), startsInSelect, 'OK selects instead of playing');
     assert.match(await page.locator('#select-count').innerText(), /2/);
+    assert.match(await page.locator('#blue-hint-text').innerText(), /نقل أو إخفاء المحدد/, 'The legend explains blue in select mode');
+    await blue(); assert.equal(await active(), 'select-move', 'Blue jumps from deep in the list to the actions');
+    await blue(); assert.equal(await page.evaluate(() => document.activeElement.textContent.includes('Two 9')), true, 'Blue again returns to the same channel');
+    await blue(); await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.textContent.includes('Two 9')), true, 'Down also returns to the same channel');
     await focusChannelNamed('Zed 7'); await page.keyboard.press('ArrowUp');
     assert.equal(await page.evaluate(() => document.getElementById('select-bar').contains(document.activeElement)), true, 'Up from the top reaches the bar');
     await page.locator('#select-move').click();
@@ -244,7 +249,8 @@ async function main() {
     // Remote: each card lands in its own column.
     await page.locator('#organize-groups').focus(); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => document.activeElement.className.replace(' active', '') + '|' + document.activeElement.parentNode.id), 'group-button|groups', 'Arrange groups lands on the first real group');
-    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape'); assert.equal(await page.evaluate(() => document.getElementById('select-bar').contains(document.activeElement)), true, 'First Back goes to the actions bar');
+    await page.keyboard.press('Escape'); assert.equal(await page.locator('#select-bar').isVisible(), false, 'Second Back leaves select mode');
     await page.locator('#nav-settings').click(); await page.locator('#manage-groups-button').click();
     await page.locator('#organize-channels').focus(); await page.keyboard.press('Enter'); await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('channel-button')), true, 'Arrange channels lands on the channels');
@@ -256,7 +262,7 @@ async function main() {
     assert.equal(await page.locator('#edit-confirm').isVisible(), false, 'Settings edits do not stop after one change');
     assert.equal(await page.locator('#select-bar').isVisible(), true, 'Still selecting after an edit');
     await focusChannelNamed('Two 4'); await page.keyboard.press('Enter'); await page.locator('#select-hide').click();
-    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
     assert.equal(await page.locator('#edit-confirm').isVisible(), true); assert.equal(await page.locator('#edit-continue').isVisible(), true);
     await page.locator('#edit-continue').click(); assert.equal(await page.locator('#select-bar').isVisible(), true, 'Continue keeps editing');
     await page.keyboard.press('Escape'); await page.locator('#edit-discard').click();
