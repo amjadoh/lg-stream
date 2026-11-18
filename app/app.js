@@ -195,8 +195,13 @@
     ensureEntryMeta();
     var code = entrySectionCodes[index];
     if (code) return sectionCodeNames[code];
-    var url = sources[index] && sources[index].url || '';
-    code = /\/series\//i.test(url) ? 3 : /\/movie\//i.test(url) ? 2 : 1;
+    if (entryKeys && entryKeys.length === sources.length && index >= 0 && index < entryKeys.length) {
+      // The stable key already encodes the section (see api.entryKey).
+      code = Math.floor(entryKeys[index] / 4294967296); if (code > 3) code -= 3;
+    } else {
+      var url = sources[index] && sources[index].url || '';
+      code = /\/series\//i.test(url) ? 3 : /\/movie\//i.test(url) ? 2 : 1;
+    }
     if (index >= 0 && index < entrySectionCodes.length) entrySectionCodes[index] = code;
     return sectionCodeNames[code];
   }
@@ -327,7 +332,11 @@
   // hidden channels, renamed channels and the master display order.
   function prepareCatalog(source, keys) {
     var count = sources.length;
-    if (!keys || keys.length !== count) { keys = new Float64Array(count); for (var index = 0; index < count; index += 1) keys[index] = api.entryKey(sources[index].url); }
+    if (!keys || keys.length !== count) {
+      // Saved entries carry their key (k) from the refresh that stored them.
+      keys = new Float64Array(count);
+      for (var index = 0; index < count; index += 1) { var stored = sources[index].k; keys[index] = typeof stored === 'number' ? stored : api.entryKey(sources[index].url); }
+    }
     entryKeys = keys;
     custom = normalizeCustomization(customizationFor(source));
     var fresh = catalogMeta.newKeys && catalogMeta.newKeys.source === source ? catalogMeta.newKeys.keys : null;
@@ -1318,7 +1327,7 @@
         if (revision !== playlistRevision) { resolve(null); return; }
         var until = performance.now() + 30;
         while (index < entries.length && performance.now() < until) {
-          for (var count = 0; count < 400 && index < entries.length; count += 1, index += 1) keys[index] = api.entryKey(entries[index].url);
+          for (var count = 0; count < 400 && index < entries.length; count += 1, index += 1) { keys[index] = api.entryKey(entries[index].url); entries[index].k = keys[index]; }
         }
         if (index < entries.length) { setTimeout(step, 0); return; }
         var previous = catalogMeta.knownKeys && catalogMeta.knownKeys.source === url && catalogMeta.knownKeys.keys && catalogMeta.knownKeys.keys.length ? catalogMeta.knownKeys.keys : null;

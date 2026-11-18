@@ -172,6 +172,8 @@
           if (pending.length > MAX_LINE_LENGTH) { finish(entry, { state: 'limit', reason: 'line-limit' }); return; }
           for (var index = 0; index < lines.length; index += 1) {
             if (!parser.push(lines[index])) { finish(entry, invalidResult()); return; }
+            // A single network chunk can hold thousands of lines.
+            if ((index & 255) === 255 && now() - sliceStart >= SLICE_MS) { await yieldTask(); if (entry.done) return; sliceStart = now(); }
           }
           if (now() - sliceStart >= SLICE_MS) {
             if (entry.onProgress) { try { entry.onProgress({ bytes: entry.bytes, total: total, entries: parser.count() }); } catch (_) {} }
