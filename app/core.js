@@ -56,18 +56,20 @@
     return 'SD';
   }
 
-  function buildSectionIndex(entries, include) {
+  function buildSectionIndex(entries, include, order) {
     var all = [];
     var groups = [];
     var byGroup = Object.create(null);
-    entries.forEach(function (entry, index) {
+    var visit = function (entry, index) {
       if (!include(entry, index)) return;
       all.push(index);
       var group = entry.group || '';
       if (!group) return;
       if (!byGroup[group]) { byGroup[group] = []; groups.push(group); }
       byGroup[group].push(index);
-    });
+    };
+    if (order) { for (var position = 0; position < order.length; position += 1) visit(entries[order[position]], order[position]); }
+    else entries.forEach(visit);
     return { all: all, groups: groups, byGroup: byGroup };
   }
 
@@ -597,5 +599,114 @@
     if (/(?:^|[^\p{L}\p{N}])(?:mbc|[إا]م\s+بي\s+سي)[ ._-]*(?:2|max|action|bollywood|ماكس|أكشن|بوليوود)(?=$|[^\p{L}\p{N}])/iu.test(text) || /روتانا\s+سينما/i.test(text)) return 'movies';
     return null;
   }
-  return { nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+
+  // Stable identity of a catalogue item that survives provider refreshes:
+  // the numeric stream id at the end of an Xtream-style path, tagged with
+  // its section. Other URLs fall back to a 32-bit hash; the key is never a
+  // URL and cannot be turned back into one.
+  var KEY_SPACE = 4294967296;
+  // Runs over every catalogue item, so it avoids regular expressions.
+  function entryKey(url) {
+    url = String(url || '');
+    var end = url.length; var query = url.indexOf('?'); var hashAt = url.indexOf('#');
+    if (query >= 0) end = query; if (hashAt >= 0 && hashAt < end) end = hashAt;
+    var lower = url.indexOf('/series/') >= 0 || url.indexOf('/movie/') >= 0 || url.indexOf('/SERIES/') >= 0 || url.indexOf('/MOVIE/') >= 0 ? url.toLowerCase() : url;
+    var section = lower.indexOf('/series/') >= 0 ? 3 : lower.indexOf('/movie/') >= 0 ? 2 : 1;
+    var start = url.lastIndexOf('/', end - 1) + 1; var value = 0; var length = 0;
+    for (var at = start; at < end; at += 1) {
+      var code = url.charCodeAt(at);
+      if (code === 46 && length) break;
+      if (code < 48 || code > 57 || length >= 9) { length = -1; break; }
+      value = value * 10 + code - 48; length += 1;
+    }
+    if (length > 0) return section * KEY_SPACE + value;
+    var hash = 2166136261;
+    for (var index = 0; index < url.length; index += 1) { hash ^= url.charCodeAt(index); hash = Math.imul(hash, 16777619) >>> 0; }
+    return (section + 3) * KEY_SPACE + hash;
+  }
+  function sortedKeys(keys) { return Float64Array.from(keys).sort(); }
+  function hasSortedKey(sorted, key) {
+    var low = 0; var high = sorted.length - 1;
+    while (low <= high) { var middle = (low + high) >>> 1; var value = sorted[middle]; if (value === key) return true; if (value < key) low = middle + 1; else high = middle - 1; }
+    return false;
+  }
+  // Flags items whose key was not in the previous refresh key list.
+  function newItemFlags(keys, previousSorted) {
+    var flags = new Uint8Array(keys.length); var count = 0;
+    if (!previousSorted || !previousSorted.length) return { flags: flags, count: 0 };
+    for (var index = 0; index < keys.length; index += 1) if (!hasSortedKey(previousSorted, keys[index])) { flags[index] = 1; count += 1; }
+    return { flags: flags, count: count };
+  }
+  // Move the items of block (kept in their current relative order) so the
+  // block starts at position `to` of the list without them.
+  function moveBlock(list, block, to) {
+    var chosen = new Set(block); var moving = []; var rest = [];
+    list.forEach(function (item) { (chosen.has(item) ? moving : rest).push(item); });
+    to = Math.max(0, Math.min(rest.length, to));
+    return rest.slice(0, to).concat(moving, rest.slice(to));
+  }
+  // One master order per section: groups (new groups first, then the saved
+  // order, then the default provider-family order) and, inside each group,
+  // new items first, then the saved order, then provider order.
+  function buildDisplayOrder(entries, sectionOf, options) {
+    options = options || {};
+    var keys = options.keys; var fresh = options.newFlags; var custom = options.custom || {};
+    var groupOrder = custom.groupOrder || {}; var channelOrder = custom.channelOrder || {};
+    var result = {};
+    ['tv', 'movies', 'series'].forEach(function (section) { result[section] = { groups: [], byGroup: new Map(), order: null, newCount: 0, newGroups: new Set() }; });
+    for (var index = 0; index < entries.length; index += 1) {
+      var own = result[sectionOf(index)]; if (!own) continue;
+      var group = entries[index].group || '';
+      var members = own.byGroup.get(group);
+      if (!members) { members = []; own.byGroup.set(group, members); own.groups.push(group); }
+      members.push(index);
+      if (fresh && fresh[index]) own.newCount += 1;
+    }
+    Object.keys(result).forEach(function (section) {
+      var own = result[section];
+      var named = own.groups.filter(function (group) { return group; });
+      var defaults = (options.orderGroups || function (groups) { return groups; })(named);
+      var saved = Array.isArray(groupOrder[section]) ? groupOrder[section] : [];
+      var present = new Set(named); var placed = new Set(); var ordered = [];
+      saved.forEach(function (group) { if (present.has(group) && !placed.has(group)) { placed.add(group); ordered.push(group); } });
+      defaults.forEach(function (group) { if (!placed.has(group)) { placed.add(group); ordered.push(group); } });
+      if (fresh) {
+        named.forEach(function (group) { if (own.byGroup.get(group).every(function (item) { return fresh[item]; })) own.newGroups.add(group); });
+        if (own.newGroups.size) ordered = ordered.filter(function (group) { return own.newGroups.has(group); }).concat(ordered.filter(function (group) { return !own.newGroups.has(group); }));
+      }
+      if (own.byGroup.has('')) ordered.push('');
+      var order = [];
+      ordered.forEach(function (group) {
+        var members = own.byGroup.get(group); var savedKeys = channelOrder[section + '\u0001' + group];
+        if (keys && Array.isArray(savedKeys) && savedKeys.length) {
+          var byKey = new Map(); members.forEach(function (item) { if (!byKey.has(keys[item])) byKey.set(keys[item], item); });
+          var used = new Set(); var arranged = [];
+          savedKeys.forEach(function (key) { var item = byKey.get(key); if (item !== undefined && !used.has(item)) { used.add(item); arranged.push(item); } });
+          members.forEach(function (item) { if (!used.has(item)) arranged.push(item); });
+          members = arranged;
+        }
+        if (fresh) members = members.filter(function (item) { return fresh[item]; }).concat(members.filter(function (item) { return !fresh[item]; }));
+        own.byGroup.set(group, members);
+        for (var position = 0; position < members.length; position += 1) order.push(members[position]);
+      });
+      own.groups = ordered; own.order = Int32Array.from(order);
+    });
+    return result;
+  }
+  // Xtream login typed on the TV becomes the same get.php playlist link.
+  function xtreamPlaylistUrl(server, username, password) {
+    var raw = String(server || '').trim(); username = String(username || '').trim(); password = String(password || '');
+    if (!raw || !username || !password || /[\u0000-\u001f\u007f]/.test(username + password)) return null;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) && !/^https?:\/\//i.test(raw)) return null;
+    if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
+    try {
+      var parsed = new URL(raw);
+      if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname || parsed.username || parsed.password) return null;
+      var link = new URL('/get.php', parsed.origin);
+      link.searchParams.set('username', username); link.searchParams.set('password', password);
+      link.searchParams.set('type', 'm3u_plus'); link.searchParams.set('output', 'ts');
+      return validateSource(link.href);
+    } catch (_) { return null; }
+  }
+  return { entryKey: entryKey, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

@@ -25,8 +25,11 @@
   function createStore(options) {
     options = options || {};
     var indexed = options.indexedDB !== undefined ? options.indexedDB : (typeof indexedDB !== 'undefined' ? indexedDB : null);
+    var BATCH_CHUNKS = options.batchChunks || 16;
+    var yieldTask = options.yieldTask || function () { return new Promise(function (resolve) { setTimeout(resolve, 0); }); };
     var databasePromise = null;
     var activeWrite = null;
+    var writingRevision = null;
     var writeGeneration = 0;
     function open() {
       if (!indexed) return Promise.reject(new Error('unsupported'));
@@ -91,19 +94,37 @@
         var transaction = database.transaction('chunks', 'readwrite');
         var store = transaction.objectStore('chunks');
         var request = store.openKeyCursor();
-        request.onsuccess = function () { var cursor = request.result; if (!cursor) return; if (String(cursor.primaryKey).indexOf(revision + ':') !== 0) store.delete(cursor.primaryKey); cursor.continue(); };
+        request.onsuccess = function () { var cursor = request.result; if (!cursor) return; var key = String(cursor.primaryKey); if (key.indexOf(revision + ':') !== 0 && !(writingRevision && key.indexOf(writingRevision + ':') === 0)) store.delete(cursor.primaryKey); cursor.continue(); };
         await transactionDone(transaction);
       } catch (_) {}
     }
-    async function save(source, entries) {
+    // Chunks of a new revision are written in several short transactions with
+    // a macrotask between them, so remote keys stay responsive while a large
+    // catalogue is stored. Nothing references the new revision until the final
+    // transaction switches the 'active' record, so a cancel or failure keeps
+    // the previous catalogue; orphan chunks are removed by the next cleanup.
+    async function save(source, entries, saveOptions) {
       if (!source || !entries || !entries.length) return { state: 'invalid' };
+      saveOptions = saveOptions || {};
       var generation = ++writeGeneration;
       try {
         var database = await open();
         if (generation !== writeGeneration) return { state: 'cancelled' };
         var revision = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-        var savedAt = Date.now();
+        var savedAt = Date.now(); writingRevision = revision;
         var chunkCount = Math.ceil(entries.length / CHUNK_SIZE);
+        var written = 0;
+        while (written < chunkCount - BATCH_CHUNKS) {
+          var batch = await begin('chunks', 'readwrite', database);
+          if (generation !== writeGeneration) { try { batch.transaction.abort(); } catch (_) {} return { state: 'cancelled' }; }
+          database = batch.database; activeWrite = batch.transaction;
+          var batchStore = batch.transaction.objectStore('chunks'); var batchEnd = Math.min(chunkCount - 1, written + BATCH_CHUNKS);
+          for (; written < batchEnd; written += 1) batchStore.put({ key: revision + ':' + written, revision: revision, index: written, entries: entries.slice(written * CHUNK_SIZE, (written + 1) * CHUNK_SIZE) });
+          await transactionDone(batch.transaction); activeWrite = null;
+          if (saveOptions.onProgress) saveOptions.onProgress(written, chunkCount);
+          await yieldTask();
+          if (generation !== writeGeneration) return { state: 'cancelled' };
+        }
         var opened = await begin(['meta', 'chunks'], 'readwrite', database);
         if (generation !== writeGeneration) { try { opened.transaction.abort(); } catch (_) {} return { state: 'cancelled' }; }
         database = opened.database; var transaction = opened.transaction;
@@ -112,11 +133,14 @@
         var metaStore = transaction.objectStore('meta');
         var preferencesRequest = requestResult(metaStore.get('group-visibility'));
         var transportRequest = requestResult(metaStore.get('live-transport'));
-        for (var index = 0; index < chunkCount; index += 1) {
+        for (var index = written; index < chunkCount; index += 1) {
           chunks.put({ key: revision + ':' + index, revision: revision, index: index, entries: entries.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE) });
         }
         metaStore.put({ key: 'active', revision: revision, source: source, count: entries.length, chunkCount: chunkCount, savedAt: savedAt });
+        (saveOptions.meta || []).forEach(function (record) { metaStore.put(record); });
         var completed = await Promise.all([preferencesRequest, transportRequest, transactionDone(transaction)]); activeWrite = null;
+        if (saveOptions.onProgress) saveOptions.onProgress(chunkCount, chunkCount);
+        writingRevision = null;
         var preferences = completed[0]; var transport = completed[1];
         cleanup(database, revision);
         return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && transport.source === source && transport.value === 'hls' ? 'hls' : 'original' };
@@ -160,6 +184,31 @@
         return { state: 'complete' };
       } catch (_) { return { state: 'error' }; }
     }
+    // Small preference records (sources, customization, known/new keys).
+    async function loadMeta(keys) {
+      try {
+        var transaction = (await begin('meta', 'readonly')).transaction; var store = transaction.objectStore('meta');
+        var values = await Promise.all(keys.map(function (key) { return requestResult(store.get(key)); }));
+        var result = {}; keys.forEach(function (key, index) { result[key] = values[index] || null; });
+        return { state: 'complete', records: result };
+      } catch (_) { return { state: 'error', records: {} }; }
+    }
+    async function saveMeta(records, removeKeys) {
+      try {
+        var transaction = (await begin('meta', 'readwrite')).transaction; var store = transaction.objectStore('meta');
+        (records || []).forEach(function (record) { store.put(record); });
+        (removeKeys || []).forEach(function (key) { store.delete(key); });
+        await transactionDone(transaction); return { state: 'complete' };
+      } catch (_) { return { state: 'error' }; }
+    }
+    // Remove the stored catalogue while keeping the sources list and the
+    // owner's customization records.
+    async function clearCatalog() {
+      try {
+        var transaction = (await begin(['meta', 'chunks'], 'readwrite')).transaction;
+        transaction.objectStore('meta').delete('active'); transaction.objectStore('chunks').clear(); await transactionDone(transaction); return { state: 'complete' };
+      } catch (_) { return { state: 'error' }; }
+    }
     async function clear() {
       try {
         var transaction = (await begin(['meta', 'chunks'], 'readwrite')).transaction;
@@ -170,7 +219,7 @@
       if (!activeWrite) { writeGeneration += 1; return true; }
       try { activeWrite.abort(); writeGeneration += 1; activeWrite = null; return true; } catch (_) { return false; }
     }
-    return { load: load, save: save, clear: clear, cancel: cancel, saveHiddenGroups: saveHiddenGroups, saveLiveTransport: saveLiveTransport };
+    return { load: load, save: save, clear: clear, clearCatalog: clearCatalog, cancel: cancel, saveHiddenGroups: saveHiddenGroups, saveLiveTransport: saveLiveTransport, loadMeta: loadMeta, saveMeta: saveMeta };
   }
   return { createStore: createStore, CHUNK_SIZE: CHUNK_SIZE };
 }));

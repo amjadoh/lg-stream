@@ -90,7 +90,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://provider.invalid/catalogue');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://provider.invalid/catalogue');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.match(await page.locator('#status').innerText(), /119 عنصر/);
@@ -255,7 +255,7 @@ async function main() {
     await closeManager();
     await page.evaluate(() => { window.__groupsLiveOnly = true; });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://provider.invalid/live-only');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://provider.invalid/live-only');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     await openManager();

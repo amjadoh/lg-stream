@@ -85,7 +85,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://catalog.example.test/list');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://catalog.example.test/list');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
 
@@ -323,7 +323,7 @@ async function main() {
     const nativePlaylist = 'https://provider.example.test/get.php?username=user&password=pass&type=m3u_plus&output=mpegts';
     await page.evaluate(() => { window.__nativePlaylistFixture = true; });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill(nativePlaylist);
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill(nativePlaylist);
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     await page.locator('#channels [data-index="0"]').click();
@@ -332,7 +332,7 @@ async function main() {
     await page.locator('#channels [data-favorite-index="0"]').click();
     await page.locator('#setup-button').click();
     const beforePreference = await page.evaluate(() => window.__mediaStarts);
-    await page.locator('#load-playlist').focus();
+    await page.locator('#refresh-saved').focus();
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'live-transport', 'Remote reaches the transport choice');
     await page.keyboard.press('Enter');
