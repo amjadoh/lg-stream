@@ -172,8 +172,9 @@ async function main() {
     assert.deepEqual(catalogueAfter,catalogueBefore);
     await page.locator('#nav-settings').click();await page.locator('[data-language="en"]').click();
     await page.evaluate(()=>{const v=document.querySelector('video');Object.defineProperty(v,'error',{configurable:true,value:{code:2}});v.dispatchEvent(new Event('error'));});
-    await page.locator('[data-language="ar"]').click();assert.match(await page.locator('#status').innerText(),/تعذر.*\(2\)/);
-    await page.locator('[data-language="en"]').click();assert.match(await page.locator('#status').innerText(),/Couldn't.*\(2\)/);
+    await page.locator('[data-language="ar"]').click();assert.match(await page.locator('#status').innerText(),/جارٍ إعادة الاتصال… \(1\/2\)/);
+    await page.locator('[data-language="en"]').click();assert.match(await page.locator('#status').innerText(),/Reconnecting… \(1\/2\)/);
+    assert.equal(await page.locator('#error-code').innerText(),'2','The numeric media error code stays available in diagnostics');
     await page.locator('#settings-appearance').click();await page.locator('[data-theme-choice="cinema"]').click();
     await page.reload();await page.locator('#launch-splash').waitFor({state:'detached'});
     assert.equal(await page.locator('html').getAttribute('lang'),'en');assert.equal(await page.locator('body').getAttribute('data-theme'),'cinema');

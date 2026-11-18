@@ -381,6 +381,11 @@
       clearTimeout: function (handle) { clearTimeout(handle); }
     };
     var startupTimeoutMs = options.startupTimeoutMs || 15000;
+    // After the first progress, a stream that shows no media-time change for
+    // this long (outside pause/seek) is reported as 'stall-timeout'. Short
+    // waits that recover on their own are left alone.
+    var stallTimeoutMs = options.stallTimeoutMs || 15000;
+    var stallCheckMs = options.stallCheckMs || 2500;
     function snapshot(entry) {
       return {
         channel: entry.channel,
@@ -402,6 +407,22 @@
     function clearStartup(entry) {
       if (entry.startupTimer !== null) timers.clearTimeout(entry.startupTimer);
       entry.startupTimer = null;
+    }
+    function clearStall(entry) {
+      if (entry.stallTimer !== null) timers.clearTimeout(entry.stallTimer);
+      entry.stallTimer = null;
+    }
+    function armStall(entry) {
+      if (!entry.watchStall || entry.stallTimer !== null) return;
+      if (entry.lastProgressAt === null) entry.lastProgressAt = now();
+      entry.stallTimer = timers.setTimeout(function check() {
+        entry.stallTimer = null;
+        if (active !== entry || entry.state === 'ended') return;
+        var video = entry.video;
+        if (video.paused || video.seeking || entry.seekInProgress) entry.lastProgressAt = now();
+        else if (now() - entry.lastProgressAt >= stallTimeoutMs) { fail(entry, 'stall-timeout'); return; }
+        entry.stallTimer = timers.setTimeout(check, stallCheckMs);
+      }, stallCheckMs);
     }
     function finishWait(entry) {
       if (entry.waitingSince !== null) {
@@ -438,7 +459,7 @@
       var old = active;
       active = null;
       if (!old) return;
-      clearStartup(old);
+      clearStartup(old); clearStall(old);
       old.listeners.forEach(function (item) { old.video.removeEventListener(item[0], item[1]); });
       if (old.frameHandle !== null && old.video.cancelVideoFrameCallback) old.video.cancelVideoFrameCallback(old.frameHandle);
       old.video.pause();
@@ -446,7 +467,7 @@
       old.video.load();
       options.unmountVideo(old.video);
     }
-    function start(source, channel, requestedAt) {
+    function start(source, channel, requestedAt, startOptions) {
       var valid = validateSource(source);
       if (!valid) { release(); emit({ state: 'error', channel: channel }); return false; }
       release();
@@ -457,7 +478,7 @@
         video: video, channel: channel, state: 'loading', started: started, playingMs: null,
         requested: typeof requestedAt === 'number' && isFinite(requestedAt) && requestedAt <= started ? requestedAt : started,
         sourceMs: null, metadataMs: null,
-        progressMs: null, lastMediaTime: 0, startupTimer: null, startupRevision: 0, playRevision: 0,
+        progressMs: null, lastMediaTime: 0, lastProgressAt: null, stallTimer: null, watchStall: !!(startOptions && startOptions.watchStall), startupTimer: null, startupRevision: 0, playRevision: 0,
         firstFrameMs: null, frameApi: typeof video.requestVideoFrameCallback === 'function',
         frameHandle: null, listeners: [], stalls: 0, stallMs: 0, waitingSince: null, seekInProgress: false, seekMediaTime: null, errorCode: 0
       };
@@ -481,11 +502,14 @@
         if (entry.seekInProgress && entry.seekMediaTime !== null && !video.paused && !video.seeking && isFinite(mediaTime) && mediaTime > entry.seekMediaTime) {
           entry.seekInProgress = false; entry.seekMediaTime = null;
         }
-        if (entry.playingMs === null || entry.progressMs !== null || video.paused || video.seeking || !isFinite(mediaTime)) return;
-        if (mediaTime > entry.lastMediaTime) {
-          entry.progressMs = Math.round(now() - entry.requested);
-          clearStartup(entry); notify(entry);
-        }
+        if (entry.playingMs === null || video.paused || video.seeking || !isFinite(mediaTime)) return;
+        if (entry.progressMs === null) {
+          if (mediaTime > entry.lastMediaTime) {
+            entry.progressMs = Math.round(now() - entry.requested);
+            entry.lastProgressAt = now();
+            clearStartup(entry); armStall(entry); notify(entry);
+          }
+        } else if (mediaTime !== entry.lastMediaTime) entry.lastProgressAt = now();
         entry.lastMediaTime = mediaTime;
       });
       on('seeking', function () {
@@ -521,7 +545,7 @@
         entry.frameHandle = video.requestVideoFrameCallback(function () {
           if (!validEntry()) return;
           entry.firstFrameMs = Math.round(now() - entry.requested);
-          clearStartup(entry);
+          clearStartup(entry); armStall(entry);
           notify(entry);
         });
       }

@@ -27,6 +27,8 @@
   "تعذر تشغيل المصدر — جرّب إعادة المحاولة": "Couldn't play the source — try retrying",
   "لم يبدأ التشغيل — اضغط إعادة المحاولة": "Playback didn't start — press Retry",
   "انتهت مهلة بدء البث — اضغط إعادة المحاولة": "Stream start timed out — press Retry",
+  "توقف البث — اضغط إعادة المحاولة": "Stream stalled — press Retry",
+  "جارٍ إعادة الاتصال…": "Reconnecting…",
   "اكتب حرفين على الأقل.": "Type at least two characters.",
   "البث المباشر": "Live TV",
   "الأفلام": "Movies",
