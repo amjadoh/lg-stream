@@ -58,12 +58,22 @@
     </main>
     <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
   </div>
+  <div id="hold-ring" class="hold-ring" hidden aria-hidden="true"><svg viewBox="0 0 44 44"><circle class="hold-track" cx="22" cy="22" r="19"></circle><circle id="hold-progress" class="hold-progress" cx="22" cy="22" r="19"></circle></svg></div>
+  <div id="select-bar" class="select-bar" role="toolbar" aria-label="التحديد المتعدد" hidden><span id="select-count" class="select-count"></span><button id="select-move" type="button">نقل</button><button id="select-hide" type="button">إخفاء</button><button id="select-cancel" type="button">إلغاء</button><span id="select-hint" class="select-hint">موافق: تحديد أو إلغاء · أعلى القائمة: الأزرار · رجوع: خروج</span></div>
+  <div id="move-bar" class="select-bar move-bar" role="status" hidden><span id="move-text"></span></div>
+  <p id="organize-status" class="organize-status" role="status" aria-live="polite" hidden></p>
+  <section id="item-menu" class="modal" role="dialog" aria-modal="true" aria-labelledby="item-menu-title" hidden>
+    <div class="setup-card track-card"><h2 id="item-menu-title" dir="auto"></h2><div class="track-list"><button id="menu-select" type="button">تحديد</button><button id="menu-move" type="button">نقل</button><button id="menu-rename" type="button">إعادة تسمية</button><button id="menu-hide" type="button">إخفاء</button></div><button id="close-item-menu" type="button">رجوع</button></div>
+  </section>
+  <section id="rename-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="rename-title" hidden>
+    <div class="setup-card"><h2 id="rename-title">إعادة تسمية القناة</h2><p id="rename-original" class="small-note" dir="auto"></p><label for="channel-name-input">الاسم الجديد</label><input id="channel-name-input" type="text" maxlength="80" autocomplete="off" spellcheck="false" dir="auto"><div class="form-actions"><button id="save-channel-name" type="button" class="primary">حفظ</button><button id="restore-channel-name" type="button">الاسم الأصلي</button><button id="close-rename" type="button">رجوع</button></div></div>
+  </section>
   <section id="exit-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="exit-title" hidden>
     <div class="setup-card"><h2 id="exit-title">هل تريد الخروج من التطبيق؟</h2><div class="form-actions"><button id="exit-cancel" type="button">إلغاء</button><button id="exit-accept" type="button">خروج</button></div></div>
   </section>
   <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
-      <button id="manage-groups-button" type="button">إدارة المجموعات<span>إظهار أو إخفاء مجموعات البث والأفلام والمسلسلات</span></button>
+      <button id="manage-groups-button" type="button">تنظيم القنوات والمجموعات<span>إظهار المخفي، الترتيب، وإعادة الضبط</span></button>
       <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
       <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
@@ -131,8 +141,10 @@
   </section>
   <section id="group-manager" class="modal group-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" hidden>
     <div class="setup-card manager-card">
-      <h2 id="manager-title">إدارة المجموعات</h2>
-      <div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button></div>
+      <h2 id="manager-title">تنظيم القنوات والمجموعات</h2>
+      <div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button><button type="button" data-manage-section="hidden" aria-pressed="false">القنوات المخفية</button></div>
+      <div class="form-actions organize-actions"><button id="organize-groups" type="button">تحديد ونقل المجموعات</button><button id="organize-channels" type="button">تحديد ونقل القنوات</button><button id="reset-customization" type="button">إعادة الضبط</button></div>
+      <div id="reset-confirm" class="source-confirm" hidden><p>إعادة الضبط تُظهر كل المخفي وتعيد ترتيب المزود والأسماء الأصلية لهذا المصدر. هل تريد المتابعة؟</p><div class="form-actions"><button id="reset-confirm-yes" type="button" class="primary">إعادة الضبط</button><button id="reset-confirm-no" type="button">إلغاء</button></div></div>
       <p id="managed-summary"></p><div id="managed-groups" class="managed-groups"></div>
       <p id="manager-status" role="status" aria-live="polite"></p><button id="close-group-manager" type="button">رجوع</button>
     </div>

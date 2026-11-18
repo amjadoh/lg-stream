@@ -672,20 +672,24 @@
       defaults.forEach(function (group) { if (!placed.has(group)) { placed.add(group); ordered.push(group); } });
       if (fresh) {
         named.forEach(function (group) { if (own.byGroup.get(group).every(function (item) { return fresh[item]; })) own.newGroups.add(group); });
-        if (own.newGroups.size) ordered = ordered.filter(function (group) { return own.newGroups.has(group); }).concat(ordered.filter(function (group) { return !own.newGroups.has(group); }));
+        // A new group the owner already placed keeps its place.
+        var leading = function (group) { return own.newGroups.has(group) && saved.indexOf(group) < 0; };
+        if (own.newGroups.size) ordered = ordered.filter(leading).concat(ordered.filter(function (group) { return !leading(group); }));
       }
       if (own.byGroup.has('')) ordered.push('');
       var order = [];
       ordered.forEach(function (group) {
         var members = own.byGroup.get(group); var savedKeys = channelOrder[section + '\u0001' + group];
         if (keys && Array.isArray(savedKeys) && savedKeys.length) {
+          // The owner's arrangement wins; items it does not mention yet go
+          // first when new, otherwise after it in provider order.
           var byKey = new Map(); members.forEach(function (item) { if (!byKey.has(keys[item])) byKey.set(keys[item], item); });
           var used = new Set(); var arranged = [];
           savedKeys.forEach(function (key) { var item = byKey.get(key); if (item !== undefined && !used.has(item)) { used.add(item); arranged.push(item); } });
-          members.forEach(function (item) { if (!used.has(item)) arranged.push(item); });
-          members = arranged;
-        }
-        if (fresh) members = members.filter(function (item) { return fresh[item]; }).concat(members.filter(function (item) { return !fresh[item]; }));
+          var before = []; var after = [];
+          members.forEach(function (item) { if (!used.has(item)) (fresh && fresh[item] ? before : after).push(item); });
+          members = before.concat(arranged, after);
+        } else if (fresh) members = members.filter(function (item) { return fresh[item]; }).concat(members.filter(function (item) { return !fresh[item]; }));
         own.byGroup.set(group, members);
         for (var position = 0; position < members.length; position += 1) order.push(members[position]);
       });
