@@ -446,7 +446,7 @@
     return sectionIndex().orderedGroups;
   }
   function groupKeys() { return [''].concat(sectionIndex().fresh.length ? [NEW_GROUP] : [], sectionGroups()); }
-  function arabicChannelName(index, group) { return entrySection(index) === 'tv' ? api.compactChannelName(sources[index].name, group === undefined ? activeGroup : group) : ''; }
+  function arabicChannelName(index, group) { return entrySection(index) === 'tv' && sources[index].originalName === undefined ? api.compactChannelName(sources[index].name, group === undefined ? activeGroup : group) : ''; }
   function setHiddenGroups(value) {
     ['tv', 'movies', 'series'].forEach(function (section) {
       hiddenGroups[section] = new Set(value && Array.isArray(value[section]) ? value[section].filter(function (name) { return typeof name === 'string'; }) : []);
@@ -455,6 +455,14 @@
   function entryVisible(index) { return !(hiddenFlags && hiddenFlags[index]) && !hiddenGroups[entrySection(index)].has(sources[index].group || ''); }
   function masterOrder(section) { return section !== 'favorites' && displayOrder && displayOrder[section] ? displayOrder[section].order : null; }
   function collectManagedGroups() {
+    if (managedSection === 'hidden') {
+      // Hidden channels by stable key; rows can be shown again one by one.
+      var wanted = new Map(); custom.hidden.forEach(function (key, position) { wanted.set(key, position); });
+      var rows = [];
+      if (entryKeys && wanted.size) for (var index = 0; index < entryKeys.length; index += 1) if (wanted.has(entryKeys[index])) rows.push({ name: entryKeys[index], index: index, label: null, count: '', order: wanted.get(entryKeys[index]) });
+      rows.sort(function (left, right) { return left.order - right.order; });
+      managedGroups = rows; managedWindowStart = 0; return;
+    }
     var counts = new Map();
     sources.forEach(function (entry, index) {
       if (entrySection(index) !== managedSection) return;
@@ -472,17 +480,22 @@
     managedGroups.slice(managedWindowStart, managedWindowStart + 40).forEach(function (item, offset) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'group-switch';
       button.dataset.position = managedWindowStart + offset; button.setAttribute('role', 'switch');
-      var enabled = !hiddenGroups[managedSection].has(item.name);
+      var channelRow = managedSection === 'hidden';
+      var enabled = channelRow ? !(hiddenFlags && hiddenFlags[item.index]) : !hiddenGroups[managedSection].has(item.name);
       button.setAttribute('aria-checked', String(enabled)); button.disabled = groupSettingsSaving;
-      var label = document.createElement('span'); label.className = 'group-switch-name'; LGI18n.provider(label, item.name, 'بدون مجموعة', item.label);
-      var count = document.createElement('span'); count.className = 'group-switch-count'; LGI18n.text(count, item.count + ' عنصر');
+      var label = document.createElement('span'); label.className = 'group-switch-name';
+      if (channelRow) LGI18n.provider(label, sources[item.index].name, 'قناة'); else LGI18n.provider(label, item.name, 'بدون مجموعة', item.label);
+      var count = document.createElement('span'); count.className = 'group-switch-count';
+      if (channelRow) LGI18n.provider(count, sources[item.index].group, 'بدون مجموعة'); else LGI18n.text(count, item.count + ' عنصر');
       var state = document.createElement('span'); state.className = 'switch-state'; LGI18n.text(state, enabled ? 'ON · ظاهر' : 'OFF · مخفي');
       button.appendChild(label); button.appendChild(count); button.appendChild(state);
       button.addEventListener('focus', function () { button.scrollIntoView({ block: 'nearest' }); });
       button.addEventListener('click', function () { toggleManagedGroup(Number(button.dataset.position)); });
       list.appendChild(button);
     });
-    LGI18n.text($('managed-summary'), managedGroups.length ? managedGroups.length + ' مجموعة — المخفي يبقى محفوظًا ويمكن إظهاره مجددًا.' : 'لا توجد مجموعات في هذا القسم.');
+    if (managedSection === 'hidden') LGI18n.text($('managed-summary'), managedGroups.length ? managedGroups.length + ' قناة مخفية — اضغط موافق لإظهارها.' : 'لا توجد قنوات مخفية.');
+    else LGI18n.text($('managed-summary'), managedGroups.length ? managedGroups.length + ' مجموعة — المخفي يبقى محفوظًا ويمكن إظهاره مجددًا.' : 'لا توجد مجموعات في هذا القسم.');
+    ['organize-groups', 'organize-channels', 'reset-customization'].forEach(function (id) { $(id).disabled = groupSettingsSaving || !customizable(); });
     Array.prototype.forEach.call($('group-manager').querySelectorAll('[data-manage-section]'), function (button) {
       button.setAttribute('aria-pressed', String(button.dataset.manageSection === managedSection)); button.disabled = groupSettingsSaving;
     });
@@ -497,6 +510,16 @@
   }
   function toggleManagedGroup(position) {
     if (groupSettingsSaving || !activePlaylistUrl || !managedGroups[position]) return;
+    if (managedSection === 'hidden') {
+      var row = managedGroups[position]; if (!hiddenFlags) hiddenFlags = new Uint8Array(sources.length);
+      var showing = !!hiddenFlags[row.index];
+      hiddenFlags[row.index] = showing ? 0 : 1;
+      custom.hidden = showing ? custom.hidden.filter(function (key) { return key !== row.name; }) : custom.hidden.concat([row.name]);
+      invalidateViews(); renderGroups(); renderChannels(); renderManagedGroups(); focusManagedGroup(position);
+      saveCustomization(showing ? 'ظهرت القناة من جديد.' : 'أُخفيت القناة.');
+      LGI18n.text($('manager-status'), showing ? 'ظهرت القناة من جديد.' : 'أُخفيت القناة.');
+      return;
+    }
     var item = managedGroups[position]; var next = {};
     ['tv', 'movies', 'series'].forEach(function (section) { next[section] = Array.from(hiddenGroups[section]); });
     var index = next[managedSection].indexOf(item.name);
@@ -542,6 +565,8 @@
     items.slice(groupWindowStart, groupWindowStart + groupWindowSize).forEach(function (item) {
       var button = document.createElement('button'); button.type = 'button'; button.className = 'group-button' + (item[0] === activeGroup ? ' active' : '');
       button.dataset.group = item[0];
+      if (selectState && selectState.kind === 'group' && selectState.items.has(item[0])) markSelected(button, true);
+      if (moveState && moveState.kind === 'group' && moveState.items.indexOf(item[0]) >= 0) button.classList.add('is-moving');
       if (item[0] === NEW_GROUP) { button.classList.add('new-group'); LGI18n.text(button, 'جديد (' + fresh.length + ')'); }
       else LGI18n.provider(button, item[0], item[1], sectionIndex().groupLabels.get(item[0]));
       button.addEventListener('focus', function (event) {
@@ -712,6 +737,8 @@
       var name = sources[index].name; var arabic = arabicChannelName(index);
       label.className = 'channel-label'; LGI18n.provider(label, name, 'المصدر ' + (index + 1), arabic);
       button.appendChild(number); button.appendChild(label);
+      if (selectState && selectState.kind === 'channel' && selectState.items.has(index)) markSelected(button, true);
+      if (moveState && moveState.kind === 'channel' && moveState.items.indexOf(index) >= 0) button.classList.add('is-moving');
       if (newFlags && newFlags[index]) { var badge = document.createElement('span'); badge.className = 'new-badge'; LGI18n.text(badge, 'جديد'); button.appendChild(badge); }
       button.setAttribute('aria-pressed', playingIndex === index ? 'true' : 'false');
       button.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); event.currentTarget.scrollIntoView({ block: 'nearest' }); });
@@ -1563,6 +1590,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
     button.addEventListener('click', function (event) {
       cancelSwitch();
+      if (selectState) { selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; }
       if (event.currentTarget.dataset.section === 'movies' || event.currentTarget.dataset.section === 'series') stop();
       activeSection = event.currentTarget.dataset.section; activeGroup = ''; contentWindowStart = 0; channelWindowStart = 0;
       setPrimary(false); renderPrimary(); renderGroups(); renderChannels();
@@ -1667,7 +1695,7 @@
 
 
   function extraDialog() {
-    return ['exit-confirm', 'category-picker', 'appearance-panel', 'settings-home'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['exit-confirm', 'category-picker', 'appearance-panel', 'settings-home', 'item-menu', 'rename-panel'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   var exitReturn = null;
   function focusSection() {
@@ -1714,6 +1742,8 @@
     else if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
     else if (panel.id === 'category-picker') focusCategoryReturn();
+    else if (panel.id === 'item-menu') closeItemMenu(true);
+    else if (panel.id === 'rename-panel') closeRename();
   }
   function renderAppearance() {
     document.body.dataset.theme = appearance.theme; document.body.dataset.layout = appearance.layout; document.body.dataset.controls = appearance.controls;
@@ -1820,6 +1850,304 @@
   } catch (_) {}
   renderAppearance();
 
+  // ---- Customization: long-press menu, select, move, hide, rename. ----
+  // Edits change the in-memory master order (displayOrder) and the
+  // customization record only; playback is never restarted by them.
+  var HOLD_MS = 4000; var RING_MS = 500; var REPEAT_GAP_MS = 450;
+  var hold = null; var menuContext = null; var menuReturn = null; var selectState = null; var moveState = null; var renameIndex = null;
+  var customSaving = Promise.resolve();
+  function customizable() { return sourceMode === 'playlist' && !!activePlaylistUrl && !!displayOrder && !!entryKeys && sources.length > 0; }
+  function holdTarget(element) {
+    if (!element || watchMode || watchChannels !== null || !customizable()) return null;
+    if (element.classList.contains('channel-button') && element.parentNode && element.parentNode.parentNode === $('channels') && activeSection !== 'favorites') return element;
+    if (element.classList.contains('group-button') && element.parentNode === $('groups') && element.dataset.group && element.dataset.group !== NEW_GROUP && activeSection !== 'favorites') return element;
+    return null;
+  }
+  function placeRing(target) {
+    var ring = $('hold-ring'); var rect = target.getBoundingClientRect();
+    ring.style.top = Math.round(rect.top + rect.height / 2 - 28) + 'px';
+    ring.style.left = Math.round((document.documentElement.dir === 'ltr' ? rect.right - 64 : rect.left + 8)) + 'px';
+  }
+  function drawRing() {
+    if (!hold) return;
+    var fraction = Math.min(1, (performance.now() - hold.start - RING_MS) / (HOLD_MS - RING_MS));
+    $('hold-progress').style.strokeDashoffset = String(119.4 * (1 - Math.max(0, fraction)));
+    hold.frame = requestAnimationFrame(drawRing);
+  }
+  function startHold(target) {
+    var now = performance.now();
+    hold = { target: target, start: now, lastEvent: now, repeats: 0, ring: false, frame: null };
+    hold.ringTimer = setTimeout(function () { if (!hold) return; hold.ring = true; placeRing(target); $('hold-progress').style.strokeDashoffset = '119.4'; $('hold-ring').hidden = false; drawRing(); }, RING_MS);
+    hold.doneTimer = setTimeout(function () { var own = hold; endHold(); if (own) openItemMenu(own.target); }, HOLD_MS);
+    // Release fallback when keyup is missing: auto-repeat stops.
+    hold.watch = setInterval(function () {
+      if (!hold) return; var idle = performance.now() - hold.lastEvent;
+      if (hold.repeats && idle > REPEAT_GAP_MS) releaseHold();
+    }, 100);
+  }
+  function endHold() {
+    if (!hold) return;
+    clearTimeout(hold.ringTimer); clearTimeout(hold.doneTimer); clearInterval(hold.watch); cancelAnimationFrame(hold.frame);
+    $('hold-ring').hidden = true; hold = null;
+  }
+  function releaseHold() {
+    if (!hold) return;
+    var own = hold; var short = performance.now() - own.start < RING_MS && !own.ring; endHold();
+    // A short press acts as OK; releasing while the ring shows cancels.
+    if (short && own.target.isConnected) own.target.click();
+  }
+  function showOrganizeStatus(text) {
+    var status = $('organize-status'); LGI18n.text(status, text); status.hidden = false;
+    clearTimeout(showOrganizeStatus.timer); showOrganizeStatus.timer = setTimeout(function () { status.hidden = true; }, 5000);
+  }
+  function itemName(target) {
+    if (target.classList.contains('group-button')) return target.textContent;
+    var index = Number(target.dataset.index); return sources[index] ? sources[index].name : '';
+  }
+  function openItemMenu(target) {
+    if (!target || !target.isConnected || !customizable()) return;
+    var channel = target.classList.contains('channel-button');
+    menuContext = { kind: channel ? 'channel' : 'group', index: channel ? Number(target.dataset.index) : null, group: channel ? null : target.dataset.group };
+    menuReturn = target; cancelSwitch();
+    LGI18n.provider($('item-menu-title'), itemName(target), channel ? 'القناة' : 'المجموعة');
+    $('menu-rename').hidden = !channel;
+    $('item-menu').hidden = false; $('menu-select').focus();
+  }
+  function closeItemMenu(restoreFocus) {
+    $('item-menu').hidden = true; menuContext = null;
+    if (restoreFocus) returnToList();
+  }
+  function returnToList() {
+    var target = menuReturn; menuReturn = null;
+    if (target && target.isConnected && target.offsetParent) { target.focus(); return; }
+    focusSelected();
+  }
+  function saveCustomization(message) {
+    var source = activePlaylistUrl;
+    var record = { key: 'customization', source: source, groupOrder: custom.groupOrder, channelOrder: custom.channelOrder, hidden: custom.hidden.slice(), names: Object.assign({}, custom.names) };
+    catalogMeta.customization = record;
+    customSaving = customSaving.then(function () { return catalogStore.saveMeta([record]); }).then(function (result) {
+      if (source !== activePlaylistUrl) return;
+      showOrganizeStatus(result.state === 'complete' ? message : 'تغيّر العرض لهذه الجلسة؛ تعذر حفظ التخصيص.');
+    });
+  }
+  function invalidateViews() { sectionCacheKey = ''; visibleCacheKey = ''; lastSearch = null; searchLiveRevision = -1; }
+  function rebuildSectionOrder(section) {
+    var own = displayOrder[section]; var order = [];
+    own.groups.forEach(function (group) { var members = own.byGroup.get(group) || []; for (var i = 0; i < members.length; i += 1) order.push(members[i]); });
+    own.order = Int32Array.from(order); invalidateViews();
+  }
+  // ---- Multi-select ----
+  function enterSelect(kind, first) {
+    if (!customizable()) return;
+    selectState = { kind: kind, items: new Set() }; if (first !== undefined && first !== null) selectState.items.add(first);
+    document.body.classList.add('select-mode'); renderSelectBar(); renderGroups(); renderChannels();
+  }
+  function exitSelect() {
+    if (!selectState) return;
+    var kind = selectState.kind; selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true;
+    renderGroups(); renderChannels();
+    if (kind === 'group') focusActiveGroup(); else focusSelected();
+  }
+  function renderSelectBar() {
+    if (!selectState) { $('select-bar').hidden = true; return; }
+    $('select-bar').hidden = false;
+    LGI18n.text($('select-count'), (selectState.kind === 'group' ? 'مجموعات محددة: ' : 'قنوات محددة: ') + selectState.items.size);
+    $('select-move').disabled = !selectState.items.size; $('select-hide').disabled = !selectState.items.size;
+  }
+  function toggleSelected(target) {
+    var key = selectState.kind === 'group' ? target.dataset.group : Number(target.dataset.index);
+    if (selectState.items.has(key)) selectState.items.delete(key); else selectState.items.add(key);
+    markSelected(target, selectState.items.has(key)); renderSelectBar();
+  }
+  function markSelected(element, on) { element.classList.toggle('is-selected', on); element.setAttribute('aria-checked', String(on)); }
+  function selectedItems() {
+    if (!selectState) return [];
+    if (selectState.kind === 'group') { var order = displayOrder[activeSection] ? displayOrder[activeSection].groups : []; return order.filter(function (group) { return selectState.items.has(group); }); }
+    var list = masterOrder(activeSection); var chosen = []; if (!list) return chosen;
+    for (var i = 0; i < list.length; i += 1) if (selectState.items.has(list[i])) chosen.push(list[i]);
+    return chosen;
+  }
+  // ---- Move ----
+  function startMove(kind, items) {
+    if (!customizable() || !items.length || !displayOrder[activeSection]) return;
+    var section = activeSection; var own = displayOrder[section];
+    if (kind === 'channel') {
+      if (activeGroup === NEW_GROUP) { showOrganizeStatus('للنقل افتح مجموعة القناة نفسها أو «الكل».'); return; }
+      var group = sources[items[0]].group || '';
+      if (items.some(function (index) { return (sources[index].group || '') !== group; })) { showOrganizeStatus('للنقل حدد قنوات من مجموعة واحدة.'); return; }
+      moveState = { kind: kind, section: section, items: items, group: group, snapshot: (own.byGroup.get(group) || []).slice() };
+    } else moveState = { kind: kind, section: section, items: items, snapshot: own.groups.slice() };
+    if (selectState) { selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; }
+    document.body.classList.add('move-mode'); $('move-bar').hidden = false;
+    LGI18n.text($('move-text'), 'نقل ' + items.length + (kind === 'group' ? ' مجموعة' : ' قناة') + ': ↑ ↓ للتحريك · موافق للحفظ · رجوع للإلغاء');
+    if (kind === 'group') { activeGroup = items[0]; channelWindowStart = 0; }
+    renderGroups(); renderChannels(); focusMoving();
+  }
+  function focusMoving() {
+    if (!moveState) return;
+    if (moveState.kind === 'group') {
+      var groups = groupKeys(); var position = groups.indexOf(moveState.items[0]);
+      if (position >= 0 && (position < groupWindowStart || position >= groupWindowStart + groupWindowSize)) { groupWindowStart = Math.max(0, position - 4); renderGroups(); }
+      var button = Array.prototype.find.call($('groups').querySelectorAll('.group-button'), function (item) { return item.dataset.group === moveState.items[0]; });
+      if (button) button.focus();
+    } else { selected = moveState.items[0]; focusChannel(moveState.items[0]); }
+  }
+  function moveStep(direction) {
+    var state = moveState; var own = displayOrder[state.section]; var block = new Set(state.items);
+    var visible = state.kind === 'group' ? sectionGroups() : visibleIndexes();
+    var positions = []; visible.forEach(function (item, position) { if (block.has(item)) positions.push(position); });
+    if (!positions.length) return;
+    var at = direction < 0 ? positions[0] - 1 : positions[positions.length - 1] + 1;
+    while (at >= 0 && at < visible.length && block.has(visible[at])) at += direction;
+    var neighbour = visible[at];
+    if (neighbour === undefined || (state.kind === 'channel' && (sources[neighbour].group || '') !== state.group)) { showOrganizeStatus(direction < 0 ? 'وصلت إلى بداية القائمة.' : 'وصلت إلى نهاية القائمة.'); return; }
+    var list = state.kind === 'group' ? own.groups : own.byGroup.get(state.group);
+    var rest = list.filter(function (item) { return !block.has(item); });
+    var next = api.moveBlock(list, state.items, rest.indexOf(neighbour) + (direction > 0 ? 1 : 0));
+    if (state.kind === 'group') own.groups = next; else own.byGroup.set(state.group, next);
+    rebuildSectionOrder(state.section);
+    if (state.kind === 'group') { activeGroup = state.items[0]; renderGroups(); renderChannels(); }
+    else renderChannels();
+    focusMoving();
+  }
+  function finishMove(save) {
+    var state = moveState; if (!state) return; moveState = null;
+    document.body.classList.remove('move-mode'); $('move-bar').hidden = true;
+    var own = displayOrder[state.section];
+    if (!save) {
+      if (state.kind === 'group') own.groups = state.snapshot; else own.byGroup.set(state.group, state.snapshot);
+      rebuildSectionOrder(state.section); renderGroups(); renderChannels();
+      showOrganizeStatus('أُلغي النقل.');
+    } else {
+      if (state.kind === 'group') custom.groupOrder[state.section] = own.groups.filter(function (group) { return group; });
+      else custom.channelOrder[state.section + '\u0001' + state.group] = own.byGroup.get(state.group).map(function (index) { return entryKeys[index]; });
+      saveCustomization('حُفظ الترتيب.');
+    }
+    if (state.kind === 'group') { var button = Array.prototype.find.call($('groups').querySelectorAll('.group-button'), function (item) { return item.dataset.group === state.items[0]; }); if (button) button.focus(); else focusActiveGroup(); }
+    else { selected = state.items[0]; focusChannel(state.items[0]); }
+  }
+  // ---- Hide ----
+  function hideItems(kind, items) {
+    if (!customizable() || !items.length) return;
+    if (kind === 'channel') {
+      if (!hiddenFlags) hiddenFlags = new Uint8Array(sources.length);
+      var known = new Set(custom.hidden);
+      items.forEach(function (index) { hiddenFlags[index] = 1; if (!known.has(entryKeys[index])) { known.add(entryKeys[index]); custom.hidden.push(entryKeys[index]); } });
+      invalidateViews(); renderGroups(); renderChannels(); focusSelected();
+      saveCustomization(items.length === 1 ? 'أُخفيت القناة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.' : 'أُخفيت ' + items.length + ' قناة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.');
+      return;
+    }
+    var section = activeSection; var source = activePlaylistUrl; var next = {};
+    ['tv', 'movies', 'series'].forEach(function (own) { next[own] = Array.from(hiddenGroups[own]); });
+    items.forEach(function (group) { if (next[section].indexOf(group) < 0) next[section].push(group); });
+    setHiddenGroups(next); invalidateViews(); if (items.indexOf(activeGroup) >= 0) activeGroup = ''; renderGroups(); renderChannels(); focusActiveGroup();
+    catalogStore.saveHiddenGroups(source, next).then(function (result) {
+      if (source !== activePlaylistUrl) return;
+      showOrganizeStatus(result.state === 'complete' ? (items.length === 1 ? 'أُخفيت المجموعة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.' : 'أُخفيت ' + items.length + ' مجموعة.') : 'أُخفيت لهذه الجلسة؛ تعذر حفظ التغيير.');
+    });
+  }
+  // ---- Rename ----
+  function openRename(index) {
+    renameIndex = index; var entry = sources[index];
+    var original = entry.originalName !== undefined ? entry.originalName : entry.name;
+    LGI18n.provider($('rename-original'), original, '', null); $('rename-original').hidden = entry.originalName === undefined;
+    if (!$('rename-original').hidden) LGI18n.provider($('rename-original'), 'الاسم الأصلي: ' + original, '');
+    $('channel-name-input').value = entry.name; $('restore-channel-name').hidden = entry.originalName === undefined;
+    $('rename-panel').hidden = false; $('save-channel-name').focus();
+  }
+  function closeRename() { $('rename-panel').hidden = true; $('channel-name-input').value = ''; renameIndex = null; returnToList(); }
+  function applyRename(index, name) {
+    var entry = sources[index]; var key = entryKeys[index];
+    if (name === null) { if (entry.originalName !== undefined) { entry.name = entry.originalName; delete entry.originalName; } delete custom.names[key]; }
+    else { if (entry.originalName === undefined) entry.originalName = entry.name; entry.name = name; custom.names[key] = name; }
+    catalogViewRevision += 1; invalidateViews(); renderChannels();
+    saveCustomization(name === null ? 'عاد الاسم الأصلي.' : 'حُفظ الاسم الجديد.');
+  }
+  // ---- Reset ----
+  function resetCustomization() {
+    if (!customizable()) return;
+    var source = activePlaylistUrl;
+    custom = emptyCustomization(); applyItemCustomization(); setHiddenGroups(null); rebuildOrder(); catalogViewRevision += 1;
+    catalogMeta.customization = null;
+    Promise.all([catalogStore.saveMeta([], ['customization']), catalogStore.saveHiddenGroups(source, { tv: [], movies: [], series: [] })]).then(function (results) {
+      if (source !== activePlaylistUrl) return;
+      LGI18n.text($('manager-status'), results.every(function (result) { return result.state === 'complete'; }) ? 'أُعيد الضبط: ظهر كل شيء بترتيب المزود وأسمائه.' : 'أُعيد الضبط لهذه الجلسة؛ تعذر حفظه.');
+    });
+    renderGroups(); renderChannels(); collectManagedGroups(); renderManagedGroups();
+  }
+  $('menu-select').addEventListener('click', function () { var context = menuContext; closeItemMenu(true); if (context) enterSelect(context.kind, context.kind === 'group' ? context.group : context.index); });
+  $('menu-move').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context) startMove(context.kind, [context.kind === 'group' ? context.group : context.index]); });
+  $('menu-hide').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); menuReturn = null; if (context) hideItems(context.kind, [context.kind === 'group' ? context.group : context.index]); });
+  $('menu-rename').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context && context.kind === 'channel') openRename(context.index); });
+  $('close-item-menu').addEventListener('click', function () { closeItemMenu(true); });
+  $('select-move').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (kind && items.length) startMove(kind, items); });
+  $('select-hide').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (!kind || !items.length) return; selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; hideItems(kind, items); });
+  $('select-cancel').addEventListener('click', exitSelect);
+  $('save-channel-name').addEventListener('click', function () {
+    var index = renameIndex; if (index === null) return;
+    var name = $('channel-name-input').value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80);
+    var original = sources[index].originalName !== undefined ? sources[index].originalName : sources[index].name;
+    applyRename(index, !name || name === original ? null : name); closeRename();
+  });
+  $('restore-channel-name').addEventListener('click', function () { var index = renameIndex; if (index === null) return; applyRename(index, null); closeRename(); });
+  $('close-rename').addEventListener('click', closeRename);
+  function leaveSettingsForOrganize(kind) {
+    $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); settingsReturn = null; $('settings-home').hidden = true;
+    if (managedSection !== 'hidden' && managedSection !== activeSection) { activeSection = managedSection; activeGroup = ''; activeCategory = 'all'; renderPrimary(); }
+    if (kind === 'group') { activeGroup = ''; renderGroups(); renderChannels(); enterSelect('group'); focusActiveGroup(); var first = $('groups').querySelector('.group-button:not([data-group=""])'); if (first) first.focus(); }
+    else { renderGroups(); renderChannels(); enterSelect('channel'); focusSelected(); }
+    showOrganizeStatus('موافق لتحديد العناصر، ثم اصعد لأعلى القائمة لاختيار نقل أو إخفاء.');
+  }
+  $('organize-groups').addEventListener('click', function () { if (customizable()) leaveSettingsForOrganize('group'); });
+  $('organize-channels').addEventListener('click', function () { if (customizable()) leaveSettingsForOrganize('channel'); });
+  $('reset-customization').addEventListener('click', function () { $('reset-confirm').hidden = false; $('reset-confirm-no').focus(); });
+  $('reset-confirm-no').addEventListener('click', function () { $('reset-confirm').hidden = true; $('reset-customization').focus(); });
+  $('reset-confirm-yes').addEventListener('click', function () { $('reset-confirm').hidden = true; resetCustomization(); $('reset-customization').focus(); });
+  document.addEventListener('keyup', function (event) {
+    var key = event.key; if (!key || key === 'Unidentified') key = event.keyCode === 13 ? 'Enter' : key;
+    if (hold && key === 'Enter') { event.preventDefault(); releaseHold(); }
+  });
+  // Returns true when the key was handled by a customization mode.
+  function customizationKey(event, key, code) {
+    if (hold) {
+      if (key === 'Enter') { event.preventDefault(); hold.lastEvent = performance.now(); if (event.repeat) hold.repeats += 1; return true; }
+      endHold();
+    }
+    if (moveState) {
+      event.preventDefault();
+      if (key === 'ArrowUp' || key === 'ArrowDown') moveStep(key === 'ArrowDown' ? 1 : -1);
+      else if (key === 'Enter' && !event.repeat) finishMove(true);
+      return true;
+    }
+    if (selectState) {
+      var focused = document.activeElement;
+      if ($('select-bar').contains(focused)) {
+        if (key === 'ArrowLeft' || key === 'ArrowRight') {
+          var bar = visibleControls($('select-bar')); var at = bar.indexOf(focused); var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
+          if (bar[at + step]) bar[at + step].focus(); event.preventDefault(); return true;
+        }
+        if (key === 'ArrowDown') { event.preventDefault(); if (selectState.kind === 'group') focusActiveGroup(); else focusSelected(); return true; }
+        return false;
+      }
+      var kindMatches = selectState.kind === 'group' ? focused.classList.contains('group-button') && focused.parentNode === $('groups') : focused.classList.contains('channel-button');
+      if (key === 'Enter') {
+        event.preventDefault();
+        if (!event.repeat && kindMatches && (selectState.kind !== 'group' || (focused.dataset.group && focused.dataset.group !== NEW_GROUP))) toggleSelected(focused);
+        return true;
+      }
+      if (key === 'ArrowUp' && kindMatches) {
+        var first = selectState.kind === 'group' ? groupKeys().indexOf(focused.dataset.group) <= (sectionIndex().fresh.length ? 2 : 1) : visibleIndexes().indexOf(Number(focused.dataset.index)) === 0;
+        if (first) { event.preventDefault(); (visibleControls($('select-bar'))[0] || $('select-cancel')).focus(); return true; }
+      }
+      return false;
+    }
+    if (key === 'Enter' && !event.repeat) {
+      var target = holdTarget(document.activeElement);
+      if (target) { event.preventDefault(); startHold(target); return true; }
+    }
+    return false;
+  }
   function visibleControls(container) {
     return Array.prototype.filter.call(container.querySelectorAll('button,input,select'), function (item) {
       return !item.disabled && item.offsetParent !== null;
@@ -1864,10 +2192,14 @@
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
     var isInput = event.target.tagName === 'INPUT';
     if (isInput && keyboardVisible) return;
+    var anyDialog = !$('track-picker').hidden || !$('group-manager').hidden || !$('sort-menu').hidden || !detailsPanel.hidden || !setup.hidden || !searchPanel.hidden || !diagnostics.hidden || !speedPanel.hidden || !!extraDialog();
+    var backKey = code === 461 || key === 'Escape';
+    if (!backKey && !anyDialog && !isInput && customizationKey(event, key, code)) return;
     if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
     var back = code === 461 || key === 'Escape';
     if (back) {
       event.preventDefault();
+      if (hold) endHold();
       if (event.repeat) return;
       if (switchPending && playingIndex !== null) selected = playingIndex;
       cancelSwitch();
@@ -1881,6 +2213,8 @@
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
       else if (extraDialog()) closeExtraDialog();
+      else if (moveState) finishMove(false);
+      else if (selectState) exitSelect();
       else if (watchMode) { if (!$('media-controls').hidden) { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
       else backToLibrary();
       return;

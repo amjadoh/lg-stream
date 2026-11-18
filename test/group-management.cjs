@@ -262,6 +262,8 @@ async function main() {
     await page.locator('[data-manage-section="movies"]').click();
     assert.equal(await page.locator('#managed-groups .group-switch').count(), 0);
     await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'organize-groups', 'The organizer actions sit under the section tabs');
+    await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-group-manager');
     await page.keyboard.press('ArrowUp');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.manageSection), 'movies', 'An empty section still lets the remote return from Close to its tabs');

@@ -138,6 +138,89 @@ async function main() {
     assert.equal(await page.locator('#setup-panel').isVisible(), true);
     assert.equal(await active(), 'add-source');
 
+    // ---- Customization ----
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#setup-panel').isVisible(), false);
+    const channelNames = () => page.locator('#channels .channel-button .channel-label').allInnerTexts();
+    const focusChannelNamed = name => page.locator('#channels .channel-button', { hasText: name }).first().focus();
+    const holdOk = async ms => { await page.keyboard.down('Enter'); await page.waitForTimeout(ms); await page.keyboard.up('Enter'); };
+    await page.locator('#groups [data-group="G2"]').click();
+    // A short OK still plays; a held OK released while the ring shows cancels.
+    const startsBefore = await page.evaluate(() => window.__mediaStarts || 0);
+    await focusChannelNamed('Two 0'); await page.keyboard.press('Enter');
+    await page.waitForFunction(count => (window.__mediaStarts || 0) === count + 1, startsBefore);
+    await page.locator('#stop-button').click();
+    await focusChannelNamed('Two 0');
+    await page.keyboard.down('Enter'); await page.waitForTimeout(800);
+    assert.equal(await page.locator('#hold-ring').isVisible(), true, 'The ring appears after half a second');
+    await page.keyboard.up('Enter');
+    assert.equal(await page.locator('#hold-ring').isVisible(), false);
+    assert.equal(await page.locator('#item-menu').isVisible(), false, 'Releasing early cancels');
+    assert.equal(await page.evaluate(() => window.__mediaStarts || 0), startsBefore + 1, 'A cancelled hold does not start playback');
+    // Four seconds opens the menu; move a channel down two places and save.
+    await focusChannelNamed('Two 0'); await holdOk(4200);
+    assert.equal(await page.locator('#item-menu').isVisible(), true);
+    assert.equal(await active(), 'menu-select');
+    await page.locator('#menu-move').click();
+    assert.equal(await page.locator('#move-bar').isVisible(), true);
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
+    assert.deepEqual((await channelNames()).slice(0, 3), ['Two 1', 'Two 2', 'Two 0']);
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#move-bar').isVisible(), false);
+    // Back during a move restores the previous order.
+    await focusChannelNamed('Two 2'); await holdOk(4200); await page.locator('#menu-move').click();
+    await page.keyboard.press('ArrowUp'); await page.keyboard.press('Escape');
+    assert.deepEqual((await channelNames()).slice(0, 3), ['Two 1', 'Two 2', 'Two 0'], 'Back cancels a move');
+    // Rename keeps the original for restoring.
+    await focusChannelNamed('Two 1'); await holdOk(4200); await page.locator('#menu-rename').click();
+    assert.equal(await active(), 'save-channel-name', 'Rename focuses Save, not the text field');
+    await page.locator('#channel-name-input').fill('Zed 7');
+    await page.locator('#save-channel-name').click();
+    assert.equal((await channelNames())[0], 'Zed 7');
+    // Hide one channel; it leaves the list and the numbering.
+    await focusChannelNamed('Two 5'); await holdOk(4200); await page.locator('#menu-hide').click();
+    assert.equal((await channelNames()).includes('Two 5'), false);
+    assert.equal(await page.locator('#channels .channel-button').count(), 9);
+    // Multi-select two channels and move them as a block to the top.
+    await focusChannelNamed('Two 8'); await holdOk(4200); await page.locator('#menu-select').click();
+    assert.equal(await page.locator('#select-bar').isVisible(), true);
+    const startsInSelect = await page.evaluate(() => window.__mediaStarts || 0);
+    await focusChannelNamed('Two 9'); await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.__mediaStarts || 0), startsInSelect, 'OK selects instead of playing');
+    assert.match(await page.locator('#select-count').innerText(), /2/);
+    await focusChannelNamed('Zed 7'); await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.getElementById('select-bar').contains(document.activeElement)), true, 'Up from the top reaches the bar');
+    await page.locator('#select-move').click();
+    for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('Enter');
+    assert.deepEqual((await channelNames()).slice(0, 4), ['Two 8', 'Two 9', 'Zed 7', 'Two 2']);
+    // Move group G2 above G1; All follows the same master order.
+    await page.locator('#groups [data-group="G2"]').focus(); await holdOk(4200); await page.locator('#menu-move').click();
+    await page.keyboard.press('ArrowUp'); await page.keyboard.press('Enter');
+    const order = await page.locator('#groups .group-button').evaluateAll(nodes => nodes.map(node => node.dataset.group));
+    assert.ok(order.indexOf('G2') < order.indexOf('G1'), 'Group order saved');
+    await page.locator('#groups [data-group=""]').click();
+    { const all = await channelNames(); assert.ok(all.indexOf('Two 8') >= 0 && all.indexOf('Two 8') < all.indexOf('One 0') && all.indexOf('Two 8') < all.indexOf('Two 9'), 'All follows the saved group and channel order'); }
+    // Everything survives a restart.
+    await page.waitForTimeout(300);
+    await ready();
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length > 0);
+    await page.locator('#groups [data-group="G2"]').click();
+    assert.deepEqual((await channelNames()).slice(0, 3), ['Two 8', 'Two 9', 'Zed 7']);
+    assert.equal((await channelNames()).includes('Two 5'), false);
+    // Settings organizer: show the hidden channel again, then reset everything.
+    await page.locator('#nav-settings').click(); await page.locator('#manage-groups-button').click();
+    await page.locator('[data-manage-section="hidden"]').click();
+    assert.equal(await page.locator('#managed-groups .group-switch').count(), 1);
+    await page.locator('#managed-groups .group-switch').first().click();
+    assert.equal(await page.locator('#managed-groups .group-switch').first().getAttribute('aria-checked'), 'true');
+    await page.locator('#reset-customization').click(); await page.locator('#reset-confirm-yes').click();
+    await page.locator('#close-group-manager').click(); await page.keyboard.press('Escape');
+    await page.locator('#groups [data-group="G2"]').click();
+    assert.deepEqual((await channelNames()).slice(0, 3), ['Two 0', 'Two 1', 'Two 2'], 'Reset restores provider order and names');
+    assert.equal(await page.locator('#channels .channel-button').count(), 10);
+    await page.waitForTimeout(300);
+    await page.locator('#setup-button').click();
     // Delete asks first, then removes the source, catalogue and preferences.
     await page.locator('#clear-sources').click(); await page.locator('#source-confirm-yes').click();
     await page.waitForFunction(() => document.getElementById('source-card').hidden);
@@ -159,7 +242,7 @@ async function main() {
     assert.equal(await page.locator('#xtream-password').inputValue(), '', 'Typed credentials are cleared after use');
 
     assert.deepEqual(errors, []);
-    console.log('Sources: card focus, counts, new items first, rename, stop/activate, delete, Xtream login and persistence passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, hold ring, menu, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();
