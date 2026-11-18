@@ -56,7 +56,7 @@
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><div id="actual-quality" class="actual-quality" hidden><span>الجودة الفعلية</span><strong id="quality-badge" class="quality-badge" dir="ltr"></strong></div><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span id="footer-note" class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span><span id="blue-hint" class="blue-hint" hidden><i class="blue-dot" aria-hidden="true"></i>الزر الأزرق: خيارات (ترتيب، نقل، إعادة تسمية، إخفاء)</span></footer>
   </div>
   <div id="hold-ring" class="hold-ring" hidden aria-hidden="true"><svg viewBox="0 0 44 44"><circle class="hold-track" cx="22" cy="22" r="19"></circle><circle id="hold-progress" class="hold-progress" cx="22" cy="22" r="19"></circle></svg></div>
   <div id="select-bar" class="select-bar" role="toolbar" aria-label="التحديد المتعدد" hidden><span id="select-count" class="select-count"></span><button id="select-move" type="button">نقل</button><button id="select-hide" type="button">إخفاء</button><button id="select-cancel" type="button">إلغاء</button><span id="select-hint" class="select-hint">موافق: تحديد أو إلغاء · أعلى القائمة: الأزرار · رجوع: خروج</span></div>
@@ -76,7 +76,7 @@
   </section>
   <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
-      <button id="manage-groups-button" type="button">إدارة القنوات والمجموعات<span>الترتيب، الإخفاء والإظهار، وإعادة الضبط</span></button>
+      <button id="manage-groups-button" type="button">إدارة القنوات والمجموعات<span>الترتيب، الإخفاء والإظهار، وإعادة الضبط · أو الزر الأزرق على أي قناة</span></button>
       <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
       <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
@@ -144,7 +144,7 @@
   </section>
   <section id="group-manager" class="modal group-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" hidden>
     <div class="setup-card manager-card">
-      <h2 id="manager-title">إدارة القنوات والمجموعات</h2>
+      <h2 id="manager-title">إدارة القنوات والمجموعات</h2><p class="small-note manager-tip"><i class="blue-dot" aria-hidden="true"></i>أسرع طريقة: اضغط الزر الأزرق على أي قناة أو مجموعة في القائمة.</p>
       <div id="manager-home" class="manager-home"><button id="organize-channels" class="manager-option" type="button"><strong>ترتيب القنوات</strong><span>حدد قناة أو أكثر ثم انقلها أو أخفها</span></button><button id="organize-groups" class="manager-option" type="button"><strong>ترتيب المجموعات</strong><span>حدد مجموعة أو أكثر ثم انقلها أو أخفها</span></button><button id="manage-visibility" class="manager-option" type="button"><strong>إخفاء وإظهار</strong><span>اختر المجموعات الظاهرة وأرجِع القنوات المخفية</span></button><button id="reset-customization" class="manager-option" type="button"><strong>إعادة الضبط</strong><span>إظهار كل المخفي وإرجاع ترتيب المزود وأسمائه</span></button></div>
       <div id="manager-visibility" hidden><div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button><button type="button" data-manage-section="hidden" aria-pressed="false">القنوات المخفية</button></div>
       <p id="managed-summary"></p><div id="managed-groups" class="managed-groups"></div></div>
