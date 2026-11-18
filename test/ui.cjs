@@ -309,7 +309,7 @@ async function main() {
     assert.equal(await page.locator('#track-list button').count(), 0, 'Source failure discards old track choices');
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Live failure must preserve watching mode');
-    assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
+    assert.match(await page.locator('#status').innerText(), /جارٍ إعادة الاتصال… \(1\/3\)/, 'A live failure announces the bounded automatic reconnect');
     assert.equal(await page.locator('#status').isVisible(), true, 'Live failure message is visible over the video');
     assert.equal(await page.locator('#media-controls').isVisible(), false);
     const failedStarts = await page.evaluate(() => window.__mediaStarts);
@@ -373,6 +373,8 @@ async function main() {
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('playlist-status').textContent.includes('السابقة'));
     await page.locator('#close-setup').click();
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), 2, 'A failed manual load restores the released catalogue locally');
     const savedBeforeInvalidResponse = await page.evaluate(() => window.__catalogSavedAt());
     await page.locator('#setup-button').click();
     await page.evaluate(() => { window.__customPlaylist = '<html>Provider error</html>\nhttps://media.example.test/error-ad.mp4'; });
@@ -384,7 +386,10 @@ async function main() {
     await page.locator('#setup-button').click();
     await page.locator('#playlist-url').fill('https://provider.example.test/stall');
     await page.locator('#load-playlist').click();
+    assert.equal(await page.locator('#channels .channel-button').count(), 0, 'A manual load releases the previous catalogue before downloading');
     await page.locator('#cancel-playlist').click();
+    await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40);
+    assert.equal(await page.locator('#setup-panel').isVisible(), true, 'Cancelling restores the catalogue without closing setup');
     await page.locator('#close-setup').click();
     await page.reload();
     await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });

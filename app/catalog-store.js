@@ -38,15 +38,32 @@
           if (!database.objectStoreNames.contains('meta')) database.createObjectStore('meta', { keyPath: 'key' });
           if (!database.objectStoreNames.contains('chunks')) database.createObjectStore('chunks', { keyPath: 'key' });
         };
-        request.onsuccess = function () { resolve(request.result); };
-        request.onerror = function () { databasePromise = null; reject(request.error || new Error('storage open failed')); };
+        request.onsuccess = function () {
+          var database = request.result;
+          // A connection closed by the platform (eviction, storage pressure)
+          // or by a newer version must not be reused; the next call reopens.
+          database.onclose = function () { if (databasePromise === ownPromise) databasePromise = null; };
+          database.onversionchange = function () { database.close(); if (databasePromise === ownPromise) databasePromise = null; };
+          resolve(database);
+        };
+        request.onerror = function () { if (databasePromise === ownPromise) databasePromise = null; reject(request.error || new Error('storage open failed')); };
       });
+      var ownPromise = databasePromise;
       return databasePromise;
+    }
+    // Start a transaction, reopening once when the cached connection has closed.
+    async function begin(storeNames, mode, database) {
+      database = database || await open();
+      try { return { database: database, transaction: database.transaction(storeNames, mode) }; } catch (error) {
+        if (!error || error.name !== 'InvalidStateError') throw error;
+        databasePromise = null; database = await open();
+        return { database: database, transaction: database.transaction(storeNames, mode) };
+      }
     }
     async function load() {
       try {
-        var database = await open();
-        var metaTransaction = database.transaction('meta', 'readonly');
+        var started = await begin('meta', 'readonly');
+        var database = started.database; var metaTransaction = started.transaction;
         var metaStore = metaTransaction.objectStore('meta');
         var records = await Promise.all([requestResult(metaStore.get('active')), requestResult(metaStore.get('group-visibility')), requestResult(metaStore.get('live-transport'))]);
         var meta = records[0]; var preferences = records[1]; var transport = records[2];
@@ -87,7 +104,9 @@
         var revision = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
         var savedAt = Date.now();
         var chunkCount = Math.ceil(entries.length / CHUNK_SIZE);
-        var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
+        var opened = await begin(['meta', 'chunks'], 'readwrite', database);
+        if (generation !== writeGeneration) { try { opened.transaction.abort(); } catch (_) {} return { state: 'cancelled' }; }
+        database = opened.database; var transaction = opened.transaction;
         activeWrite = transaction;
         var chunks = transaction.objectStore('chunks');
         var metaStore = transaction.objectStore('meta');
@@ -118,7 +137,7 @@
       var copy = copyHiddenGroups(hiddenGroups);
       if (!source || !copy) return { state: 'error' };
       try {
-        var database = await open(); var transaction = database.transaction('meta', 'readwrite');
+        var transaction = (await begin('meta', 'readwrite')).transaction;
         transaction.objectStore('meta').put({ key: 'group-visibility', source: source, hiddenGroups: copy });
         await transactionDone(transaction); return { state: 'complete' };
       } catch (_) { return { state: 'error' }; }
@@ -127,8 +146,7 @@
     async function saveLiveTransport(source, value) {
       if (!source || (value !== 'original' && value !== 'hls')) return { state: 'error' };
       try {
-        var database = await open();
-        var transaction = database.transaction('meta', 'readwrite');
+        var transaction = (await begin('meta', 'readwrite')).transaction;
         var completed = transactionDone(transaction);
         completed.catch(function () {});
         var store = transaction.objectStore('meta');
@@ -144,7 +162,7 @@
     }
     async function clear() {
       try {
-        var database = await open(); var transaction = database.transaction(['meta', 'chunks'], 'readwrite');
+        var transaction = (await begin(['meta', 'chunks'], 'readwrite')).transaction;
         transaction.objectStore('meta').clear(); transaction.objectStore('chunks').clear(); await transactionDone(transaction); return { state: 'complete' };
       } catch (_) { return { state: 'error' }; }
     }

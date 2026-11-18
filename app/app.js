@@ -61,6 +61,11 @@
   var playlistSaving = false;
   var playlistAutomatic = false;
   var automaticReleasedView = null;
+  // After a failed local restore, wait before reading the whole saved
+  // catalogue again (each attempt loads every chunk); returning to the app
+  // retries immediately.
+  var RESTORE_RETRY_MS = 60000;
+  var restoreRetryAt = 0;
   var automaticRestoreMessage = '';
   var automaticRestorePromise = null;
   var pendingViewState = null;
@@ -80,6 +85,7 @@
   var searchTimer = null;
   var searchLiveRevision = -1;
   var searchLiveIndexes = [];
+  var lastSearch = null;
   var nameCollator = typeof Intl !== 'undefined' && Intl.Collator ? new Intl.Collator('ar') : null;
   var AUTO_UPDATE_MS = 24 * 60 * 60 * 1000;
   var AUTO_UPDATE_IDLE_MS = 60000;
@@ -93,24 +99,112 @@
     idle: 'جاهز', loading: 'جارٍ فتح البث…', playing: 'يعمل', waiting: 'بانتظار البث…',
     paused: 'متوقف مؤقتًا', ended: 'انتهى البث', error: 'تعذر تشغيل المصدر — جرّب إعادة المحاولة',
     'play-rejected': 'لم يبدأ التشغيل — اضغط إعادة المحاولة',
-    'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة'
+    'startup-timeout': 'انتهت مهلة بدء البث — اضغط إعادة المحاولة',
+    'stall-timeout': 'توقف البث — اضغط إعادة المحاولة'
   };
+  // Bounded automatic reconnect for live channels: at most three consecutive
+  // attempts and six per channel selection. On the owner's TV the provider
+  // rejected (code 4) or delayed a new connection for 12-20s after another
+  // one, so the waits grow (5s, 12s, 25s). Any user channel request or stop
+  // cancels it; on-demand items are never restarted automatically.
+  var RECONNECT_DELAYS = [5000, 12000, 25000];
+  var RECONNECT_SESSION_LIMIT = 6;
+  var RECONNECT_STABLE_MS = 60000;
+  var reconnect = { index: null, consecutive: 0, total: 0, timer: null, lastAttemptAt: 0 };
+  // In-memory interruption log for diagnostics: clock time, list position,
+  // event kind, duration and numeric error code only. Never URLs or names;
+  // never persisted; capped at the last 20 events.
+  var interruptions = []; var interruptionTrack = { channel: null, stalls: 0, stallMs: 0, failedAt: 0 };
+  var interruptionLabels = { stall: 'انتظار مكتمل', error: 'خطأ المشغّل', 'startup-timeout': 'انتهت مهلة البدء', 'stall-timeout': 'توقف بلا تقدم', reconnect: 'إعادة اتصال تلقائية', recovered: 'عاد البث' };
+  function logInterruption(kind, ms, code, attempt) {
+    var clock = new Date(); var pad = function (value) { return (value < 10 ? '0' : '') + value; };
+    interruptions.push({ at: pad(clock.getHours()) + ':' + pad(clock.getMinutes()) + ':' + pad(clock.getSeconds()), channel: playingIndex === null ? 0 : playingIndex + 1, kind: kind, ms: ms || 0, code: code || 0, attempt: attempt || 0 });
+    if (interruptions.length > 20) interruptions.shift();
+    if (!diagnostics.hidden) renderInterruptions();
+  }
+  function trackInterruptions(state) {
+    if (state.channel !== interruptionTrack.channel || state.state === 'loading' && !state.playingMs) {
+      if (state.channel !== interruptionTrack.channel) interruptionTrack.failedAt = 0;
+      interruptionTrack.channel = state.channel; interruptionTrack.stalls = state.stalls || 0; interruptionTrack.stallMs = state.stallMs || 0;
+    }
+    if ((state.stallMs || 0) > interruptionTrack.stallMs) logInterruption('stall', state.stallMs - interruptionTrack.stallMs);
+    interruptionTrack.stalls = state.stalls || 0; interruptionTrack.stallMs = state.stallMs || 0;
+    if (['error', 'startup-timeout', 'stall-timeout'].indexOf(state.state) >= 0) { logInterruption(state.state, 0, state.errorCode); interruptionTrack.failedAt = Date.now(); }
+    else if (state.state === 'playing' && interruptionTrack.failedAt) { logInterruption('recovered', Date.now() - interruptionTrack.failedAt); interruptionTrack.failedAt = 0; }
+  }
+  function renderInterruptions() {
+    var list = $('interruption-log'); list.replaceChildren();
+    $('interruption-empty').hidden = interruptions.length > 0;
+    interruptions.slice().reverse().forEach(function (item) {
+      var row = document.createElement('li');
+      var label = document.createElement('span'); LGI18n.text(label, interruptionLabels[item.kind] + (item.attempt ? ' ' + item.attempt + '/' + RECONNECT_DELAYS.length : ''));
+      var detail = document.createElement('bdi');
+      detail.textContent = item.at + ' · #' + item.channel + (item.ms ? ' · ' + item.ms + ' ms' : '') + (item.code ? ' · (' + item.code + ')' : '');
+      row.append(label, detail); list.appendChild(row);
+    });
+  }
+  function cancelReconnect(reset) {
+    clearTimeout(reconnect.timer); reconnect.timer = null;
+    if (reset) { reconnect.index = null; reconnect.consecutive = 0; reconnect.total = 0; reconnect.lastAttemptAt = 0; }
+  }
+  function scheduleReconnect(state) {
+    if (reconnect.timer !== null || playingIndex === null || document.hidden || unloading || entrySection(playingIndex) !== 'tv') return false;
+    if (['error', 'startup-timeout', 'stall-timeout'].indexOf(state.state) < 0) return false;
+    var index = playingIndex;
+    if (reconnect.index !== index) { cancelReconnect(true); reconnect.index = index; }
+    if (state.progressMs != null && Date.now() - reconnect.lastAttemptAt >= RECONNECT_STABLE_MS) reconnect.consecutive = 0;
+    if (reconnect.consecutive >= RECONNECT_DELAYS.length || reconnect.total >= RECONNECT_SESSION_LIMIT) return false;
+    var delay = RECONNECT_DELAYS[reconnect.consecutive];
+    reconnect.consecutive += 1; reconnect.total += 1;
+    logInterruption('reconnect', delay, 0, reconnect.consecutive);
+    LGI18n.text($('status'), 'جارٍ إعادة الاتصال… (' + reconnect.consecutive + '/' + RECONNECT_DELAYS.length + ')');
+    reconnect.timer = setTimeout(function () {
+      reconnect.timer = null;
+      if (playingIndex !== index || !retryablePlayback() || document.hidden || unloading) return;
+      reconnect.lastAttemptAt = Date.now();
+      scheduler.immediate({ index: index, requestedAt: performance.now(), retry: true, auto: true });
+    }, delay);
+    return true;
+  }
   function finishLaunch() { var splash = $('launch-splash'); if (splash) splash.remove(); }
   $('launch-splash').addEventListener('animationend', function (event) { if (event.animationName === 'launchExit') finishLaunch(); });
   setTimeout(finishLaunch, 1900);
+  // Per-catalogue memo: section and name category are pure functions of each
+  // entry, so compute them once per loaded catalogue instead of re-running
+  // regexes over every entry on each filter or visibility change.
+  var entryMetaSources = null; var entrySectionCodes = null; var entryCategoryCodes = null;
+  var sectionCodeNames = ['', 'tv', 'movies', 'series'];
+  var categoryCodeNames = ['', null, 'sports', 'movies', 'news', 'kids', 'documentary'];
+  function ensureEntryMeta() {
+    if (entryMetaSources === sources) return;
+    entryMetaSources = sources; entrySectionCodes = new Uint8Array(sources.length); entryCategoryCodes = new Uint8Array(sources.length);
+  }
   function entrySection(index) {
+    ensureEntryMeta();
+    var code = entrySectionCodes[index];
+    if (code) return sectionCodeNames[code];
     var url = sources[index] && sources[index].url || '';
-    if (/\/series\//i.test(url)) return 'series';
-    if (/\/movie\//i.test(url)) return 'movies';
-    return 'tv';
+    code = /\/series\//i.test(url) ? 3 : /\/movie\//i.test(url) ? 2 : 1;
+    if (index >= 0 && index < entrySectionCodes.length) entrySectionCodes[index] = code;
+    return sectionCodeNames[code];
+  }
+  function entryChannelCategory(index) {
+    ensureEntryMeta();
+    var code = entryCategoryCodes[index];
+    if (code) return categoryCodeNames[code];
+    var category = api.channelCategory(sources[index] && sources[index].name);
+    code = category === null ? 1 : categoryCodeNames.indexOf(category);
+    if (code < 1) return category;
+    if (index >= 0 && index < entryCategoryCodes.length) entryCategoryCodes[index] = code;
+    return category;
   }
   function sectionIndex() {
     var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeCategory].join('\u0001');
     if (cacheKey === sectionCacheKey) return sectionCache;
     var groupCategories = new Map();
     var allGroups = new Set();
-    function matchesCategory(entry) {
-      var category = api.channelCategory(entry.name);
+    function matchesCategory(entry, index) {
+      var category = entryChannelCategory(index);
       if (category) return category === activeCategory;
       var group = entry.group;
       if (!groupCategories.has(group)) groupCategories.set(group, api.groupCategory(group));
@@ -119,7 +213,7 @@
     sectionCache = api.buildSectionIndex(sources, function (entry, index) {
       var ownSection = activeSection === 'favorites' ? favorites[index] : entrySection(index) === activeSection;
       if (ownSection) allGroups.add(entry.group || '');
-      return ownSection && entryVisible(index) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(entry));
+      return ownSection && entryVisible(index) && (activeSection !== 'tv' || activeCategory === 'all' || matchesCategory(entry, index));
     });
     sectionCache.orderedGroups = api.orderedCatalogGroups(sectionCache.groups);
     sectionCache.groupLabels = groupLabels(activeSection, Array.from(allGroups));
@@ -155,7 +249,7 @@
   function setPrimary(open) {
     document.querySelector('.library-panel').classList.toggle('primary-open', open); applyPictureFit();
   }
-  function closeSearch() {
+  function closeSearch() { lastSearch = null;
     clearTimeout(searchTimer); searchTimer = null;
     searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); LGI18n.text($('search-status'), 'اكتب حرفين على الأقل.');
     setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups').querySelector('button'); if (group) group.focus();
@@ -169,7 +263,9 @@
       sources.forEach(function (_, index) { if (entrySection(index) === 'tv') searchLiveIndexes.push(index); });
       searchLiveRevision = catalogViewRevision;
     }
-    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12, searchLiveIndexes);
+    var narrowing = lastSearch && lastSearch.revision === catalogViewRevision && lastSearch.sources === sources && query.indexOf(lastSearch.query) === 0;
+    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12, searchLiveIndexes, narrowing ? lastSearch.matched : null);
+    lastSearch = { query: query, revision: catalogViewRevision, sources: sources, matched: results.matched };
     sections.forEach(function (section) {
       var matches = results.matches[section[0]]; var count = results.counts[section[0]];
       total += count;
@@ -184,7 +280,7 @@
     });
     LGI18n.text($('search-status'), total ? 'وُجد ' + total + ' نتيجة. تظهر أول 12 نتيجة في كل قسم.' : 'لا توجد نتائج.');
   }
-  function openSearch() { cancelSwitch(); setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
+  function openSearch() { lastSearch = null; cancelSwitch(); setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
   function renderPrimary() {
     document.querySelector('.library-panel').classList.toggle('content-mode', activeSection === 'movies' || activeSection === 'series'); applyPictureFit();
     Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
@@ -248,9 +344,11 @@
       if (generation !== sourceGeneration) return false;
       if (document.hidden || unloading) return false;
       if (saved.state !== 'complete') {
+        restoreRetryAt = Date.now() + RESTORE_RETRY_MS;
         LGI18n.text($('status'), 'تعذر استعادة القائمة الآن — ستُعاد المحاولة عند الرجوع للتطبيق.');
         return false;
       }
+      restoreRetryAt = 0;
       applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups, saved.liveTransport); restoreRuntimeView(view, shouldFocus);
       automaticReleasedView = null;
       if (automaticRestoreMessage) LGI18n.text($('status'), automaticRestoreMessage);
@@ -462,6 +560,7 @@
     },
     unmountVideo: function (video) { cancelSeek(); closeTrackPicker(false); video.remove(); },
     onState: function (state) {
+      if (state.channel) trackInterruptions(state);
       lastState = state.state;
       document.body.dataset.state = state.state;
       LGI18n.text($('status'), labels[state.state] || 'جاهز');
@@ -474,13 +573,14 @@
       $('display-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
       $('display-fullscreen').disabled = $('display-button').disabled;
       updateChannelStates();
-      if (['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(state.state) >= 0) {
+      if (['error', 'play-rejected', 'startup-timeout', 'stall-timeout', 'ended'].indexOf(state.state) >= 0) {
         if (playingIndex === null) { stop(); focusSelected(); LGI18n.text($('status'), labels[state.state]); return; }
         if (watchMode && entrySection(playingIndex) === 'tv') {
           if (watchChannels === null) setWatchMode(true);
           $('fullscreen-hint').hidden = true;
           LGI18n.text($('status'), watchChannels === null ? 'البث مقطوع — أكمل بالسهم فوق أو تحت، أو اضغط رجوع' : 'البث مقطوع — اختر قناة واضغط موافق');
         } else if (watchMode || isOnDemand()) { setWatchMode(false); if (isOnDemand()) renderChannels(); $('retry-button').focus(); }
+        scheduleReconnect(state);
       }
       if (!watchMode && setup.hidden && searchPanel.hidden && detailsPanel.hidden && diagnostics.hidden && speedPanel.hidden && $('group-manager').hidden && !extraDialog() && document.activeElement.disabled) focusSelected();
       $('playing-ms').textContent = state.playingMs === null || state.playingMs === undefined ? '—' : state.playingMs + ' ms';
@@ -491,7 +591,7 @@
       $('stall-count').textContent = state.stalls || 0;
       $('stall-ms').textContent = (state.stallMs || 0) + ' ms';
       $('video-size').textContent = state.width ? state.width + ' × ' + state.height : '—';
-      var failed = ['error', 'play-rejected', 'startup-timeout'].indexOf(state.state) >= 0;
+      var failed = ['error', 'play-rejected', 'startup-timeout', 'stall-timeout'].indexOf(state.state) >= 0;
       var quality = failed ? '' : measuredQuality(state.width, state.height);
       LGI18n.text($('quality-badge'), quality || (failed || state.state === 'idle' ? 'غير متاحة' : 'بانتظار القياس'));
       $('actual-quality').hidden = playingIndex === null;
@@ -650,12 +750,12 @@
     $('empty-state').hidden = true;
     var title = api.channelTitle(sources[index].name);
     LGI18n.provider($('channel-title'), title, 'المصدر ' + (index + 1), entrySection(index) === 'tv' ? api.compactChannelName(title, '') : '');
-    if (!watchMode && activeSection === 'tv') focusChannel(index);
+    if (!watchMode && activeSection === 'tv' && !intent.auto) focusChannel(index);
     var playbackSource = sources[index].url;
     if (liveTransport === 'hls' && sourceMode === 'playlist' && entrySection(index) === 'tv') {
       playbackSource = api.nativeHlsSource(playbackSource, activePlaylistUrl);
     }
-    if (!player.start(playbackSource, index + 1, intent.requestedAt)) return;
+    if (!player.start(playbackSource, index + 1, intent.requestedAt, { watchStall: entrySection(index) === 'tv' })) return;
     if (entrySection(index) === 'movies' || entrySection(index) === 'series') setWatchMode(true);
   }
   var scheduler = api.createSwitchScheduler(playChannel);
@@ -681,6 +781,7 @@
     lastConfirmIndex = index; lastConfirmAt = now; requestChannel(index, false);
   }
   function requestChannel(index, coalesce, retry) {
+    cancelReconnect(true);
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
     if (watchMode && coalesce && sources[index]) {
       announcementIndex = index; announcementQualityReady = false;
@@ -710,6 +811,7 @@
     }, 6000);
   }
   function stop() {
+    cancelReconnect(true);
     cancelSwitch();
     setWatchMode(false);
     playingIndex = null;
@@ -849,7 +951,7 @@
     $(id).setAttribute('aria-expanded', 'true'); $('track-picker').hidden = false;
     ($('track-list').querySelector('[aria-pressed="true"]') || $('track-list').firstElementChild).focus();
   }
-  function retryablePlayback() { return playingIndex !== null && ['error', 'play-rejected', 'startup-timeout', 'ended'].indexOf(lastState) >= 0; }
+  function retryablePlayback() { return playingIndex !== null && ['error', 'play-rejected', 'startup-timeout', 'stall-timeout', 'ended'].indexOf(lastState) >= 0; }
   function showWatchChannels() {
     if (playingIndex === null || isOnDemand()) { showPlaybackControls(); return; }
     cancelSwitch();
@@ -904,6 +1006,8 @@
     clearTimeout(autoUpdateTimer); autoUpdateTimer = null;
     if (playlistRunning) return;
     if (automaticReleasedView) {
+      var restoreWait = restoreRetryAt - Date.now();
+      if (restoreWait > 0) { if (!document.hidden && !unloading) autoUpdateTimer = setTimeout(scheduleAutoUpdate, restoreWait); return; }
       if (!document.hidden && !unloading) restoreReleasedCatalog('', true).then(function (restored) { if (restored) scheduleAutoUpdate(); });
       return;
     }
@@ -1039,7 +1143,12 @@
     if (playlistRunning || transportSaving) return;
     var runtimeView = automatic || (sourceMode === 'playlist' && url === activePlaylistUrl) ? (automaticReleasedView || captureRuntimeView()) : null;
     sourceGeneration += 1; stop();
+    // Free the current catalogue before downloading the next one, for manual
+    // loads too: holding the old array, the new parse and the save copies at
+    // once can exhaust the TV renderer. Failure, cancel or closing setup
+    // restores the saved copy through scheduleAutoUpdate/restoreReleasedCatalog.
     if (automatic) releaseCatalogForAutomaticUpdate(runtimeView);
+    else if (sourceMode === 'playlist' && activeCatalogRevision && sources.length) releaseCatalogForAutomaticUpdate(runtimeView || captureRuntimeView());
     var revision = ++playlistRevision;
     playlistAutomatic = !!automatic;
     playlistControls(true);
@@ -1068,7 +1177,7 @@
       catalogStore.save(url, result.entries).then(function (saved) {
         if (revision !== playlistRevision) return;
         if (saved.state !== 'complete') {
-          playlistControls(false); var saveFailure = saved.state === 'quota' ? 'مساحة التخزين لا تكفي. احتفظنا بالقائمة السابقة.' : 'تعذر حفظ القائمة. احتفظنا بالقائمة السابقة.';
+          playlistControls(false); var saveFailure = saved.state === 'quota' ? 'مساحة التخزين لا تكفي لحفظ نسخة جديدة بجانب الحالية. احتفظنا بالقائمة السابقة. لتحديثها: «مسح المصادر» ثم حمّل الرابط من جديد.' : 'تعذر حفظ القائمة. احتفظنا بالقائمة السابقة.';
           if (automatic) {
             result.entries = [];
             autoNextAttemptAt = Date.now() + 60 * 60 * 1000;
@@ -1093,7 +1202,7 @@
     loadPlaylist(url, false);
   });
   $('refresh-saved').addEventListener('click', function () { if (activePlaylistUrl) loadPlaylist(activePlaylistUrl, false); });
-  $('cancel-playlist').addEventListener('click', function () { cancelPlaylist(); $('load-playlist').focus(); });
+  $('cancel-playlist').addEventListener('click', function () { if (cancelPlaylist()) scheduleAutoUpdate(); $('load-playlist').focus(); });
   $('clear-sources').addEventListener('click', function () {
     if (playlistRunning) return;
     sourceGeneration += 1; if (!cancelPlaylist()) return; stop(); $('clear-sources').disabled = true; LGI18n.text($('playlist-status'), 'جارٍ مسح القائمة المحفوظة…');
@@ -1220,7 +1329,7 @@
     cancelSwitch();
     diagnostics.hidden = !diagnostics.hidden;
     $('settings-info').setAttribute('aria-expanded', String(!diagnostics.hidden));
-    if (!diagnostics.hidden) $('close-diagnostics').focus();
+    if (!diagnostics.hidden) { renderInterruptions(); $('close-diagnostics').focus(); }
   }
   $('close-diagnostics').addEventListener('click', closeDiagnostics);
   $('toggle-button').addEventListener('click', function () { cancelSwitch(); player.toggle(); });
@@ -1711,9 +1820,9 @@
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
-    if (!document.hidden) scheduleAutoUpdate();
+    if (!document.hidden) { restoreRetryAt = 0; scheduleAutoUpdate(); }
   });
-  window.addEventListener('pageshow', function () { unloading = false; scheduleAutoUpdate(); });
+  window.addEventListener('pageshow', function () { unloading = false; restoreRetryAt = 0; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
     unloading = true; ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; clearTimeout(viewTimer); saveViewState(detailsIndex !== null); cancelPlaylist(); cancelSpeed(); speedResults = []; $('speed-results').replaceChildren(); stop();
     if (!automaticReleasedView && sourceMode === 'playlist' && sources.length) automaticReleasedView = captureRuntimeView();
