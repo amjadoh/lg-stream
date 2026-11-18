@@ -29,6 +29,12 @@ test('collects groups from a full-size catalogue in one pass and preserves provi
   const results = searchCatalog(entries, 'عنوان 33168', index => ['tv', 'movies', 'series'][index % 3], 12);
   assert.equal(results.counts.tv + results.counts.movies + results.counts.series, 2);
   assert.ok(results.matches.tv.length <= 12 && results.matches.movies.length <= 12 && results.matches.series.length <= 12);
+  // Narrowing a query from the previous direct matches gives the same answer as a full scan.
+  const section = index => ['tv', 'movies', 'series'][index % 3];
+  const broad = searchCatalog(entries, 'عنوان 3316', section, 12);
+  const narrowed = searchCatalog(entries, 'عنوان 33168', section, 12, null, broad.matched);
+  assert.deepEqual(narrowed.counts, results.counts); assert.deepEqual(narrowed.matches, results.matches);
+  assert.ok(broad.matched.length < 200, 'Narrowing rescans only the earlier matches');
 });
 
 test('builds a YouTube TV voice search with title and year exactly once', () => {

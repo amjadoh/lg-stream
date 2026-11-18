@@ -290,7 +290,9 @@
     });
   }
 
-  function searchCatalog(entries, query, sectionForIndex, limit, liveIndexes) {
+  // candidates (optional): indexes known to contain a prefix of query, from a
+  // previous result's `matched`; narrowing a query then rescans only those.
+  function searchCatalog(entries, query, sectionForIndex, limit, liveIndexes, candidates) {
     var counts = { tv: 0, movies: 0, series: 0 };
     var matches = { tv: [], movies: [], series: [] };
     var searchArabic = /[\u0600-\u06ff]/.test(query);
@@ -313,9 +315,13 @@
         if (list.length > limit) list.pop();
       }
     }
-    entries.forEach(function (entry, index) {
-      if ((entry.name || '').toLocaleLowerCase().indexOf(query) >= 0) collect(index, sectionForIndex(index));
-    });
+    var matched = [];
+    function direct(index) {
+      if ((entries[index].name || '').toLocaleLowerCase().indexOf(query) < 0) return;
+      matched.push(index); collect(index, sectionForIndex(index));
+    }
+    if (candidates) candidates.forEach(direct);
+    else for (var position = 0; position < entries.length; position++) direct(position);
     function matchAlias(index) {
       var name = entries[index].name || '';
       if (name.toLocaleLowerCase().indexOf(query) >= 0 || sectionForIndex(index) !== 'tv' || !aliasHint.test(name)) return;
@@ -327,7 +333,7 @@
       if (liveIndexes) liveIndexes.forEach(matchAlias);
       else entries.forEach(function (_, index) { matchAlias(index); });
     }
-    return { counts: counts, matches: matches };
+    return { counts: counts, matches: matches, matched: matched };
   }
 
   function normalizeCatalogSearch(value) {
