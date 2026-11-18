@@ -44,13 +44,13 @@ Playback connects directly from the TV to the source. Users add their own source
 
 ## الحالة الحالية / Current status
 
-الإصدار الحالي [0.8.10](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.10)، وهو مثبت ومجرب على LG OLED55CS6LA. دُمجت تحديثاته في الفرع الرئيسي عبر [طلب المراجعة 8](https://github.com/amjadoh/lg-stream/pull/8). يستمر تطوير التطبيق بناءً على نتائج الاستخدام الفعلي.
+الإصدار الحالي [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12)، وهو مثبت ومجرب على LG OLED55CS6LA. دُمجت تحديثاته في الفرع الرئيسي عبر [طلب المراجعة 9](https://github.com/amjadoh/lg-stream/pull/9). يركز على ثبات البث وسرعة التنقل: فلاتر وبحث أسرع، وإعادة اتصال تلقائية محدودة للبث المباشر، وسجل انقطاعات في شاشة القياسات.
 
-اجتازت هذه النسخة اختبارات المنطق والواجهة، وفحوصًا قصيرة على التلفزيون. تأكد أثر تكبير الصورة بالمشاهدة، وثبات موضع بطاقة القناة بالقياس. تستمر متابعة حالات الانقطاع المتقطع، وتُسجل نتائج الصوت وصيغ العرض بحسب التجربة الفعلية لكل مصدر وجهاز.
+اجتازت هذه النسخة 40 اختبار منطق وبرامج الواجهة الستة، وفحوصًا قصيرة على التلفزيون: تشغيل مستقر لمدة 60 ثانية بلا توقف أو خطأ، وعودة قناة رفضها المزود مؤقتًا في المحاولة التلقائية الثالثة. الفحوص قصيرة، والثبات الطويل يُقاس بالاستخدام الفعلي.
 
-The current release is [0.8.10](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.10), installed and tested on LG OLED55CS6LA. Its updates were merged into main through [pull request 8](https://github.com/amjadoh/lg-stream/pull/8). Development continues from real usage feedback.
+The current release is [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12), installed and tested on LG OLED55CS6LA. Its updates were merged into main through [pull request 9](https://github.com/amjadoh/lg-stream/pull/9). It focuses on stable playback and fast navigation: faster filters and search, a bounded automatic reconnect for live channels, and an interruption log in the diagnostics screen.
 
-This version passed logic and UI checks and short tests on the TV. Visible picture enlargement was confirmed by the user, and the announcement position was measured. Intermittent source interruptions remain under investigation. Audio and display-format support is recorded from tests with each source and device.
+This version passed 40 logic tests, all six UI programs and short TV checks: 60 seconds of steady playback with no waits or errors, and a channel temporarily rejected by the provider recovered on the third automatic attempt. The checks are short; long-term stability is measured through real use.
 
 ## التثبيت والتوثيق / Installation and documentation
 
