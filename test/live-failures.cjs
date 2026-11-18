@@ -37,7 +37,7 @@ async function main() {
       };
       window.__mediaStarts = 0;
       const originalTimeout = window.setTimeout;
-      window.setTimeout = function (fn, ms, ...args) { return originalTimeout(fn, ms === 15000 ? 100 : ms, ...args); };
+      window.setTimeout = function (fn, ms, ...args) { return originalTimeout(fn, ms === 15000 ? 100 : ms === 5000 ? 400 : ms === 12000 ? 800 : ms === 25000 ? 1200 : ms, ...args); };
       window.__seekWrites = 0;
       const proto = HTMLMediaElement.prototype;
       Object.defineProperty(proto, 'src', { configurable: true, get() { return state(this).source; }, set(value) { state(this).source = value; } });
@@ -120,35 +120,44 @@ async function main() {
       assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), true, kind);
       assert.equal(await page.locator('#status').isVisible(), true, kind);
       if (kind !== 'ended') assert.equal(await page.locator('#quality-badge').innerText(), 'غير متاحة', 'A released failed video has no current measured quality');
-      assert.match(await page.locator('#status').innerText(), reconnecting ? /جارٍ إعادة الاتصال… \(1\/2\)/ : /البث مقطوع/, kind);
+      assert.match(await page.locator('#status').innerText(), reconnecting ? /جارٍ إعادة الاتصال… \(1\/3\)/ : /البث مقطوع/, kind);
       const startsBeforeArrow = await page.evaluate(() => window.__mediaStarts);
       await page.keyboard.press('ArrowDown');
       await current(kind === 'error' || kind === 'ended' ? 2 : 4);
       if (reconnecting) {
-        await page.waitForTimeout(3300);
+        await page.waitForTimeout(700);
         assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeArrow + 1, 'A channel request cancels the pending automatic reconnect');
       }
       await page.keyboard.press('Escape');
     }
-    // Live failures reconnect automatically at most twice in a row, then wait for the viewer.
+    // Live failures reconnect automatically at most three times in a row, then wait for the viewer.
     await watch(0);
     const reconnectStart = await page.evaluate(() => window.__mediaStarts);
     const failCurrent = () => page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
     await failCurrent();
-    await page.waitForFunction(() => /\(1\/2\)/.test(document.getElementById('status').textContent));
+    await page.waitForFunction(() => /\(1\/3\)/.test(document.getElementById('status').textContent));
     assert.equal(await page.locator('video').count(), 0, 'The failed element is released while waiting to reconnect');
     await current(0);
     assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 1, 'First reconnect after the delay');
+    for (const attempt of [2, 3]) {
+      await failCurrent();
+      await page.waitForFunction(attempt => document.getElementById('status').textContent.includes('(' + attempt + '/3)'), attempt);
+      await page.waitForFunction(() => document.body.dataset.state === 'playing');
+      assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + attempt);
+    }
     await failCurrent();
-    await page.waitForFunction(() => /\(2\/2\)/.test(document.getElementById('status').textContent));
-    await page.waitForFunction(() => document.body.dataset.state === 'playing', null, { timeout: 12000 });
-    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 2);
-    await failCurrent();
-    await page.waitForTimeout(9000);
-    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 2, 'No third consecutive automatic attempt');
+    await page.waitForTimeout(2000);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 3, 'No fourth consecutive automatic attempt');
     assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
     assert.equal(await page.locator('video').count(), 0);
     await page.keyboard.press('Escape');
+    await page.locator('#nav-settings').click();
+    await page.locator('#settings-info').click();
+    const log = await page.locator('#interruption-log li').allTextContents();
+    await page.locator('#close-diagnostics').click();
+    if (await page.locator('#settings-home').isVisible()) await page.keyboard.press('Escape');
+    assert.ok(log.filter(row => row.includes('إعادة اتصال تلقائية')).length >= 2 && log.some(row => row.includes('عاد البث')), 'Diagnostics list reconnects and recoveries');
+    assert.ok(log.length <= 20 && log.every(row => !/https?:|example|عنصر/.test(row)), 'The interruption log holds no URLs or channel names');
     // Live OK opens only channels; held OK must not immediately close the drawer.
     await watch(0);
     const beforeHeldOK = await page.evaluate(() => window.__mediaStarts);

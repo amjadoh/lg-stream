@@ -146,3 +146,31 @@ test('native transport preferences preserve catalogue identity and survive refre
   await store.clear();
   assert.deepEqual(await cold.load(), { state: 'empty' });
 });
+
+test('reopens IndexedDB after the platform closes the cached connection', async () => {
+  const innerRequest = fakeIndexedDB().open();
+  const database = await new Promise(resolve => { innerRequest.onsuccess = () => resolve(innerRequest.result); });
+  let opens = 0; let closed = false; let firstDatabase = null;
+  const indexedDB = {
+    open() {
+      const ownOpen = ++opens; const request = {};
+      const wrapped = Object.create(database);
+      wrapped.transaction = (...args) => {
+        if (ownOpen === 1 && closed) throw Object.assign(new Error('connection is closing'), { name: 'InvalidStateError' });
+        return database.transaction(...args);
+      };
+      if (ownOpen === 1) firstDatabase = wrapped;
+      setTimeout(() => { request.result = wrapped; request.onsuccess(); }, 0);
+      return request;
+    }
+  };
+  const store = createStore({ indexedDB });
+  const entries = [{ url: 'https://private.invalid/1', name: 'one' }];
+  assert.equal((await store.save('https://private.invalid/list', entries)).state, 'complete');
+  closed = true;
+  assert.equal((await store.load()).state, 'complete', 'A closed connection is replaced instead of failing until restart');
+  assert.equal(opens, 2);
+  closed = false; firstDatabase.onclose();
+  assert.equal((await store.load()).state, 'complete');
+  assert.equal(opens, 2, 'A close event from a connection that is no longer cached is ignored');
+});

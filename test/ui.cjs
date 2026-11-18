@@ -309,7 +309,7 @@ async function main() {
     assert.equal(await page.locator('#track-list button').count(), 0, 'Source failure discards old track choices');
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'Live failure must preserve watching mode');
-    assert.match(await page.locator('#status').innerText(), /جارٍ إعادة الاتصال… \(1\/2\)/, 'A live failure announces the bounded automatic reconnect');
+    assert.match(await page.locator('#status').innerText(), /جارٍ إعادة الاتصال… \(1\/3\)/, 'A live failure announces the bounded automatic reconnect');
     assert.equal(await page.locator('#status').isVisible(), true, 'Live failure message is visible over the video');
     assert.equal(await page.locator('#media-controls').isVisible(), false);
     const failedStarts = await page.evaluate(() => window.__mediaStarts);
