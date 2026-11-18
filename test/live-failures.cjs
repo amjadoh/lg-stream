@@ -116,14 +116,39 @@ async function main() {
         await page.keyboard.press('ArrowDown');
       }
       await page.waitForFunction(() => ['error', 'ended', 'play-rejected', 'startup-timeout'].includes(document.body.dataset.state));
+      const reconnecting = kind === 'error' || kind === 'timeout';
       assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), true, kind);
       assert.equal(await page.locator('#status').isVisible(), true, kind);
       if (kind !== 'ended') assert.equal(await page.locator('#quality-badge').innerText(), 'غير متاحة', 'A released failed video has no current measured quality');
-      assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
+      assert.match(await page.locator('#status').innerText(), reconnecting ? /جارٍ إعادة الاتصال… \(1\/2\)/ : /البث مقطوع/, kind);
+      const startsBeforeArrow = await page.evaluate(() => window.__mediaStarts);
       await page.keyboard.press('ArrowDown');
       await current(kind === 'error' || kind === 'ended' ? 2 : 4);
+      if (reconnecting) {
+        await page.waitForTimeout(3300);
+        assert.equal(await page.evaluate(() => window.__mediaStarts), startsBeforeArrow + 1, 'A channel request cancels the pending automatic reconnect');
+      }
       await page.keyboard.press('Escape');
     }
+    // Live failures reconnect automatically at most twice in a row, then wait for the viewer.
+    await watch(0);
+    const reconnectStart = await page.evaluate(() => window.__mediaStarts);
+    const failCurrent = () => page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
+    await failCurrent();
+    await page.waitForFunction(() => /\(1\/2\)/.test(document.getElementById('status').textContent));
+    assert.equal(await page.locator('video').count(), 0, 'The failed element is released while waiting to reconnect');
+    await current(0);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 1, 'First reconnect after the delay');
+    await failCurrent();
+    await page.waitForFunction(() => /\(2\/2\)/.test(document.getElementById('status').textContent));
+    await page.waitForFunction(() => document.body.dataset.state === 'playing', null, { timeout: 12000 });
+    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 2);
+    await failCurrent();
+    await page.waitForTimeout(9000);
+    assert.equal(await page.evaluate(() => window.__mediaStarts), reconnectStart + 2, 'No third consecutive automatic attempt');
+    assert.match(await page.locator('#status').innerText(), /البث مقطوع/);
+    assert.equal(await page.locator('video').count(), 0);
+    await page.keyboard.press('Escape');
     // Live OK opens only channels; held OK must not immediately close the drawer.
     await watch(0);
     const beforeHeldOK = await page.evaluate(() => window.__mediaStarts);

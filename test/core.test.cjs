@@ -272,6 +272,43 @@ test('measures intent-to-start/progress including switch delay and aborts a stal
   assert.equal(state, timedOut);
 });
 
+test('stall watchdog reports a live stream that stops progressing, but not pauses, seeks or short waits', () => {
+  let time = 0; let video; let state; let mounted = 0;
+  const timers = fakeTimers();
+  const player = createPlayer({
+    createVideo: () => (video = fakeVideo()), mountVideo: () => { mounted++; }, unmountVideo: () => { mounted--; },
+    now: () => time, onState: next => { state = next; }, timers
+  });
+  const runDue = () => { const due = timers.entries.filter(entry => !entry.cancelled && !entry.ran); due.forEach(entry => { entry.ran = true; entry.callback(); }); };
+  player.start('https://example.test/live', 1, 0, { watchStall: true });
+  time = 100; video.fire('playing');
+  time = 200; video.currentTime = 0.1; video.fire('timeupdate');
+  assert.equal(state.progressMs, 200);
+  // A 9.5s wait that recovers must not fail.
+  time = 1000; video.fire('waiting');
+  for (time = 2700; time <= 10500; time += 2500) runDue();
+  video.currentTime = 1; video.fire('timeupdate'); video.fire('playing');
+  assert.equal(state.state, 'playing');
+  // User pause keeps the stream alive regardless of duration.
+  video.pause(); for (time = 13000; time <= 60000; time += 2500) runDue();
+  assert.equal(state.state, 'paused'); assert.equal(mounted, 1);
+  video.paused = false; video.fire('playing');
+  // Seeking backwards is progress, not a stall.
+  time = 61000; video.seeking = true; video.fire('seeking'); video.currentTime = 0.5; video.seeking = false; video.fire('seeked'); video.fire('timeupdate'); video.fire('playing');
+  runDue(); assert.equal(state.state, 'playing');
+  // No media-time change for 15s while not paused fails exactly once and releases the element.
+  for (time = 63500; time < 76000; time += 2500) runDue();
+  assert.notEqual(state.state, 'stall-timeout');
+  time = 76100; runDue();
+  assert.equal(state.state, 'stall-timeout'); assert.equal(mounted, 0); assert.equal(video.src, undefined);
+  assert.equal(timers.entries.filter(entry => !entry.cancelled && !entry.ran).length, 0, 'No timer remains armed after release');
+  // On-demand playback (no watchStall) is never failed by the watchdog.
+  time = 80000; player.start('https://example.test/movie', 2, 80000);
+  video.fire('playing'); time = 80100; video.currentTime = 3; video.fire('timeupdate');
+  for (time = 82600; time < 200000; time += 2500) runDue();
+  assert.equal(state.state, 'playing'); assert.equal(mounted, 1);
+});
+
 test('seeking and its refill do not inflate playback stall measurements', () => {
   let time = 0; let video; let state;
   const player = createPlayer({
