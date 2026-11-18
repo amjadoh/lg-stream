@@ -25,7 +25,8 @@
   function createStore(options) {
     options = options || {};
     var indexed = options.indexedDB !== undefined ? options.indexedDB : (typeof indexedDB !== 'undefined' ? indexedDB : null);
-    var BATCH_CHUNKS = options.batchChunks || 16;
+    var BATCH_CHUNKS = options.batchChunks || 4;
+    var LOAD_BATCH_CHUNKS = options.loadBatchChunks || 8;
     var yieldTask = options.yieldTask || function () { return new Promise(function (resolve) { setTimeout(resolve, 0); }); };
     var databasePromise = null;
     var activeWrite = null;
@@ -72,12 +73,19 @@
         var meta = records[0]; var preferences = records[1]; var transport = records[2];
         if (!meta) return { state: 'empty' };
         if (!meta.revision || !meta.source || !Number.isSafeInteger(meta.count) || meta.count <= 0 || meta.chunkCount !== Math.ceil(meta.count / CHUNK_SIZE)) return { state: 'corrupt' };
-        var transaction = database.transaction('chunks', 'readonly');
-        var done = transactionDone(transaction);
-        var store = transaction.objectStore('chunks');
-        var requests = [];
-        for (var index = 0; index < meta.chunkCount; index += 1) requests.push(requestResult(store.get(meta.revision + ':' + index)));
-        var loaded = await Promise.all([Promise.all(requests), done]); var chunks = loaded[0];
+        // Read in small batches with a macrotask between them: reading every
+        // chunk at once deserialised the whole catalogue in one long task.
+        var chunks = [];
+        for (var first = 0; first < meta.chunkCount; first += LOAD_BATCH_CHUNKS) {
+          var transaction = (await begin('chunks', 'readonly', database)).transaction;
+          var done = transactionDone(transaction);
+          var store = transaction.objectStore('chunks');
+          var requests = [];
+          for (var index = first; index < Math.min(meta.chunkCount, first + LOAD_BATCH_CHUNKS); index += 1) requests.push(requestResult(store.get(meta.revision + ':' + index)));
+          var loaded = await Promise.all([Promise.all(requests), done]);
+          for (var item = 0; item < loaded[0].length; item += 1) chunks.push(loaded[0][item]);
+          if (first + LOAD_BATCH_CHUNKS < meta.chunkCount) await yieldTask();
+        }
         var entries = new Array(meta.count); var offset = 0;
         for (var chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
           if (!chunks[chunkIndex] || chunks[chunkIndex].revision !== meta.revision) return { state: 'corrupt' };
