@@ -1,6 +1,8 @@
 (function () {
   'use strict';
   var dictionary = {
+  "الزر الأزرق: نقل أو إخفاء المحدد، أو إلغاء": "Blue button: move or hide the selection, or cancel",
+  "موافق: تحديد أو إلغاء · الأزرق: نقل أو إخفاء · رجوع: خروج": "OK: select or unselect · Blue: move or hide · Back: exit",
   "ترتيب المجموعات — المحدد:": "Arrange groups — selected:",
   "ترتيب القنوات — المحدد:": "Arrange channels — selected:",
   "الزر الأزرق: خيارات (ترتيب، نقل، إعادة تسمية، إخفاء)": "Blue button: options (arrange, move, rename, hide)",

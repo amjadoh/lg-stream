@@ -2190,7 +2190,14 @@
   // webOS delivers OK as an instant press (no hold, no repeat), so the item
   // menu opens with the blue colour key; OK keeps playing immediately.
   var BLUE_KEY = 406; var blueTipKey = 'lg-stream-blue-tip-v1';
+  var selectReturn = null;
+  function returnFromSelectBar() {
+    var target = selectReturn; selectReturn = null;
+    if (target && target.isConnected && target.offsetParent) target.focus(); else if (selectState && selectState.kind === 'group') focusActiveGroup(); else focusSelected();
+  }
   function updateBlueHint() {
+    if (selectState && !watchMode) { LGI18n.text($('blue-hint-text'), 'الزر الأزرق: نقل أو إخفاء المحدد، أو إلغاء'); $('blue-hint').hidden = false; $('footer-note').hidden = true; return; }
+    LGI18n.text($('blue-hint-text'), 'الزر الأزرق: خيارات (ترتيب، نقل، إعادة تسمية، إخفاء)');
     var show = !watchMode && !selectState && !moveState && !!holdTarget(document.activeElement);
     $('blue-hint').hidden = !show; $('footer-note').hidden = show;
     if (!show) return;
@@ -2213,12 +2220,19 @@
     }
     if (selectState) {
       var focused = document.activeElement;
+      // Blue jumps between the list and the bar's actions, wherever the list is scrolled.
+      if (code === BLUE_KEY) {
+        event.preventDefault(); if (event.repeat) return true;
+        if ($('select-bar').contains(focused)) returnFromSelectBar();
+        else { selectReturn = focused; var actions = visibleControls($('select-bar')).filter(function (button) { return !button.disabled; }); (actions[0] || $('select-cancel')).focus(); }
+        return true;
+      }
       if ($('select-bar').contains(focused)) {
         if (key === 'ArrowLeft' || key === 'ArrowRight') {
           var bar = visibleControls($('select-bar')); var at = bar.indexOf(focused); var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
           if (bar[at + step]) bar[at + step].focus(); event.preventDefault(); return true;
         }
-        if (key === 'ArrowDown') { event.preventDefault(); if (selectState.kind === 'group') focusActiveGroup(); else focusSelected(); return true; }
+        if (key === 'ArrowDown') { event.preventDefault(); returnFromSelectBar(); return true; }
         return false;
       }
       var kindMatches = selectState.kind === 'group' ? focused.classList.contains('group-button') && focused.parentNode === $('groups') : focused.classList.contains('channel-button');
@@ -2309,7 +2323,7 @@
       else if (!speedPanel.hidden) closeSpeed();
       else if (extraDialog()) closeExtraDialog();
       else if (moveState) finishMove(false);
-      else if (selectState) exitSelect();
+      else if (selectState) { if ($('select-bar').contains(document.activeElement)) exitSelect(); else { selectReturn = document.activeElement; var barActions = visibleControls($('select-bar')).filter(function (button) { return !button.disabled; }); (barActions[0] || $('select-cancel')).focus(); } }
       else if (watchMode) { if (!$('media-controls').hidden) { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
       else backToLibrary();
       return;
