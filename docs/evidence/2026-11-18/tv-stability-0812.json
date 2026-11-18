@@ -1,0 +1,223 @@
+{
+ "schema": 1,
+ "date": "2026-11-18",
+ "device": {
+  "model": "OLED55CS6LA",
+  "firmware": "43.21.94",
+  "sdk": "11.2.0"
+ },
+ "note": "Numbers and states only. No URLs, channel names or subscription data. Short inspector runs, not a soak test.",
+ "categorySwitchSyncMs": {
+  "0.8.10": {
+   "all": [
+    271,
+    166
+   ],
+   "sports": [
+    183,
+    163
+   ],
+   "movies": [
+    192,
+    165
+   ],
+   "kids": [
+    166,
+    155
+   ],
+   "documentary": [
+    139,
+    144
+   ],
+   "other": [
+    203,
+    187
+   ],
+   "news": [
+    158,
+    167
+   ]
+  },
+  "0.8.11": {
+   "all": [
+    150,
+    86
+   ],
+   "sports": [
+    96,
+    89
+   ],
+   "movies": [
+    100,
+    74
+   ],
+   "kids": [
+    82,
+    77
+   ],
+   "documentary": [
+    64,
+    54
+   ],
+   "other": [
+    94,
+    95
+   ],
+   "news": [
+    77,
+    65
+   ]
+  },
+  "0.8.12": {
+   "all": [
+    124,
+    106
+   ],
+   "sports": [
+    96,
+    79
+   ],
+   "movies": [
+    89,
+    94
+   ],
+   "kids": [
+    81,
+    70
+   ],
+   "documentary": [
+    60,
+    65
+   ],
+   "other": [
+    107,
+    81
+   ],
+   "news": [
+    66,
+    75
+   ]
+  }
+ },
+ "searchMaxBlockMs_0.8.12": {
+  "be": 422,
+  "bei": 37,
+  "bein": 47,
+  "ال": 464,
+  "الج": 95
+ },
+ "channelStart_0.8.10": [
+  {
+   "clickMs": 185,
+   "playableMs": 11115,
+   "progressMs": 11842,
+   "videos": 1,
+   "w": 1280,
+   "err": 0
+  },
+  {
+   "clickMs": 49,
+   "playableMs": null,
+   "progressMs": 1185,
+   "videos": 1,
+   "w": 1920,
+   "err": 0
+  },
+  {
+   "clickMs": 52,
+   "playableMs": 9928,
+   "progressMs": 10575,
+   "videos": 1,
+   "w": 1280,
+   "err": 0
+  }
+ ],
+ "channelStart_0.8.11": [
+  {
+   "clickMs": 25,
+   "playableMs": 1502,
+   "progressMs": 1502,
+   "videos": 1,
+   "w": 1280,
+   "err": 0
+  },
+  {
+   "clickMs": 17,
+   "playableMs": 1227,
+   "progressMs": 1227,
+   "videos": 1,
+   "w": 1920,
+   "err": 0
+  },
+  {
+   "clickMs": 12,
+   "playableMs": null,
+   "progressMs": null,
+   "videos": 0,
+   "w": 0,
+   "err": 0
+  }
+ ],
+ "providerReturnAfterOtherChannel": {
+  "0.8.11_ABA": [
+   "A error code 4 at 0.6s",
+   "auto 1/2 at +3.5s error 4",
+   "auto 2/2 at +12.2s error 4",
+   "left in error"
+  ],
+  "gapTest": [
+   {
+    "gapAfterBstopMs": 20000,
+    "A": "no progress within 8s"
+   },
+   {
+    "gapAfterBstopMs": 35000,
+    "A": "progress at 1.44s",
+    "B_before": "error 4 at 0.57s"
+   }
+  ],
+  "0.8.12_ABA": [
+   "A error 4 at 0.6s",
+   "auto 1/3 +5s error 4",
+   "auto 2/3 +12s error 4",
+   "auto 3/3 +25s progress at 45.4s total",
+   "log: recovered after 26464 ms"
+  ]
+ },
+ "steady_0.8.12_60s": {
+  "sameVideo": true,
+  "videos": 1,
+  "advancedS": 60.11,
+  "wallS": 60.02,
+  "waits": 0,
+  "err": 0,
+  "bufferedAheadS": 43.8,
+  "mainThreadMaxLagMs": 3,
+  "size": "1280x720"
+ },
+ "startupWaits_0.8.12": "9 completed waits of 128-291 ms during the first ~10 s after start, then none",
+ "manualRefresh_0.8.12": {
+  "ms": 53078,
+  "releasedDuringLoad": true,
+  "restoredView": true,
+  "countAfter": 331840,
+  "hidden": [
+   240,
+   0,
+   0
+  ],
+  "transport": "hls",
+  "mainThreadMaxLagMs": 20685,
+  "heap": "performance.memory stayed at 159 MB throughout; treated as not informative"
+ },
+ "packages": {
+  "0.8.11": {
+   "run": 44365313027,
+   "sha256": "255865122029524ed3d596a1ff6f5c5cf9ee17ef12772ca34ae93776df9d259b"
+  },
+  "0.8.12": {
+   "run": 44368847252,
+   "sha256": "8fca2056d757216a540150bef707b0614cb0759af6360c0a854787a22d9b93ad"
+  }
+ }
+}
