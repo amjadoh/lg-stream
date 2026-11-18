@@ -2033,7 +2033,7 @@
   function renderSelectBar() {
     if (!selectState) { $('select-bar').hidden = true; return; }
     $('select-bar').hidden = false;
-    LGI18n.text($('select-count'), (selectState.kind === 'group' ? 'مجموعات محددة: ' : 'قنوات محددة: ') + selectState.items.size);
+    LGI18n.text($('select-count'), (selectState.kind === 'group' ? 'ترتيب المجموعات — المحدد: ' : 'ترتيب القنوات — المحدد: ') + selectState.items.size);
     $('select-move').disabled = !selectState.items.size; $('select-hide').disabled = !selectState.items.size;
   }
   function toggleSelected(target) {
@@ -2177,7 +2177,7 @@
     $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); settingsReturn = null; $('settings-home').hidden = true;
     if (managedSection !== 'hidden' && managedSection !== activeSection) { activeSection = managedSection; activeGroup = ''; activeCategory = 'all'; renderPrimary(); }
     beginEdit('settings');
-    if (kind === 'group') { activeGroup = ''; renderGroups(); renderChannels(); enterSelect('group'); focusActiveGroup(); var first = $('groups').querySelector('.group-button:not([data-group=""])'); if (first) first.focus(); }
+    if (kind === 'group') { activeGroup = ''; renderGroups(); renderChannels(); enterSelect('group'); focusActiveGroup(); var first = $('groups').querySelector('.group-button:not([data-group=""]):not(.new-group)'); if (first) first.focus(); }
     else { renderGroups(); renderChannels(); enterSelect('channel'); focusSelected(); }
     showOrganizeStatus('موافق لتحديد العناصر، ثم اصعد لأعلى القائمة لاختيار نقل أو إخفاء. رجوع عند الانتهاء.');
   }
@@ -2187,10 +2187,18 @@
   $('manage-visibility').addEventListener('click', function () { showManagerView(true); });
   $('reset-confirm-no').addEventListener('click', function () { $('reset-confirm').hidden = true; $('reset-customization').focus(); });
   $('reset-confirm-yes').addEventListener('click', function () { $('reset-confirm').hidden = true; resetCustomization(); $('reset-customization').focus(); });
-  document.addEventListener('keyup', function (event) {
-    var key = event.key; if (!key || key === 'Unidentified') key = event.keyCode === 13 ? 'Enter' : key;
-    if (hold && key === 'Enter') { event.preventDefault(); releaseHold(); }
-  });
+  // webOS delivers OK as an instant press (no hold, no repeat), so the item
+  // menu opens with the blue colour key; OK keeps playing immediately.
+  var BLUE_KEY = 406; var blueTipKey = 'lg-stream-blue-tip-v1';
+  function updateBlueHint() {
+    var show = !watchMode && !selectState && !moveState && !!holdTarget(document.activeElement);
+    $('blue-hint').hidden = !show; $('footer-note').hidden = show;
+    if (!show) return;
+    var seen = false; try { seen = localStorage.getItem(blueTipKey) === '1'; localStorage.setItem(blueTipKey, '1'); } catch (_) { seen = updateBlueHint.shown; }
+    if (!seen && !updateBlueHint.shown) showOrganizeStatus('جديد: اضغط الزر الأزرق على أي قناة أو مجموعة لترتيبها أو نقلها أو إخفائها.');
+    updateBlueHint.shown = true;
+  }
+  document.addEventListener('focusin', updateBlueHint);
   // Returns true when the key was handled by a customization mode.
   function customizationKey(event, key, code) {
     if (hold) {
@@ -2225,9 +2233,13 @@
       }
       return false;
     }
-    if (key === 'Enter' && !event.repeat) {
+    if (code === BLUE_KEY) {
+      if (event.repeat || watchMode) return false;
+      event.preventDefault();
       var target = holdTarget(document.activeElement);
-      if (target) { event.preventDefault(); startHold(target); return true; }
+      if (target) openItemMenu(target);
+      else showOrganizeStatus('الزر الأزرق يفتح خيارات القناة أو المجموعة المحددة في القائمة.');
+      return true;
     }
     return false;
   }

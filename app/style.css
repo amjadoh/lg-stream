@@ -312,3 +312,10 @@ body[data-layout="vertical"] #category-shortcuts button { flex-shrink: 0; width:
 .manager-option { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-height: 120px; padding: 20px 24px; text-align: start; }
 .manager-option strong { font-size: 28px; }
 .manager-option span { font-size: 19px; color: #c3cfde; font-weight: normal; }
+/* Blue colour-key legend */
+.blue-hint { display: inline-flex; align-items: center; gap: 10px; font-size: 19px; color: #d8e2f0; }
+.blue-hint[hidden], .footer-note[hidden] { display: none; }
+.blue-dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; background: #2f7cf6; box-shadow: 0 0 0 2px rgba(255,255,255,.25); vertical-align: middle; margin-inline-end: 8px; }
+.manager-tip { margin: 4px 0 0; }
+.manager-option:focus { background: #4a3514; outline: 5px solid #ffd98a; outline-offset: 3px; box-shadow: 0 0 0 10px rgba(255,217,138,.18); }
+.manager-option:focus strong { color: #ffd98a; }

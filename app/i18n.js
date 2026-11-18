@@ -1,6 +1,13 @@
 (function () {
   'use strict';
   var dictionary = {
+  "ترتيب المجموعات — المحدد:": "Arrange groups — selected:",
+  "ترتيب القنوات — المحدد:": "Arrange channels — selected:",
+  "الزر الأزرق: خيارات (ترتيب، نقل، إعادة تسمية، إخفاء)": "Blue button: options (arrange, move, rename, hide)",
+  "أسرع طريقة: اضغط الزر الأزرق على أي قناة أو مجموعة في القائمة.": "Quickest way: press the blue button on any channel or group in the list.",
+  "الترتيب، الإخفاء والإظهار، وإعادة الضبط · أو الزر الأزرق على أي قناة": "Order, hide and show, and reset · or the blue button on any channel",
+  "جديد: اضغط الزر الأزرق على أي قناة أو مجموعة لترتيبها أو نقلها أو إخفائها.": "New: press the blue button on any channel or group to arrange, move or hide it.",
+  "الزر الأزرق يفتح خيارات القناة أو المجموعة المحددة في القائمة.": "The blue button opens options for the channel or group selected in the list.",
   "إدارة القنوات والمجموعات": "Manage channels and groups",
   "الترتيب، الإخفاء والإظهار، وإعادة الضبط": "Order, hide and show, and reset",
   "ترتيب القنوات": "Arrange channels",
