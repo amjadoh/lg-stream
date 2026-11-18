@@ -101,9 +101,10 @@ async function main() {
       await page.locator('#nav-settings').click();
       await page.locator('#manage-groups-button').click();
       assert.equal(await page.locator('#group-manager').isVisible(), true);
+      await page.locator('#manage-visibility').click();
     }
     async function closeManager() {
-      await page.locator('#close-group-manager').click();
+      await page.locator('#close-group-manager').click(); await page.locator('#close-group-manager').click();
       await page.locator('#close-settings').click();
     }
     async function chooseSection(section) {
@@ -261,8 +262,6 @@ async function main() {
     await openManager();
     await page.locator('[data-manage-section="movies"]').click();
     assert.equal(await page.locator('#managed-groups .group-switch').count(), 0);
-    await page.keyboard.press('ArrowDown');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'organize-groups', 'The organizer actions sit under the section tabs');
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'close-group-manager');
     await page.keyboard.press('ArrowUp');

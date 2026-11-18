@@ -153,11 +153,11 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__mediaStarts), starts, 'Filters and settings do not reconnect playback');
     // Hide sports, then selecting sports must stay empty; changing appearance cannot unhide it.
     await key('ArrowLeft'); await page.locator('#nav-settings').click();
-    await page.locator('#manage-groups-button').click();
+    await page.locator('#manage-groups-button').click(); await page.locator('#manage-visibility').click();
     await page.locator('.group-switch').filter({ hasText: 'رياضة' }).click();
     await page.waitForFunction(() => document.getElementById('manager-status').textContent.includes('أُخفيت'));
     assert.equal(await page.locator('video').count(), 0, 'Hiding the currently playing group intentionally stops its video');
-    await key('Escape', 'manage-groups-button');
+    await key('Escape', 'manage-visibility'); await key('Escape', 'manage-groups-button');
     await page.locator('#settings-appearance').click();
     await page.locator('[data-layout="tabs"]').click(); await key('Escape'); await key('Escape');
     await key('ArrowDown', 'nav-search'); await key('ArrowRight'); await key('ArrowUp', 'groups-filter');

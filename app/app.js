@@ -542,11 +542,18 @@
     if (playlistRunning || !activePlaylistUrl || !sources.length) return;
     cancelSwitch(); managedSection = /^(tv|movies|series)$/.test(activeSection) ? activeSection : 'tv';
     collectManagedGroups(); renderManagedGroups(); $('manager-status').textContent = '';
-    $('group-manager').hidden = false;
-    $('group-manager').querySelector('[data-manage-section="' + managedSection + '"]').focus();
+    $('group-manager').hidden = false; showManagerView(false);
+  }
+  // The manager opens on option cards; «إخفاء وإظهار» shows the section lists.
+  function showManagerView(visibility) {
+    $('manager-home').hidden = visibility; $('manager-visibility').hidden = !visibility; $('reset-confirm').hidden = true;
+    if (visibility) { collectManagedGroups(); renderManagedGroups(); $('group-manager').querySelector('[data-manage-section="' + managedSection + '"]').focus(); }
+    else if ($('organize-channels').disabled) $('manage-visibility').focus(); else $('organize-channels').focus();
   }
   function closeGroupManager() {
     if (groupSettingsSaving) return;
+    if (!$('reset-confirm').hidden) { $('reset-confirm').hidden = true; $('reset-customization').focus(); return; }
+    if (!$('manager-visibility').hidden) { $('manager-status').textContent = ''; showManagerView(false); $('manage-visibility').focus(); return; }
     $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); if (!returnToSettings()) $('setup-button').focus();
   }
   function renderGroups() {
@@ -1589,8 +1596,8 @@
   }, { passive: false });
   Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
     button.addEventListener('click', function (event) {
+      if (editSession || moveState || selectState) { showOrganizeStatus('أنهِ التعديل أولًا: رجوع للحفظ أو الإلغاء.'); return; }
       cancelSwitch();
-      if (selectState) { selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; }
       if (event.currentTarget.dataset.section === 'movies' || event.currentTarget.dataset.section === 'series') stop();
       activeSection = event.currentTarget.dataset.section; activeGroup = ''; contentWindowStart = 0; channelWindowStart = 0;
       setPrimary(false); renderPrimary(); renderGroups(); renderChannels();
@@ -1695,7 +1702,7 @@
 
 
   function extraDialog() {
-    return ['exit-confirm', 'category-picker', 'appearance-panel', 'settings-home', 'item-menu', 'rename-panel'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['exit-confirm', 'category-picker', 'appearance-panel', 'settings-home', 'item-menu', 'rename-panel', 'edit-confirm'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   var exitReturn = null;
   function focusSection() {
@@ -1744,6 +1751,7 @@
     else if (panel.id === 'category-picker') focusCategoryReturn();
     else if (panel.id === 'item-menu') closeItemMenu(true);
     else if (panel.id === 'rename-panel') closeRename();
+    else if (panel.id === 'edit-confirm') { panel.hidden = false; if (editSession && editSession.origin === 'settings') $('edit-continue').click(); else $('edit-discard').click(); }
   }
   function renderAppearance() {
     document.body.dataset.theme = appearance.theme; document.body.dataset.layout = appearance.layout; document.body.dataset.controls = appearance.controls;
@@ -1878,7 +1886,7 @@
     var now = performance.now();
     hold = { target: target, start: now, lastEvent: now, repeats: 0, ring: false, frame: null };
     hold.ringTimer = setTimeout(function () { if (!hold) return; hold.ring = true; placeRing(target); $('hold-progress').style.strokeDashoffset = '119.4'; $('hold-ring').hidden = false; drawRing(); }, RING_MS);
-    hold.doneTimer = setTimeout(function () { var own = hold; endHold(); if (own) openItemMenu(own.target); }, HOLD_MS);
+    hold.doneTimer = setTimeout(function () { var own = hold; if (own && own.pointer) pointerSwallowClick = true; endHold(); if (own) openItemMenu(own.target); }, HOLD_MS);
     // Release fallback when keyup is missing: auto-repeat stops.
     hold.watch = setInterval(function () {
       if (!hold) return; var idle = performance.now() - hold.lastEvent;
@@ -1896,6 +1904,23 @@
     // A short press acts as OK; releasing while the ring shows cancels.
     if (short && own.target.isConnected) own.target.click();
   }
+  // Magic Remote pointer: OK arrives as mouse events instead of keys. A press
+  // held past the ring never becomes a click (no playback); a short one does.
+  var pointerSwallowClick = false;
+  document.addEventListener('mousedown', function (event) {
+    pointerSwallowClick = false;
+    if (event.button !== 0 || hold || selectState || moveState) return;
+    var target = holdTarget(event.target && event.target.closest ? event.target.closest('.channel-button, .group-button') : null);
+    if (!target) return;
+    startHold(target); hold.pointer = true;
+  }, true);
+  document.addEventListener('mouseup', function () {
+    if (hold && hold.pointer) { if (hold.ring) pointerSwallowClick = true; endHold(); }
+  }, true);
+  document.addEventListener('click', function (event) {
+    if (!pointerSwallowClick) return;
+    pointerSwallowClick = false; event.preventDefault(); event.stopPropagation();
+  }, true);
   function showOrganizeStatus(text) {
     var status = $('organize-status'); LGI18n.text(status, text); status.hidden = false;
     clearTimeout(showOrganizeStatus.timer); showOrganizeStatus.timer = setTimeout(function () { status.hidden = true; }, 5000);
@@ -1922,6 +1947,57 @@
     if (target && target.isConnected && target.offsetParent) { target.focus(); return; }
     focusSelected();
   }
+  // ---- Edit session: edits stay in memory until the owner confirms saving. ----
+  // From the long-press menu one edit ends the session; from Settings the
+  // owner keeps editing until Back, then chooses save, discard or continue.
+  var editSession = null; var editReturn = null;
+  function hiddenGroupsCopy() { var copy = {}; ['tv', 'movies', 'series'].forEach(function (own) { copy[own] = Array.from(hiddenGroups[own]); }); return copy; }
+  function beginEdit(origin) {
+    if (editSession) return;
+    editSession = { origin: origin, dirty: false, groupsDirty: false, source: activePlaylistUrl, custom: JSON.parse(JSON.stringify(custom)), hiddenGroups: hiddenGroupsCopy() };
+  }
+  function endEditIfClean() { if (editSession && !editSession.dirty) editSession = null; }
+  function editDone(kind, groups) {
+    if (!editSession) beginEdit('menu');
+    editSession.dirty = true; if (groups) editSession.groupsDirty = true;
+    if (editSession.origin === 'settings') {
+      enterSelect(kind); if (kind === 'group') focusActiveGroup(); else focusSelected();
+      showOrganizeStatus('تم. تابع التعديل، أو اضغط رجوع للحفظ.');
+    } else askSaveEdits();
+  }
+  function askSaveEdits() {
+    editReturn = document.activeElement;
+    $('edit-continue').hidden = !(editSession && editSession.origin === 'settings');
+    $('edit-confirm').hidden = false; $('edit-save').focus();
+  }
+  function closeEditConfirm() {
+    $('edit-confirm').hidden = true; var target = editReturn; editReturn = null;
+    if (target && target.isConnected && target.offsetParent) target.focus(); else focusSelected();
+  }
+  function commitEdits() {
+    var session = editSession; editSession = null;
+    if (!session || !session.dirty || session.source !== activePlaylistUrl) return;
+    var source = activePlaylistUrl;
+    saveCustomization('حُفظت التغييرات.');
+    if (session.groupsDirty) catalogStore.saveHiddenGroups(source, hiddenGroupsCopy()).then(function (result) {
+      if (source === activePlaylistUrl && result.state !== 'complete') showOrganizeStatus('تغيّر العرض لهذه الجلسة؛ تعذر حفظ إخفاء المجموعات.');
+    });
+  }
+  function discardEdits() {
+    var session = editSession; editSession = null;
+    if (!session || !session.dirty || session.source !== activePlaylistUrl) return;
+    custom = session.custom; applyItemCustomization(); setHiddenGroups(session.hiddenGroups); rebuildOrder(); catalogViewRevision += 1; invalidateViews();
+    renderGroups(); renderChannels();
+    showOrganizeStatus('أُلغيت التغييرات وعاد كل شيء كما كان.');
+  }
+  function finishEditing(save) {
+    closeEditConfirm();
+    if (selectState) finishSelect();
+    if (save) commitEdits(); else discardEdits();
+  }
+  $('edit-save').addEventListener('click', function () { finishEditing(true); });
+  $('edit-discard').addEventListener('click', function () { finishEditing(false); });
+  $('edit-continue').addEventListener('click', closeEditConfirm);
   function saveCustomization(message) {
     var source = activePlaylistUrl;
     var record = { key: 'customization', source: source, groupOrder: custom.groupOrder, channelOrder: custom.channelOrder, hidden: custom.hidden.slice(), names: Object.assign({}, custom.names) };
@@ -1944,6 +2020,11 @@
     document.body.classList.add('select-mode'); renderSelectBar(); renderGroups(); renderChannels();
   }
   function exitSelect() {
+    if (!selectState) return;
+    if (editSession && editSession.dirty) { askSaveEdits(); return; }
+    editSession = null; finishSelect();
+  }
+  function finishSelect() {
     if (!selectState) return;
     var kind = selectState.kind; selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true;
     renderGroups(); renderChannels();
@@ -2022,10 +2103,12 @@
     } else {
       if (state.kind === 'group') custom.groupOrder[state.section] = own.groups.filter(function (group) { return group; });
       else custom.channelOrder[state.section + '\u0001' + state.group] = own.byGroup.get(state.group).map(function (index) { return entryKeys[index]; });
-      saveCustomization('حُفظ الترتيب.');
     }
     if (state.kind === 'group') { var button = Array.prototype.find.call($('groups').querySelectorAll('.group-button'), function (item) { return item.dataset.group === state.items[0]; }); if (button) button.focus(); else focusActiveGroup(); }
     else { selected = state.items[0]; focusChannel(state.items[0]); }
+    if (save) editDone(state.kind, false);
+    else if (editSession && editSession.origin === 'settings') { enterSelect(state.kind); if (state.kind === 'group') focusActiveGroup(); else focusSelected(); }
+    else endEditIfClean();
   }
   // ---- Hide ----
   function hideItems(kind, items) {
@@ -2035,17 +2118,14 @@
       var known = new Set(custom.hidden);
       items.forEach(function (index) { hiddenFlags[index] = 1; if (!known.has(entryKeys[index])) { known.add(entryKeys[index]); custom.hidden.push(entryKeys[index]); } });
       invalidateViews(); renderGroups(); renderChannels(); focusSelected();
-      saveCustomization(items.length === 1 ? 'أُخفيت القناة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.' : 'أُخفيت ' + items.length + ' قناة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.');
+      editDone('channel', false);
       return;
     }
-    var section = activeSection; var source = activePlaylistUrl; var next = {};
+    var section = activeSection; var next = {};
     ['tv', 'movies', 'series'].forEach(function (own) { next[own] = Array.from(hiddenGroups[own]); });
     items.forEach(function (group) { if (next[section].indexOf(group) < 0) next[section].push(group); });
     setHiddenGroups(next); invalidateViews(); if (items.indexOf(activeGroup) >= 0) activeGroup = ''; renderGroups(); renderChannels(); focusActiveGroup();
-    catalogStore.saveHiddenGroups(source, next).then(function (result) {
-      if (source !== activePlaylistUrl) return;
-      showOrganizeStatus(result.state === 'complete' ? (items.length === 1 ? 'أُخفيت المجموعة. لإظهارها: الإعدادات ← تنظيم القنوات والمجموعات.' : 'أُخفيت ' + items.length + ' مجموعة.') : 'أُخفيت لهذه الجلسة؛ تعذر حفظ التغيير.');
-    });
+    editDone('group', true);
   }
   // ---- Rename ----
   function openRename(index) {
@@ -2056,13 +2136,12 @@
     $('channel-name-input').value = entry.name; $('restore-channel-name').hidden = entry.originalName === undefined;
     $('rename-panel').hidden = false; $('save-channel-name').focus();
   }
-  function closeRename() { $('rename-panel').hidden = true; $('channel-name-input').value = ''; renameIndex = null; returnToList(); }
+  function closeRename() { $('rename-panel').hidden = true; $('channel-name-input').value = ''; renameIndex = null; returnToList(); endEditIfClean(); }
   function applyRename(index, name) {
     var entry = sources[index]; var key = entryKeys[index];
     if (name === null) { if (entry.originalName !== undefined) { entry.name = entry.originalName; delete entry.originalName; } delete custom.names[key]; }
     else { if (entry.originalName === undefined) entry.originalName = entry.name; entry.name = name; custom.names[key] = name; }
     catalogViewRevision += 1; invalidateViews(); renderChannels();
-    saveCustomization(name === null ? 'عاد الاسم الأصلي.' : 'حُفظ الاسم الجديد.');
   }
   // ---- Reset ----
   function resetCustomization() {
@@ -2076,10 +2155,10 @@
     });
     renderGroups(); renderChannels(); collectManagedGroups(); renderManagedGroups();
   }
-  $('menu-select').addEventListener('click', function () { var context = menuContext; closeItemMenu(true); if (context) enterSelect(context.kind, context.kind === 'group' ? context.group : context.index); });
-  $('menu-move').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context) startMove(context.kind, [context.kind === 'group' ? context.group : context.index]); });
-  $('menu-hide').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); menuReturn = null; if (context) hideItems(context.kind, [context.kind === 'group' ? context.group : context.index]); });
-  $('menu-rename').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context && context.kind === 'channel') openRename(context.index); });
+  $('menu-select').addEventListener('click', function () { var context = menuContext; closeItemMenu(true); if (context) { beginEdit('menu'); enterSelect(context.kind, context.kind === 'group' ? context.group : context.index); } });
+  $('menu-move').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context) { beginEdit('menu'); startMove(context.kind, [context.kind === 'group' ? context.group : context.index]); if (!moveState) { endEditIfClean(); returnToList(); } } });
+  $('menu-hide').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); menuReturn = null; if (context) { beginEdit('menu'); hideItems(context.kind, [context.kind === 'group' ? context.group : context.index]); } });
+  $('menu-rename').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context && context.kind === 'channel') { beginEdit('menu'); openRename(context.index); } });
   $('close-item-menu').addEventListener('click', function () { closeItemMenu(true); });
   $('select-move').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (kind && items.length) startMove(kind, items); });
   $('select-hide').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (!kind || !items.length) return; selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; hideItems(kind, items); });
@@ -2088,20 +2167,24 @@
     var index = renameIndex; if (index === null) return;
     var name = $('channel-name-input').value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 80);
     var original = sources[index].originalName !== undefined ? sources[index].originalName : sources[index].name;
+    var changed = (!name || name === original) ? sources[index].originalName !== undefined : name !== sources[index].name;
     applyRename(index, !name || name === original ? null : name); closeRename();
+    if (changed) editDone('channel', false); else endEditIfClean();
   });
-  $('restore-channel-name').addEventListener('click', function () { var index = renameIndex; if (index === null) return; applyRename(index, null); closeRename(); });
+  $('restore-channel-name').addEventListener('click', function () { var index = renameIndex; if (index === null) return; applyRename(index, null); closeRename(); editDone('channel', false); });
   $('close-rename').addEventListener('click', closeRename);
   function leaveSettingsForOrganize(kind) {
     $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); settingsReturn = null; $('settings-home').hidden = true;
     if (managedSection !== 'hidden' && managedSection !== activeSection) { activeSection = managedSection; activeGroup = ''; activeCategory = 'all'; renderPrimary(); }
+    beginEdit('settings');
     if (kind === 'group') { activeGroup = ''; renderGroups(); renderChannels(); enterSelect('group'); focusActiveGroup(); var first = $('groups').querySelector('.group-button:not([data-group=""])'); if (first) first.focus(); }
     else { renderGroups(); renderChannels(); enterSelect('channel'); focusSelected(); }
-    showOrganizeStatus('موافق لتحديد العناصر، ثم اصعد لأعلى القائمة لاختيار نقل أو إخفاء.');
+    showOrganizeStatus('موافق لتحديد العناصر، ثم اصعد لأعلى القائمة لاختيار نقل أو إخفاء. رجوع عند الانتهاء.');
   }
   $('organize-groups').addEventListener('click', function () { if (customizable()) leaveSettingsForOrganize('group'); });
   $('organize-channels').addEventListener('click', function () { if (customizable()) leaveSettingsForOrganize('channel'); });
   $('reset-customization').addEventListener('click', function () { $('reset-confirm').hidden = false; $('reset-confirm-no').focus(); });
+  $('manage-visibility').addEventListener('click', function () { showManagerView(true); });
   $('reset-confirm-no').addEventListener('click', function () { $('reset-confirm').hidden = true; $('reset-customization').focus(); });
   $('reset-confirm-yes').addEventListener('click', function () { $('reset-confirm').hidden = true; resetCustomization(); $('reset-customization').focus(); });
   document.addEventListener('keyup', function (event) {
@@ -2235,7 +2318,7 @@
     var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : extraDialog();
     if (dialog) {
       if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
-      if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager')) {
+      if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager') && !$('manager-visibility').hidden) {
         if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
         else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
         event.preventDefault(); return;
