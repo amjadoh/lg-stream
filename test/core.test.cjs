@@ -559,3 +559,29 @@ test('Arabic descriptions come from TMDB by id with a valid key only', () => {
   assert.equal(api.tmdbArabicPlot({ overview: 'English fallback only' }), '', 'An untranslated overview is not shown as Arabic');
   assert.equal(api.tmdbArabicPlot(null), '');
 });
+
+test('TMDB search finds a movie by title and year, in the app language', () => {
+  const api = require('../app/core.js');
+  const key = '0123456789abcdef0123456789abcdef';
+  assert.equal(api.tmdbTitle('AR - فيلم عربي (2020)'), 'فيلم عربي', 'Arabic titles are searched on TMDB');
+  assert.equal(api.tmdbTitle('|EN| 1917 4K'), '', 'A title with no letters is not searched');
+  const search = new URL(api.tmdbSearchUrl(key, 'The Matrix', 1999, 'en'));
+  assert.equal(search.origin + search.pathname, 'https://api.themoviedb.org/3/search/movie');
+  assert.deepEqual([search.searchParams.get('query'), search.searchParams.get('year'), search.searchParams.get('language')], ['The Matrix', '1999', 'en-US']);
+  assert.equal(new URL(api.tmdbSearchUrl(key, 'x', '', 'ar')).searchParams.get('year'), null);
+  assert.equal(api.tmdbSearchUrl('bad', 'The Matrix', 1999), null);
+  assert.equal(new URL(api.tmdbUrl(key, '603', 'en')).searchParams.get('language'), 'en-US');
+  const results = { results: [
+    { id: 1, release_date: '2010-05-01', vote_average: 5.5, vote_count: 40 },
+    { id: 2, release_date: '2000-03-30', vote_average: 8.214, vote_count: 900, overview: 'A hacker learns.' },
+    { id: 3, release_date: '1999-03-30', vote_average: 8.2, vote_count: 3, overview: 'وصف عربي' }
+  ] };
+  assert.deepEqual(api.tmdbSearchResult(results, 1999, 'ar'), { id: '3', rating: '', plot: 'وصف عربي' }, 'Same year first; under 5 votes is no rating');
+  assert.deepEqual(api.tmdbSearchResult(results, 2001, 'en'), { id: '2', rating: '8.2', plot: 'A hacker learns.' }, 'Then one year apart');
+  assert.equal(api.tmdbSearchResult(results, 1980, 'en'), null, 'No match for a far year');
+  assert.equal(api.tmdbSearchResult(results, '', 'en').id, '1', 'Without a year, the first result');
+  assert.equal(api.tmdbSearchResult({ results: [] }, 1999), null);
+  assert.equal(api.tmdbSearchResult(null, 1999), null);
+  assert.equal(api.tmdbPlot({ overview: 'English only' }, 'ar'), '', 'Arabic mode does not show English as Arabic');
+  assert.equal(api.tmdbPlot({ overview: 'English only' }, 'en'), 'English only');
+});
