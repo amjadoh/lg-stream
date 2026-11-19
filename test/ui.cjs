@@ -701,6 +701,14 @@ async function main() {
     await page.locator('#sort-menu [data-sort="year"]').click();
     assert.match(await page.locator('#sort-button').innerText(), /السنة/);
     await page.locator('#groups [data-group="أفلام VOD"]').click();
+    await page.locator('#sort-button').click();
+    assert.equal(await page.locator('#sort-menu [data-sort="newest"]').isDisabled(), false, 'Provider ids make the newest sort available');
+    await page.locator('#sort-menu [data-sort="newest"]').click();
+    assert.match(await page.locator('#sort-button').innerText(), /الأحدث/);
+    assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '105', 'Newest puts the highest provider id first');
+    await page.locator('#sort-button').click();
+    await page.locator('#sort-menu [data-sort="year"]').click();
+    await page.locator('#groups [data-group="أفلام VOD"]').click();
     await page.locator('#movie-grid .movie-card').first().click();
     assert.equal(await page.locator('#details-panel').isVisible(), true);
     assert.match(await page.locator('#details-year').innerText(), /2024/);
