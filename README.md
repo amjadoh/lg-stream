@@ -20,7 +20,9 @@ English / الإنجليزية
 
 ## المزايا بالعربية
 
-- إضافة قائمة M3U من إعدادات المصادر، وحفظ آخر قائمة ناجحة وإعداداتها محليًا على التلفزيون.
+- شاشة «مصادر البث»: إضافة رابط M3U أو حساب Xtream، وتسمية المصدر وإيقافه وحذفه، وتحديث يدوي أو تلقائي كل 24 ساعة بشريط تقدم دون تجميد الريموت. تُحفظ القائمة وإعداداتها محليًا على التلفزيون.
+- القنوات والمجموعات الجديدة من المزود تظهر أولًا، مع مجموعة «جديد».
+- الزر الأزرق على أي قناة أو مجموعة: تحديد متعدد، نقل، إعادة تسمية، إخفاء، مع تأكيد قبل الحفظ. ومن الإعدادات «إدارة القنوات والمجموعات» لترتيبها وإظهار المخفي وإعادة الضبط. ترتيب واحد ينعكس على كل العروض والترقيم.
 - تصفح القنوات والأفلام والمسلسلات، والبحث في المحتوى، وإدارة المفضلة وإخفاء المجموعات.
 - واجهة عربية وإنجليزية. تُختصر الأسماء العربية وتُنظّم المجموعات المتشابهة مع الحفاظ على اختصارات العلامات، وتظهر أسماء المزود الأصلية في القوائم الإنجليزية.
 - تصفية القنوات حسب النوع، مثل الرياضة والأفلام والأخبار والأطفال، وترقيم القائمة المعروضة من 1 داخل كل مجموعة أو فلتر.
@@ -32,7 +34,9 @@ English / الإنجليزية
 
 ## Features in English
 
-- Add an M3U playlist and keep the last successfully loaded catalogue and its settings locally on the TV.
+- A Streaming sources screen: add an M3U link or an Xtream account, name, pause or delete the source, and refresh manually or automatically every 24 hours with a progress bar while the remote stays responsive. The catalogue and its settings stay locally on the TV.
+- New channels and groups from the provider appear first, with a "New" group.
+- The blue button on any channel or group: multi-select, move, rename and hide, with a confirmation before saving. Settings → "Manage channels and groups" arranges them, shows hidden items and resets. One order drives every view and the numbering.
 - Browse live channels, movies and series, search content, manage favorites, and hide groups.
 - Switch between Arabic and English. Arabic labels are shortened and organized while preserving brand abbreviations. English catalogue rows show the provider's original names.
 - Filter channels by categories such as sports, movies, news and kids. Each displayed group or filtered list starts numbering at 1.
