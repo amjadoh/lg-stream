@@ -20,7 +20,9 @@ English / الإنجليزية
 
 ## المزايا بالعربية
 
-- إضافة قائمة M3U من إعدادات المصادر، وحفظ آخر قائمة ناجحة وإعداداتها محليًا على التلفزيون.
+- شاشة «مصادر البث»: إضافة رابط M3U أو حساب Xtream، وتسمية المصدر وإيقافه وحذفه، وتحديث يدوي أو تلقائي كل 24 ساعة بشريط تقدم دون تجميد الريموت. تُحفظ القائمة وإعداداتها محليًا على التلفزيون.
+- القنوات والمجموعات الجديدة من المزود تظهر أولًا، مع مجموعة «جديد».
+- الزر الأزرق على أي قناة أو مجموعة: تحديد متعدد، نقل، إعادة تسمية، إخفاء، مع تأكيد قبل الحفظ. ومن الإعدادات «إدارة القنوات والمجموعات» لترتيبها وإظهار المخفي وإعادة الضبط. ترتيب واحد ينعكس على كل العروض والترقيم.
 - تصفح القنوات والأفلام والمسلسلات، والبحث في المحتوى، وإدارة المفضلة وإخفاء المجموعات.
 - واجهة عربية وإنجليزية. تُختصر الأسماء العربية وتُنظّم المجموعات المتشابهة مع الحفاظ على اختصارات العلامات، وتظهر أسماء المزود الأصلية في القوائم الإنجليزية.
 - تصفية القنوات حسب النوع، مثل الرياضة والأفلام والأخبار والأطفال، وترقيم القائمة المعروضة من 1 داخل كل مجموعة أو فلتر.
@@ -32,7 +34,9 @@ English / الإنجليزية
 
 ## Features in English
 
-- Add an M3U playlist and keep the last successfully loaded catalogue and its settings locally on the TV.
+- A Streaming sources screen: add an M3U link or an Xtream account, name, pause or delete the source, and refresh manually or automatically every 24 hours with a progress bar while the remote stays responsive. The catalogue and its settings stay locally on the TV.
+- New channels and groups from the provider appear first, with a "New" group.
+- The blue button on any channel or group: multi-select, move, rename and hide, with a confirmation before saving. Settings → "Manage channels and groups" arranges them, shows hidden items and resets. One order drives every view and the numbering.
 - Browse live channels, movies and series, search content, manage favorites, and hide groups.
 - Switch between Arabic and English. Arabic labels are shortened and organized while preserving brand abbreviations. English catalogue rows show the provider's original names.
 - Filter channels by categories such as sports, movies, news and kids. Each displayed group or filtered list starts numbering at 1.
@@ -44,13 +48,13 @@ Playback connects directly from the TV to the source. Users add their own source
 
 ## الحالة الحالية / Current status
 
-الإصدار الحالي [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12)، وهو مثبت ومجرب على LG OLED55CS6LA. دُمجت تحديثاته في الفرع الرئيسي عبر [طلب المراجعة 9](https://github.com/amjadoh/lg-stream/pull/9). يركز على ثبات البث وسرعة التنقل: فلاتر وبحث أسرع، وإعادة اتصال تلقائية محدودة للبث المباشر، وسجل انقطاعات في شاشة القياسات.
+الإصدار الحالي [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0)، مثبت على LG OLED55CS6LA، ودُمج في الفرع الرئيسي عبر [طلب المراجعة 10](https://github.com/amjadoh/lg-stream/pull/10). يضيف شاشة مصادر البث (M3U وXtream)، وتحديثًا لا يجمّد الريموت مع شريط تقدم، وظهور الجديد أولًا، وتخصيص القنوات والمجموعات بالزر الأزرق مع تأكيد الحفظ.
 
-اجتازت هذه النسخة 40 اختبار منطق وبرامج الواجهة الستة، وفحوصًا قصيرة على التلفزيون: تشغيل مستقر لمدة 60 ثانية بلا توقف أو خطأ، وعودة قناة رفضها المزود مؤقتًا في المحاولة التلقائية الثالثة. الفحوص قصيرة، والثبات الطويل يُقاس بالاستخدام الفعلي.
+اجتازت هذه النسخة 45 اختبار منطق وبرامج الواجهة السبعة. على التلفزيون: انخفض أطول حجب للواجهة عند الاستعادة من 8.4 إلى 1.19 ثانية وعند التحديث الكامل من 20.7 إلى 2.4 ثانية، وبقيت القائمة (331841 عنصرًا) سليمة عبر التحديثات، والتبديل بين القنوات 1.25–1.8 ثانية، و30 ثانية تشغيل بلا توقف. تجربة مسار الزر الأزرق كاملًا بالريموت ما زالت عند المالك.
 
-The current release is [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12), installed and tested on LG OLED55CS6LA. Its updates were merged into main through [pull request 9](https://github.com/amjadoh/lg-stream/pull/9). It focuses on stable playback and fast navigation: faster filters and search, a bounded automatic reconnect for live channels, and an interruption log in the diagnostics screen.
+The current release is [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0), installed on LG OLED55CS6LA and merged into main through [pull request 10](https://github.com/amjadoh/lg-stream/pull/10). It adds a streaming sources screen (M3U and Xtream), a refresh that keeps the remote responsive with a progress bar, new items first, and blue-key channel and group customization with a save confirmation.
 
-This version passed 40 logic tests, all six UI programs and short TV checks: 60 seconds of steady playback with no waits or errors, and a channel temporarily rejected by the provider recovered on the third automatic attempt. The checks are short; long-term stability is measured through real use.
+This version passed 45 logic tests and all seven UI programs. On the TV the longest UI block fell from 8.4 s to 1.19 s on restore and from 20.7 s to 2.4 s on a full refresh, the 331,841-item catalogue survived every update, channel switches took 1.25–1.8 s, and 30 s of playback ran with no waits. The owner has yet to try the full blue-key flow on the remote.
 
 ## التثبيت والتوثيق / Installation and documentation
 

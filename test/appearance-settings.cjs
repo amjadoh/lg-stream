@@ -74,7 +74,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://catalog.example.test/list');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://catalog.example.test/list');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     await page.locator('#channels .channel-button').first().click();
@@ -91,14 +91,12 @@ async function main() {
     assert.equal(await page.locator('#setup-panel').isVisible(), false);
     await page.screenshot({ animations: 'disabled', path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
     assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series']);
-    await key('ArrowLeft', 'settings-sources');
-    await key('Enter');
-    assert.equal(await page.evaluate(() => document.activeElement.tagName), 'FORM', 'Sources does not open the keyboard automatically');
-    await key('Escape', 'settings-sources');
-    await key('ArrowDown', 'settings-info'); await key('Enter', 'close-diagnostics');
+    assert.equal(await page.locator('#settings-sources').count(), 0, 'Sources live only next to Settings, not duplicated inside it');
+    await key('ArrowLeft', 'settings-speed');
+    await key('ArrowRight', 'manage-groups-button'); await key('ArrowDown', 'settings-info'); await key('Enter', 'close-diagnostics');
     assert.equal(await page.locator('#settings-home').isVisible(), false, 'Covered settings cards cannot receive pointer clicks');
     await key('Escape', 'settings-info');
-    await key('ArrowRight', 'settings-speed'); await key('Enter', 'speed-wired'); await key('Escape', 'settings-speed');
+    await key('ArrowUp', 'manage-groups-button'); await key('ArrowLeft', 'settings-speed'); await key('Enter', 'speed-wired'); await key('Escape', 'settings-speed');
     await key('ArrowDown', 'settings-appearance'); await key('Enter');
     for (const layout of ['tabs', 'vertical', 'compact']) {
       await page.locator(`[data-layout="${layout}"]`).click();
@@ -155,11 +153,11 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__mediaStarts), starts, 'Filters and settings do not reconnect playback');
     // Hide sports, then selecting sports must stay empty; changing appearance cannot unhide it.
     await key('ArrowLeft'); await page.locator('#nav-settings').click();
-    await page.locator('#manage-groups-button').click();
+    await page.locator('#manage-groups-button').click(); await page.locator('#manage-visibility').click();
     await page.locator('.group-switch').filter({ hasText: 'رياضة' }).click();
     await page.waitForFunction(() => document.getElementById('manager-status').textContent.includes('أُخفيت'));
     assert.equal(await page.locator('video').count(), 0, 'Hiding the currently playing group intentionally stops its video');
-    await key('Escape', 'manage-groups-button');
+    await key('Escape', 'manage-visibility'); await key('Escape', 'manage-groups-button');
     await page.locator('#settings-appearance').click();
     await page.locator('[data-layout="tabs"]').click(); await key('Escape'); await key('Escape');
     await key('ArrowDown', 'nav-search'); await key('ArrowRight'); await key('ArrowUp', 'groups-filter');
@@ -184,7 +182,9 @@ async function main() {
     await page.locator('#groups-filter').click();
     await page.locator('#category-list [data-category="news"]').click();
     await key('ArrowLeft'); await page.locator('#nav-settings').click();
-    await page.locator('#settings-sources').click(); await page.locator('#refresh-saved').click();
+    await page.locator('#close-settings').click(); await page.locator('#setup-button').click();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'refresh-saved', 'Sources opens on the source card with Refresh focused');
+    await page.locator('#refresh-saved').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.match(await page.locator('#groups-filter').innerText(), /أخبار/);
     assert.equal(await page.locator('#category-shortcuts [data-category="more"]').getAttribute('aria-pressed'), 'true');

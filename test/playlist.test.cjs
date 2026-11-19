@@ -162,3 +162,16 @@ test('uses the final response URL for relative entries and bounds trickling down
   assert.deepEqual(await loading, { state: 'timeout' });
   assert.ok(cleared.length > 0);
 });
+
+test('parsing yields to the event loop and reports progress on long downloads', async () => {
+  const lines = ['#EXTM3U'];
+  for (let index = 0; index < 3000; index += 1) lines.push('#EXTINF:-1 group-title="G",Channel ' + index, 'https://media.invalid/live/u/p/' + index + '.ts');
+  const body = new TextEncoder().encode(lines.join('\n'));
+  const chunks = []; for (let at = 0; at < body.length; at += 4096) chunks.push(body.slice(at, at + 4096));
+  let clock = 0; let yields = 0; const progress = [];
+  const loader = createLoader({ now: () => (clock += 10), yieldTask: () => { yields += 1; return Promise.resolve(); }, fetch: async () => ({ ok: true, headers: { get: () => String(body.byteLength) }, body: controlledStream(chunks) }) });
+  const result = await loader.start('https://provider.invalid/list', { onProgress: value => progress.push(value) });
+  assert.equal(result.state, 'complete'); assert.equal(result.entries.length, 3000);
+  assert.ok(yields > 0, 'Parsing gives the event loop a turn');
+  assert.ok(progress.length > 0 && progress.every(item => item.total === body.byteLength && item.bytes <= item.total));
+});

@@ -440,3 +440,45 @@ test('presentation removes provider quality and scales the same native video rec
   assert.equal(pictureScale('zoom135', 1920, 1080, 1920, 1080), 1.35);
   assert.equal(pictureScale('cover', 0, 0, 0, 0), 1);
 });
+
+test('stable keys, new-item flags, block moves and the master order', () => {
+  const api = require('../app/core.js');
+  const live = api.entryKey('http://provider.invalid/live/user/pass/42.ts');
+  assert.equal(api.entryKey('http://other.invalid/live/user2/pass2/42.ts'), live, 'The stream id survives a credential or host change');
+  assert.notEqual(api.entryKey('http://provider.invalid/movie/user/pass/42.mkv'), live, 'Sections do not collide');
+  assert.equal(String(api.entryKey('https://cdn.invalid/a.m3u8?token=x')).includes('token'), false);
+  const previous = api.sortedKeys([3, 1, 2]);
+  const flags = api.newItemFlags(Float64Array.from([1, 4, 2, 5]), previous);
+  assert.deepEqual(Array.from(flags.flags), [0, 1, 0, 1]); assert.equal(flags.count, 2);
+  assert.equal(api.newItemFlags(Float64Array.from([9]), null).count, 0, 'No comparison on the first load');
+  assert.deepEqual(api.moveBlock(['a', 'b', 'c', 'd', 'e'], ['d', 'b'], 0), ['b', 'd', 'a', 'c', 'e']);
+  assert.deepEqual(api.moveBlock(['a', 'b', 'c'], ['a'], 9), ['b', 'c', 'a']);
+  const entries = [
+    { url: 'http://p/live/u/p/1.ts', group: 'G1' }, { url: 'http://p/live/u/p/2.ts', group: 'G2' }, { url: 'http://p/live/u/p/3.ts', group: 'G1' },
+    { url: 'http://p/live/u/p/4.ts', group: 'G3' }, { url: 'http://p/movie/u/p/5.mp4', group: 'M' }
+  ];
+  const keys = Float64Array.from(entries.map(entry => api.entryKey(entry.url)));
+  const sectionOf = index => /movie/.test(entries[index].url) ? 'movies' : 'tv';
+  let order = api.buildDisplayOrder(entries, sectionOf, { keys });
+  assert.deepEqual(order.tv.groups, ['G1', 'G2', 'G3']);
+  assert.deepEqual(Array.from(order.tv.order), [0, 2, 1, 3], 'All follows the group order');
+  const custom = { groupOrder: { tv: ['G2'] }, channelOrder: { 'tv\u0001G1': [keys[2]] } };
+  order = api.buildDisplayOrder(entries, sectionOf, { keys, custom });
+  assert.deepEqual(order.tv.groups, ['G2', 'G1', 'G3']);
+  assert.deepEqual(Array.from(order.tv.order), [1, 2, 0, 3]);
+  const fresh = new Uint8Array([0, 0, 1, 1, 0]);
+  order = api.buildDisplayOrder(entries, sectionOf, { keys, custom, newFlags: fresh });
+  assert.deepEqual(order.tv.groups, ['G3', 'G2', 'G1'], 'A wholly new group comes first');
+  assert.deepEqual(Array.from(order.tv.order), [3, 1, 2, 0], 'New items lead their group');
+  assert.equal(order.tv.newCount, 2); assert.equal(order.movies.newCount, 0);
+});
+
+test('Xtream login builds the same get.php playlist link', () => {
+  const api = require('../app/core.js');
+  assert.equal(api.xtreamPlaylistUrl('server.invalid:8080', 'user', 'p&ss'), 'http://server.invalid:8080/get.php?username=user&password=p%26ss&type=m3u_plus&output=ts');
+  assert.equal(api.xtreamPlaylistUrl('https://server.invalid/some/path', 'u', 'p'), 'https://server.invalid/get.php?username=u&password=p&type=m3u_plus&output=ts');
+  assert.equal(api.xtreamPlaylistUrl('', 'u', 'p'), null);
+  assert.equal(api.xtreamPlaylistUrl('server.invalid', '', 'p'), null);
+  assert.equal(api.xtreamPlaylistUrl('ftp://server.invalid', 'u', 'p'), null);
+  assert.ok(api.nativeHlsPlaylist(api.xtreamPlaylistUrl('server.invalid', 'u', 'p')), 'Native HLS still recognises the built link');
+});

@@ -56,15 +56,27 @@
         <div class="playback-bar"><span id="channel-title">لا يوجد بث محدد</span><div id="actual-quality" class="actual-quality" hidden><span>الجودة الفعلية</span><strong id="quality-badge" class="quality-badge" dir="ltr"></strong></div><span id="status" role="status" aria-live="polite">جاهز</span></div>
       </section>
     </main>
-    <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span></footer>
+    <footer><div class="transport"><button id="display-fullscreen" type="button" disabled>ملء الشاشة</button><button id="display-button" type="button" disabled>ملاءمة العرض · ملائم</button><button id="toggle-button" type="button" disabled>إيقاف مؤقت</button><button id="retry-button" type="button" disabled>إعادة المحاولة</button><button id="stop-button" type="button" disabled>إيقاف البث</button></div><span id="footer-note" class="footer-note">القائمة الناجحة تُحفظ محليًا على التلفزيون</span><span id="blue-hint" class="blue-hint" hidden><i class="blue-dot" aria-hidden="true"></i><span id="blue-hint-text">الزر الأزرق: خيارات (ترتيب، نقل، إعادة تسمية، إخفاء)</span></span></footer>
   </div>
+  <div id="hold-ring" class="hold-ring" hidden aria-hidden="true"><svg viewBox="0 0 44 44"><circle class="hold-track" cx="22" cy="22" r="19"></circle><circle id="hold-progress" class="hold-progress" cx="22" cy="22" r="19"></circle></svg></div>
+  <div id="select-bar" class="select-bar" role="toolbar" aria-label="التحديد المتعدد" hidden><span id="select-count" class="select-count"></span><button id="select-move" type="button">نقل</button><button id="select-hide" type="button">إخفاء</button><button id="select-cancel" type="button">إلغاء</button><span id="select-hint" class="select-hint">موافق: تحديد أو إلغاء · الأزرق: نقل أو إخفاء · رجوع: خروج</span></div>
+  <div id="move-bar" class="select-bar move-bar" role="status" hidden><span id="move-text"></span></div>
+  <p id="organize-status" class="organize-status" role="status" aria-live="polite" hidden></p>
+  <section id="item-menu" class="modal" role="dialog" aria-modal="true" aria-labelledby="item-menu-title" hidden>
+    <div class="setup-card track-card"><h2 id="item-menu-title" dir="auto"></h2><div class="track-list"><button id="menu-select" type="button">تحديد</button><button id="menu-move" type="button">نقل</button><button id="menu-rename" type="button">إعادة تسمية</button><button id="menu-hide" type="button">إخفاء</button></div><button id="close-item-menu" type="button">رجوع</button></div>
+  </section>
+  <section id="edit-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-confirm-title" hidden>
+    <div class="setup-card track-card"><h2 id="edit-confirm-title">حفظ التغييرات؟</h2><p id="edit-confirm-text">ستبقى التغييرات بعد إعادة تشغيل التطبيق.</p><div class="track-list"><button id="edit-save" type="button" class="primary">حفظ</button><button id="edit-continue" type="button">متابعة التعديل</button><button id="edit-discard" type="button">تجاهل التغييرات</button></div></div>
+  </section>
+  <section id="rename-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="rename-title" hidden>
+    <div class="setup-card"><h2 id="rename-title">إعادة تسمية القناة</h2><p id="rename-original" class="small-note" dir="auto"></p><label for="channel-name-input">الاسم الجديد</label><input id="channel-name-input" type="text" maxlength="80" autocomplete="off" spellcheck="false" dir="auto"><div class="form-actions"><button id="save-channel-name" type="button" class="primary">حفظ</button><button id="restore-channel-name" type="button">الاسم الأصلي</button><button id="close-rename" type="button">رجوع</button></div></div>
+  </section>
   <section id="exit-confirm" class="modal" role="dialog" aria-modal="true" aria-labelledby="exit-title" hidden>
     <div class="setup-card"><h2 id="exit-title">هل تريد الخروج من التطبيق؟</h2><div class="form-actions"><button id="exit-cancel" type="button">إلغاء</button><button id="exit-accept" type="button">خروج</button></div></div>
   </section>
   <section id="settings-home" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="setup-card settings-card"><h2 id="settings-title">الإعدادات</h2><div class="settings-grid">
-      <button id="manage-groups-button" type="button">إدارة المجموعات<span>إظهار أو إخفاء مجموعات البث والأفلام والمسلسلات</span></button>
-      <button id="settings-sources" type="button">مصادر البث والقوائم<span>إضافة قائمة M3U وتحديث القائمة المحفوظة</span></button>
+      <button id="manage-groups-button" type="button">إدارة القنوات والمجموعات<span>الترتيب، الإخفاء والإظهار، وإعادة الضبط · أو الزر الأزرق على أي قناة</span></button>
       <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
       <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
@@ -92,28 +104,51 @@
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">
-      <h2 id="setup-title">مصادر البث والقوائم</h2>
-      <p>ألصق رابط M3U الكامل لتحميل القنوات. بعد نجاح القائمة كاملة تُحفظ محليًا على التلفزيون وتعود عند فتح التطبيق.</p>
-      <label for="playlist-url">إضافة قائمة M3U</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+      <h2 id="setup-title">مصادر البث</h2>
+      <div id="source-card" class="source-card" hidden>
+        <div class="source-head"><strong id="source-name" dir="auto"></strong><span id="source-badge" class="source-badge"></span></div>
+        <p id="source-counts" class="source-counts"></p>
+        <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
+        <div class="form-actions source-actions"><button id="refresh-saved" type="button" class="primary">تحديث الآن</button><button id="cancel-playlist" type="button" disabled>إلغاء التحديث</button><button id="rename-source" type="button">إعادة تسمية</button><button id="toggle-source" type="button">إيقاف</button><button id="clear-sources" type="button">حذف</button><button id="live-transport" type="button" aria-pressed="false" hidden>البث المباشر: رابط القائمة الأصلي</button></div>
+        <div id="rename-row" class="rename-row" hidden><label for="source-name-input">اسم المصدر</label><input id="source-name-input" type="text" maxlength="40" autocomplete="off" spellcheck="false"><div class="form-actions"><button id="save-source-name" type="button" class="primary">حفظ الاسم</button><button id="cancel-source-name" type="button">إلغاء</button></div></div>
+        <p id="transport-status" class="small-note" role="status"></p>
+      </div>
+      <div id="source-confirm" class="source-confirm" hidden><p id="source-confirm-text"></p><div class="form-actions"><button id="source-confirm-yes" type="button" class="primary">تأكيد</button><button id="source-confirm-no" type="button">إلغاء</button></div></div>
+      <div id="playlist-progress" class="playlist-progress" hidden><div id="playlist-progress-bar" class="playlist-progress-bar"></div></div>
       <p id="playlist-status" class="playlist-status" role="status" aria-live="polite"></p>
-      <p id="saved-catalog-status" class="small-note">لا توجد قائمة محفوظة.</p>
-      <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button><button id="refresh-saved" type="button" hidden>تحديث القائمة</button><button id="cancel-playlist" type="button" disabled>إلغاء التحميل</button></div>
-      <button id="live-transport" type="button" aria-pressed="false" hidden>البث المباشر: رابط القائمة الأصلي</button>
-      <p id="transport-status" class="small-note" role="status"></p>
-      <h3 class="setup-divider">أو روابط مباشرة</h3>
-      <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
-      <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
-      <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
+      <button id="add-source" type="button" aria-expanded="false">إضافة مصدر</button>
+      <div id="add-source-panel" class="add-source-panel" hidden>
+        <p class="small-note">مصدر واحد في هذه المرحلة: إضافة مصدر جديد تستبدل الحالي بعد نجاح تحميله.</p>
+        <div class="form-actions add-modes"><button type="button" data-add-mode="link" aria-pressed="true">رابط M3U</button><button type="button" data-add-mode="xtream" aria-pressed="false">اسم مستخدم وكلمة مرور</button><button type="button" data-add-mode="direct" aria-pressed="false">روابط مباشرة</button></div>
+        <div id="add-link" data-add-section="link">
+          <label for="playlist-url">رابط القائمة</label><input id="playlist-url" name="playlist-url" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/get.php?…&type=m3u_plus">
+          <div class="form-actions"><button id="load-playlist" type="button" class="primary">تحميل القائمة</button></div>
+        </div>
+        <div id="add-xtream" data-add-section="xtream" hidden>
+          <label for="xtream-server">السيرفر</label><input id="xtream-server" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="512" placeholder="http://server:port">
+          <label for="xtream-username">اسم المستخدم</label><input id="xtream-username" type="text" dir="ltr" spellcheck="false" autocomplete="off" maxlength="256">
+          <label for="xtream-password">كلمة المرور</label><input id="xtream-password" type="password" dir="ltr" spellcheck="false" autocomplete="off" maxlength="256">
+          <div class="form-actions"><button id="load-xtream" type="button" class="primary">تسجيل الدخول وتحميل القائمة</button></div>
+        </div>
+        <div id="add-direct" data-add-section="direct" hidden>
+          <label for="source-1">المصدر الأول</label><input id="source-1" name="source-1" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+          <label for="source-2">المصدر الثاني <small>اختياري</small></label><input id="source-2" name="source-2" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/stream.m3u8">
+          <label for="source-3">المصدر الثالث <small>اختياري</small></label><input id="source-3" name="source-3" type="url" inputmode="url" dir="ltr" spellcheck="false" autocomplete="off" maxlength="4096" placeholder="https://…/movie.mp4">
+          <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button></div>
+        </div>
+      </div>
       <p id="form-error" class="form-error" role="alert"></p>
-      <div class="form-actions"><button type="submit" class="primary">حفظ للجلسة</button><button id="close-setup" type="button">رجوع</button><button id="clear-sources" type="button">مسح المصادر</button></div>
-      <p class="small-note">قد يمنع مزود القائمة التحميل من تطبيق التلفزيون؛ عندها تظهر رسالة واضحة ولا نرسل الرابط لأي وسيط. يبدأ التشغيل فقط عند اختيار قناة.</p>
+      <div class="form-actions"><button id="close-setup" type="button">رجوع</button></div>
+      <p class="small-note">لا يظهر رابط المصدر على الشاشة. القائمة الناجحة تُحفظ على التلفزيون وتتحدث تلقائيًا كل 24 ساعة أثناء التصفح فقط.</p>
     </form>
   </section>
   <section id="group-manager" class="modal group-manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" hidden>
     <div class="setup-card manager-card">
-      <h2 id="manager-title">إدارة المجموعات</h2>
-      <div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button></div>
-      <p id="managed-summary"></p><div id="managed-groups" class="managed-groups"></div>
+      <h2 id="manager-title">إدارة القنوات والمجموعات</h2><p class="small-note manager-tip"><i class="blue-dot" aria-hidden="true"></i>أسرع طريقة: اضغط الزر الأزرق على أي قناة أو مجموعة في القائمة.</p>
+      <div id="manager-home" class="manager-home"><button id="organize-channels" class="manager-option" type="button"><strong>ترتيب القنوات</strong><span>حدد قناة أو أكثر ثم انقلها أو أخفها</span></button><button id="organize-groups" class="manager-option" type="button"><strong>ترتيب المجموعات</strong><span>حدد مجموعة أو أكثر ثم انقلها أو أخفها</span></button><button id="manage-visibility" class="manager-option" type="button"><strong>إخفاء وإظهار</strong><span>اختر المجموعات الظاهرة وأرجِع القنوات المخفية</span></button><button id="reset-customization" class="manager-option" type="button"><strong>إعادة الضبط</strong><span>إظهار كل المخفي وإرجاع ترتيب المزود وأسمائه</span></button></div>
+      <div id="manager-visibility" hidden><div class="form-actions manager-sections"><button type="button" data-manage-section="tv" aria-pressed="true">البث</button><button type="button" data-manage-section="movies" aria-pressed="false">الأفلام</button><button type="button" data-manage-section="series" aria-pressed="false">المسلسلات</button><button type="button" data-manage-section="hidden" aria-pressed="false">القنوات المخفية</button></div>
+      <p id="managed-summary"></p><div id="managed-groups" class="managed-groups"></div></div>
+      <div id="reset-confirm" class="source-confirm" hidden><p>إعادة الضبط تُظهر كل المخفي وتعيد ترتيب المزود والأسماء الأصلية لهذا المصدر. هل تريد المتابعة؟</p><div class="form-actions"><button id="reset-confirm-yes" type="button" class="primary">إعادة الضبط</button><button id="reset-confirm-no" type="button">إلغاء</button></div></div>
       <p id="manager-status" role="status" aria-live="polite"></p><button id="close-group-manager" type="button">رجوع</button>
     </div>
   </section>

@@ -82,7 +82,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached' });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://catalog.example.test/list');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://catalog.example.test/list');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     await page.locator('#channels .channel-button').first().click();
@@ -214,12 +214,12 @@ async function main() {
     assert.match(await page.locator('#channels .favorite-button').first().getAttribute('aria-label'), /beIN 1/);
     assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
     await page.locator('#nav-settings').click();
-    await page.locator('#manage-groups-button').click();
+    await page.locator('#manage-groups-button').click(); await page.locator('#manage-visibility').click();
     const countryFirst = page.locator('#managed-groups .group-switch').filter({ has: page.locator('.group-switch-name', { hasText: /^الأردن \(1\)$/ }) });
     assert.equal(await page.locator('#managed-groups .group-switch-name').filter({ hasText: /^الأردن \(2\)$/ }).count(), 1);
     await countryFirst.click();
     await page.waitForFunction(() => !document.querySelector('#managed-groups .group-switch:disabled'));
-    await page.locator('#close-group-manager').click();
+    await page.locator('#close-group-manager').click(); await page.locator('#close-group-manager').click();
     await page.locator('#close-settings').click();
     assert.equal(await page.locator('#groups [data-group="Jordan"]').innerText(), 'الأردن (2)');
     await page.screenshot({ path: path.join(root, 'artifacts/catalog-arabic-1080.png') });
