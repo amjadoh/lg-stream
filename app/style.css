@@ -141,6 +141,8 @@ input::placeholder { color: #7f90a7; }
 .list-count { margin: 0 0 12px; font-size: 22px; color: #b5c2d3; }
 .details-poster { width: 240px; height: 350px; object-fit: cover; border-radius: 14px; background: #172338; }
 .details-card .details-year { color: #f6d28a; font-weight: bold; }
+#imdb-panel .key-on { color: #7ddc9a; font-weight: bold; }
+#imdb-panel input::placeholder { color: #9fb0c4; }
 /* Details: the description is clamped so the buttons always stay in view and nothing overlaps them. */
 .details-card { max-height: calc(100vh - 56px); overflow: hidden; }
 .details-body { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

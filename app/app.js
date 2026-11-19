@@ -852,6 +852,10 @@
     LGI18n.text($('imdb-state'), omdbKey ? 'مفعّل — المفتاح محفوظ على هذا التلفزيون' : 'غير مفعّل');
     LGI18n.text($('settings-imdb').querySelector('span'), omdbKey ? 'مفعّل · تقييم IMDb في تفاصيل الأفلام' : 'أضف مفتاح OMDb لعرض تقييم IMDb');
     $('imdb-remove').disabled = !omdbKey;
+    // The saved state shows in the field itself, since the typed key is cleared after saving.
+    LGI18n.attribute($('imdb-key'), 'placeholder', omdbKey ? '✓ محفوظ — اكتب مفتاحًا جديدًا للاستبدال' : 'اكتب مفتاح OMDb');
+    LGI18n.attribute($('tmdb-key'), 'placeholder', tmdbKey ? '✓ محفوظ — اكتب مفتاحًا جديدًا للاستبدال' : 'اكتب مفتاح TMDB');
+    $('imdb-state').classList.toggle('key-on', !!omdbKey); $('tmdb-state').classList.toggle('key-on', !!tmdbKey);
     LGI18n.text($('tmdb-state'), tmdbKey ? 'الوصف العربي مفعّل — المفتاح محفوظ على هذا التلفزيون' : 'الوصف العربي غير مفعّل');
     $('tmdb-remove').disabled = !tmdbKey;
     if (omdbKey || tmdbKey) LGI18n.text($('settings-imdb').querySelector('span'), (omdbKey ? 'IMDb مفعّل' : 'IMDb غير مفعّل') + ' · ' + (tmdbKey ? 'الوصف العربي مفعّل' : 'الوصف العربي غير مفعّل'));
