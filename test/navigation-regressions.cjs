@@ -54,7 +54,7 @@ async function main() {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('#launch-splash').waitFor({ state: 'detached', timeout: 2500 });
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://catalog.example.test/navigation.m3u');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://catalog.example.test/navigation.m3u');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.querySelectorAll('#channels .channel-button').length === 40 && document.getElementById('setup-panel').hidden);
 

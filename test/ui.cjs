@@ -184,14 +184,22 @@ async function main() {
     }
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.locator('#start-button').click();
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'source-form', 'Opening setup must leave inputs unfocused so webOS can open its keyboard on selection');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.addMode), 'link', 'Without a source, setup opens the add choices without focusing a text field');
+    assert.equal(await page.locator('#source-card').isVisible(), false, 'No source card before a source exists');
+    await page.locator('[data-add-mode="xtream"]').click();
+    assert.equal(await page.locator('#xtream-server').isVisible(), true);
+    assert.equal(await page.locator('#playlist-url').isVisible(), false);
+    await page.locator('#load-xtream').click();
+    assert.match(await page.locator('#form-error').innerText(), /السيرفر/, 'Incomplete Xtream login is rejected locally');
+    assert.equal(await page.evaluate(() => window.__playlistRequests.length), 0);
+    await page.locator('[data-add-mode="direct"]').click();
     await page.locator('#source-1').click();
     assert.equal(await page.evaluate(() => document.activeElement.id), 'source-1');
-    await page.locator('#clear-sources').focus();
+    await page.locator('#close-setup').focus();
     await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'playlist-url');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'add-source');
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'clear-sources');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'close-setup');
     await page.locator('#source-1').fill('https://example.test/first.m3u8?token=synthetic');
     await page.locator('#source-2').fill('https://example.test/second.m3u8');
     await page.locator('#source-3').fill('https://example.test/third.m3u8');
@@ -361,7 +369,7 @@ async function main() {
 
     // A full private M3U URL loads names into memory and renders only one small page at a time.
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://provider.example.test/get.php?username=private&password=secret&type=m3u_plus&output=mpegts');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://provider.example.test/get.php?username=private&password=secret&type=m3u_plus&output=mpegts');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('setup-panel').hidden);
     assert.equal(await page.evaluate(() => window.__playlistRequests.length), 1);
@@ -369,7 +377,7 @@ async function main() {
 
     // Failed and cancelled refreshes must leave the last complete catalogue intact.
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://provider.example.test/fail');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://provider.example.test/fail');
     await page.locator('#load-playlist').click();
     await page.waitForFunction(() => document.getElementById('playlist-status').textContent.includes('السابقة'));
     await page.locator('#close-setup').click();
@@ -384,7 +392,7 @@ async function main() {
     assert.equal(await page.evaluate(() => window.__catalogSavedAt()), savedBeforeInvalidResponse, 'A provider error page cannot replace the saved catalogue');
     await page.locator('#close-setup').click();
     await page.locator('#setup-button').click();
-    await page.locator('#playlist-url').fill('https://provider.example.test/stall');
+    await page.evaluate(() => { if (document.getElementById('add-source-panel').hidden) document.getElementById('add-source').click(); document.querySelector('[data-add-mode="link"]').click(); }); await page.locator('#playlist-url').fill('https://provider.example.test/stall');
     await page.locator('#load-playlist').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 0, 'A manual load releases the previous catalogue before downloading');
     await page.locator('#cancel-playlist').click();
