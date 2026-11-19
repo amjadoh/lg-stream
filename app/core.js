@@ -743,9 +743,54 @@
       genre: text(info.genre, 120),
       minutes: minutes > 0 && minutes < 1000 ? minutes : 0,
       director: text(info.director, 120),
-      cast: text(info.cast, 200)
+      cast: text(info.cast, 200),
+      tmdb: /^\d{1,9}$/.test(text(info.tmdb_id, 12)) ? text(info.tmdb_id, 12) : ''
     };
     return details.plot || details.rating || details.year || details.genre || details.minutes || details.director || details.cast ? details : null;
+  }
+  // OMDb (IMDb rating) — only with a key the owner created and typed on the TV.
+  function validOmdbKey(key) { return /^[A-Za-z0-9]{6,20}$/.test(String(key || '').trim()); }
+  // Provider titles carry language tags, quality marks and years; OMDb needs the plain title.
+  function omdbTitle(name) {
+    var title = String(name || '').replace(/[\u0000-\u001f\u007f]/g, ' ');
+    title = title.replace(/\[[^\]]*\]/g, ' ').replace(/\(\s*(?:19|20)\d{2}\s*\)/g, ' ');
+    for (var pass = 0; pass < 2; pass += 1) title = title.replace(/^\s*(?:\|[A-Z0-9]{2,5}\|\s*|[A-Z0-9]{2,5}\s*[-:|]\s+)/, '');
+    title = title.replace(/(?:^|[\s\-–|])(?:19|20)\d{2}\s*$/, ' ');
+    for (var tag = 0; tag < 3; tag += 1) title = title.replace(/[\s\-|]+(?:4K|UHD|FHD|HD|HDR|SD|MULTI(?:-?SUB)?|SUB|DUB(?:BED)?|VOSTFR)\s*$/i, '');
+    title = title.replace(/\s+/g, ' ').replace(/^[\s\-:|]+|[\s\-:|]+$/g, '');
+    return /[A-Za-z]/.test(title) && title.length <= 120 ? title : '';
+  }
+  function omdbUrl(key, title, year) {
+    if (!validOmdbKey(key) || !title) return null;
+    var url = new URL('https://www.omdbapi.com/');
+    url.searchParams.set('apikey', String(key).trim()); url.searchParams.set('t', title); url.searchParams.set('type', 'movie');
+    if (/^(?:19|20)\d{2}$/.test(String(year || ''))) url.searchParams.set('y', String(year));
+    return url.href;
+  }
+  // TMDB: human-written Arabic overviews, looked up by the provider's tmdb_id.
+  function validTmdbKey(key) { return /^[A-Fa-f0-9]{32}$/.test(String(key || '').trim()); }
+  function tmdbUrl(key, id) {
+    if (!validTmdbKey(key) || !/^\d{1,9}$/.test(String(id || ''))) return null;
+    var url = new URL('https://api.themoviedb.org/3/movie/' + id);
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('language', 'ar');
+    return url.href;
+  }
+  function tmdbArabicPlot(reply) {
+    var text = reply && typeof reply === 'object' && typeof reply.overview === 'string' ? reply.overview.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    return /[؀-ۿ]/.test(text) ? text.slice(0, 900) : '';
+  }
+  // 'limit' when the daily quota is used up, 'key' for a rejected key, '' otherwise.
+  function omdbFailure(reply) {
+    if (!reply || typeof reply !== 'object' || reply.Response !== 'False') return '';
+    var error = String(reply.Error || '');
+    return /limit/i.test(error) ? 'limit' : /api key|unauthori[sz]ed|activate/i.test(error) ? 'key' : '';
+  }
+  function omdbDetails(reply) {
+    if (!reply || typeof reply !== 'object' || reply.Response !== 'True') return null;
+    var rating = Number(reply.imdbRating); var plot = typeof reply.Plot === 'string' && reply.Plot !== 'N/A' ? reply.Plot.replace(/\s+/g, ' ').trim().slice(0, 900) : '';
+    var id = typeof reply.imdbID === 'string' && /^tt\d{5,10}$/.test(reply.imdbID) ? reply.imdbID : '';
+    var details = { rating: rating > 0 && rating <= 10 ? String(rating) : '', plot: plot, id: id };
+    return details.rating || details.plot ? details : null;
   }
   // Xtream login typed on the TV becomes the same get.php playlist link.
   function xtreamPlaylistUrl(server, username, password) {
@@ -762,5 +807,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

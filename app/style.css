@@ -83,6 +83,9 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .sort-menu button.active { color: #f6d28a; border-color: #c9912f; }
 .movie-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
 .movie-card { position: relative; overflow: hidden; min-width: 0; min-height: 230px; height: auto; padding: 20px; text-align: right; white-space: normal; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(145deg, #345569, #172432 65%); border-radius: 18px; }
+.movie-card .card-rating { position: absolute; z-index: 2; top: 10px; right: 10px; left: auto; padding: 3px 8px; border-radius: 7px; background: rgba(3,7,19,.82); color: #e8edf4; font-size: 16px; font-weight: 700; line-height: 1.3; direction: ltr; }
+.movie-card .card-rating.imdb { background: #f5c518; color: #111; }
+.movie-card.rated::before { opacity: 0; }
 .movie-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .78; }
 .movie-card::before { content: '▶'; color: #e2ad45; font: 42px/1 Arial, sans-serif; margin-bottom: auto; }
 .movie-card span { position: relative; z-index: 1; display: block; flex-shrink: 0; overflow-wrap: anywhere; padding: 8px; border-radius: 8px; background: rgba(3,7,19,.76); }
@@ -138,6 +141,15 @@ input::placeholder { color: #7f90a7; }
 .list-count { margin: 0 0 12px; font-size: 22px; color: #b5c2d3; }
 .details-poster { width: 240px; height: 350px; object-fit: cover; border-radius: 14px; background: #172338; }
 .details-card .details-year { color: #f6d28a; font-weight: bold; }
+/* Details: the description is clamped so the buttons always stay in view and nothing overlaps them. */
+.details-card { max-height: calc(100vh - 56px); overflow: hidden; }
+.details-body { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.details-card .details-body p { margin: 0 0 10px; }
+.details-card .details-rating bdi { unicode-bidi: isolate; }
+.details-card .details-extra { font-size: 18px; line-height: 1.5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.details-card .details-description { line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 7; overflow: hidden; unicode-bidi: plaintext; text-align: start; }
+.details-card .details-note { margin: 4px 0 0; font-size: 16px; line-height: 1.5; }
+.details-card .details-actions { flex-shrink: 0; margin-top: 22px; }
 .setup-divider { margin: 26px 0 8px; padding-top: 20px; border-top: 1px solid #3b4d64; font-size: 22px; }
 .playlist-status { min-height: 28px; margin: 10px 0 !important; color: #f6d28a !important; }
 #clear-sources { color: #ffc6b5; }
