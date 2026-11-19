@@ -48,13 +48,13 @@ Playback connects directly from the TV to the source. Users add their own source
 
 ## الحالة الحالية / Current status
 
-الإصدار الحالي [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12)، وهو مثبت ومجرب على LG OLED55CS6LA. دُمجت تحديثاته في الفرع الرئيسي عبر [طلب المراجعة 9](https://github.com/amjadoh/lg-stream/pull/9). يركز على ثبات البث وسرعة التنقل: فلاتر وبحث أسرع، وإعادة اتصال تلقائية محدودة للبث المباشر، وسجل انقطاعات في شاشة القياسات.
+الإصدار الحالي [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0)، مثبت على LG OLED55CS6LA، ودُمج في الفرع الرئيسي عبر [طلب المراجعة 10](https://github.com/amjadoh/lg-stream/pull/10). يضيف شاشة مصادر البث (M3U وXtream)، وتحديثًا لا يجمّد الريموت مع شريط تقدم، وظهور الجديد أولًا، وتخصيص القنوات والمجموعات بالزر الأزرق مع تأكيد الحفظ.
 
-اجتازت هذه النسخة 40 اختبار منطق وبرامج الواجهة الستة، وفحوصًا قصيرة على التلفزيون: تشغيل مستقر لمدة 60 ثانية بلا توقف أو خطأ، وعودة قناة رفضها المزود مؤقتًا في المحاولة التلقائية الثالثة. الفحوص قصيرة، والثبات الطويل يُقاس بالاستخدام الفعلي.
+اجتازت هذه النسخة 45 اختبار منطق وبرامج الواجهة السبعة. على التلفزيون: انخفض أطول حجب للواجهة عند الاستعادة من 8.4 إلى 1.19 ثانية وعند التحديث الكامل من 20.7 إلى 2.4 ثانية، وبقيت القائمة (331841 عنصرًا) سليمة عبر التحديثات، والتبديل بين القنوات 1.25–1.8 ثانية، و30 ثانية تشغيل بلا توقف. تجربة مسار الزر الأزرق كاملًا بالريموت ما زالت عند المالك.
 
-The current release is [0.8.12](https://github.com/amjadoh/lg-stream/releases/tag/v0.8.12), installed and tested on LG OLED55CS6LA. Its updates were merged into main through [pull request 9](https://github.com/amjadoh/lg-stream/pull/9). It focuses on stable playback and fast navigation: faster filters and search, a bounded automatic reconnect for live channels, and an interruption log in the diagnostics screen.
+The current release is [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0), installed on LG OLED55CS6LA and merged into main through [pull request 10](https://github.com/amjadoh/lg-stream/pull/10). It adds a streaming sources screen (M3U and Xtream), a refresh that keeps the remote responsive with a progress bar, new items first, and blue-key channel and group customization with a save confirmation.
 
-This version passed 40 logic tests, all six UI programs and short TV checks: 60 seconds of steady playback with no waits or errors, and a channel temporarily rejected by the provider recovered on the third automatic attempt. The checks are short; long-term stability is measured through real use.
+This version passed 45 logic tests and all seven UI programs. On the TV the longest UI block fell from 8.4 s to 1.19 s on restore and from 20.7 s to 2.4 s on a full refresh, the 331,841-item catalogue survived every update, channel switches took 1.25–1.8 s, and 30 s of playback ran with no waits. The owner has yet to try the full blue-key flow on the remote.
 
 ## التثبيت والتوثيق / Installation and documentation
 
