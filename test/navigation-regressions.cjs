@@ -195,6 +195,16 @@ async function main() {
         await focusedIndex(base + row, 'movie-card');
       }
 
+      for (let row = 0; row < 20; row += 4) await page.keyboard.press('ArrowDown');
+      await focusedIndex(base + 20, 'movie-card');
+      await page.evaluate(() => { document.activeElement.__kept = true; });
+      await page.keyboard.press('ArrowDown');
+      await focusedIndex(base + 24, 'movie-card');
+      assert.equal(await page.evaluate(index => document.querySelector(`#movie-grid [data-index="${index}"]`).__kept === true, base + 20), true, 'Moving one row keeps the cards already shown instead of rebuilding them');
+      assert.ok(await page.locator('#movie-grid .movie-card').count() <= 24);
+      for (let row = 24; row > 0; row -= 4) await page.keyboard.press('ArrowUp');
+      await focusedIndex(base, 'movie-card');
+
       const wheelContent = new Set();
       for (let step = 0; step < 6; step++) {
         for (const index of await page.locator('#movie-grid .movie-card').evaluateAll(nodes => nodes.map(node => Number(node.dataset.index)))) wheelContent.add(index);
