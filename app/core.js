@@ -710,6 +710,123 @@
     });
     return result;
   }
+  // Provider details for one movie (Xtream get_vod_info), built from the saved
+  // get.php source; requested only when that movie's details open.
+  function vodInfoUrl(playlistSource, movieUrl) {
+    var playlist = nativeHlsPlaylist(playlistSource);
+    var match = /\/movie\/[^/?#]+\/[^/?#]+\/(\d{1,9})\.[A-Za-z0-9]{1,8}(?:[?#]|$)/i.exec(String(movieUrl || ''));
+    if (!playlist || !match) return null;
+    var info = new URL('/player_api.php', playlist.origin);
+    info.searchParams.set('username', playlist.searchParams.get('username'));
+    info.searchParams.set('password', playlist.searchParams.get('password'));
+    info.searchParams.set('action', 'get_vod_info'); info.searchParams.set('vod_id', match[1]);
+    return info.href;
+  }
+  // Keep only short plain-text fields from the provider reply.
+  function vodDetails(reply) {
+    var info = reply && typeof reply === 'object' && reply.info && typeof reply.info === 'object' && !Array.isArray(reply.info) ? reply.info : null;
+    if (!info) return null;
+    function text(value, max) {
+      if (typeof value === 'number' && isFinite(value)) value = String(value);
+      if (typeof value !== 'string') return '';
+      value = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+      return value.length > max ? value.slice(0, max - 1) + '…' : value;
+    }
+    var rating = Number(text(info.rating, 8));
+    var year = /(?:19|20)\d{2}/.exec(text(info.year, 12) || text(info.releasedate, 24));
+    var duration = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(text(info.duration, 12));
+    var minutes = duration ? Number(duration[1]) * 60 + Number(duration[2]) : 0;
+    var details = {
+      plot: text(info.plot || info.description, 900),
+      rating: rating > 0 && rating <= 10 ? String(Math.round(rating * 10) / 10) : '',
+      year: year ? year[0] : '',
+      genre: text(info.genre, 120),
+      minutes: minutes > 0 && minutes < 1000 ? minutes : 0,
+      director: text(info.director, 120),
+      cast: text(info.cast, 200),
+      tmdb: /^\d{1,9}$/.test(text(info.tmdb_id, 12)) ? text(info.tmdb_id, 12) : ''
+    };
+    return details.plot || details.rating || details.year || details.genre || details.minutes || details.director || details.cast ? details : null;
+  }
+  // OMDb (IMDb rating) — only with a key the owner created and typed on the TV.
+  function validOmdbKey(key) { return /^[A-Za-z0-9]{6,20}$/.test(String(key || '').trim()); }
+  // Provider titles carry language tags, quality marks and years; OMDb needs the plain title.
+  function cleanTitle(name) {
+    var title = String(name || '').replace(/[\u0000-\u001f\u007f]/g, ' ');
+    title = title.replace(/\[[^\]]*\]/g, ' ').replace(/\(\s*(?:19|20)\d{2}\s*\)/g, ' ');
+    for (var pass = 0; pass < 2; pass += 1) title = title.replace(/^\s*(?:\|[A-Z0-9]{2,5}\|\s*|[A-Z0-9]{2,5}\s*[-:|]\s+)/, '');
+    title = title.replace(/(?:^|[\s\-–|])(?:19|20)\d{2}\s*$/, ' ');
+    for (var tag = 0; tag < 3; tag += 1) title = title.replace(/[\s\-|]+(?:4K|UHD|FHD|HD|HDR|SD|MULTI(?:-?SUB)?|SUB|DUB(?:BED)?|VOSTFR)\s*$/i, '');
+    title = title.replace(/\s+/g, ' ').replace(/^[\s\-:|]+|[\s\-:|]+$/g, '');
+    return title.length <= 120 ? title : '';
+  }
+  function omdbTitle(name) { var title = cleanTitle(name); return /[A-Za-z]/.test(title) ? title : ''; }
+  // TMDB also finds Arabic titles.
+  function tmdbTitle(name) { var title = cleanTitle(name); return /[A-Za-z؀-ۿ]/.test(title) ? title : ''; }
+  function omdbUrl(key, title, year) {
+    if (!validOmdbKey(key) || !title) return null;
+    var url = new URL('https://www.omdbapi.com/');
+    url.searchParams.set('apikey', String(key).trim()); url.searchParams.set('t', title); url.searchParams.set('type', 'movie');
+    if (/^(?:19|20)\d{2}$/.test(String(year || ''))) url.searchParams.set('y', String(year));
+    return url.href;
+  }
+  // TMDB: rating (no daily limit) and human-written overviews in the app language.
+  function validTmdbKey(key) { return /^[A-Fa-f0-9]{32}$/.test(String(key || '').trim()); }
+  function tmdbLanguage(lang) { return lang === 'en' ? 'en-US' : 'ar'; }
+  function tmdbUrl(key, id, lang) {
+    if (!validTmdbKey(key) || !/^\d{1,9}$/.test(String(id || ''))) return null;
+    var url = new URL('https://api.themoviedb.org/3/movie/' + id);
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('language', tmdbLanguage(lang));
+    return url.href;
+  }
+  function tmdbSearchUrl(key, title, year, lang) {
+    if (!validTmdbKey(key) || !title) return null;
+    var url = new URL('https://api.themoviedb.org/3/search/movie');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('query', title);
+    url.searchParams.set('include_adult', 'false'); url.searchParams.set('language', tmdbLanguage(lang));
+    if (/^(?:19|20)\d{2}$/.test(String(year || ''))) url.searchParams.set('year', String(year));
+    return url.href;
+  }
+  function tmdbPlot(reply, lang) {
+    var text = reply && typeof reply === 'object' && typeof reply.overview === 'string' ? reply.overview.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    if (lang !== 'en' && !/[؀-ۿ]/.test(text)) return '';
+    return text.slice(0, 900);
+  }
+  function tmdbArabicPlot(reply) { return tmdbPlot(reply, 'ar'); }
+  // A movie (details or one search result) -> { id, rating, plot }. Under 5 votes
+  // the rating is noise and counts as none.
+  function tmdbMovie(reply, lang) {
+    if (!reply || typeof reply !== 'object' || !/^\d{1,9}$/.test(String(reply.id))) return null;
+    var average = Number(reply.vote_average); var votes = Number(reply.vote_count);
+    return { id: String(reply.id), rating: average > 0 && average <= 10 && votes >= 5 ? average.toFixed(1) : '', plot: tmdbPlot(reply, lang) };
+  }
+  // Best search match: the same release year (then +-1 year); without a year, the
+  // first result. No match -> null.
+  function tmdbSearchResult(reply, year, lang) {
+    var results = reply && Array.isArray(reply.results) ? reply.results.slice(0, 10) : [];
+    var wanted = /^(?:19|20)\d{2}$/.test(String(year || '')) ? Number(year) : 0; var pick = null;
+    if (!wanted) pick = results[0] || null;
+    for (var near = 0; near <= 1 && !pick && wanted; near += 1) {
+      for (var i = 0; i < results.length && !pick; i += 1) {
+        var released = Number(String(results[i] && results[i].release_date || '').slice(0, 4));
+        if (released && Math.abs(released - wanted) === near) pick = results[i];
+      }
+    }
+    return tmdbMovie(pick, lang);
+  }
+  // 'limit' when the daily quota is used up, 'key' for a rejected key, '' otherwise.
+  function omdbFailure(reply) {
+    if (!reply || typeof reply !== 'object' || reply.Response !== 'False') return '';
+    var error = String(reply.Error || '');
+    return /limit/i.test(error) ? 'limit' : /api key|unauthori[sz]ed|activate/i.test(error) ? 'key' : '';
+  }
+  function omdbDetails(reply) {
+    if (!reply || typeof reply !== 'object' || reply.Response !== 'True') return null;
+    var rating = Number(reply.imdbRating); var plot = typeof reply.Plot === 'string' && reply.Plot !== 'N/A' ? reply.Plot.replace(/\s+/g, ' ').trim().slice(0, 900) : '';
+    var id = typeof reply.imdbID === 'string' && /^tt\d{5,10}$/.test(reply.imdbID) ? reply.imdbID : '';
+    var details = { rating: rating > 0 && rating <= 10 ? String(rating) : '', plot: plot, id: id };
+    return details.rating || details.plot ? details : null;
+  }
   // Xtream login typed on the TV becomes the same get.php playlist link.
   function xtreamPlaylistUrl(server, username, password) {
     var raw = String(server || '').trim(); username = String(username || '').trim(); password = String(password || '');
@@ -725,5 +842,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

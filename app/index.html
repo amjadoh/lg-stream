@@ -80,6 +80,7 @@
       <button id="settings-speed" type="button" aria-expanded="false">اختبار الاتصال<span>قياس يدوي لسرعة التنزيل</span></button>
       <button id="settings-info" type="button" aria-expanded="false">القياسات<span>قياسات الجلسة وقدرات المشغّل</span></button>
       <button id="settings-appearance" type="button">المظهر<span>شكل القوائم والتحكم بالمشاهدة</span></button>
+      <button id="settings-imdb" type="button">التقييمات والوصف (IMDb و TMDB)<span>أضف مفتاح OMDb لعرض تقييم IMDb</span></button>
     </div><h3>اللغة · Language</h3><div class="form-actions"><button data-language="ar" type="button">العربية</button><button data-language="en" type="button">English</button></div><p id="language-status" role="status"></p><button id="close-settings" type="button">رجوع</button></div>
   </section>
   <section id="appearance-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="appearance-title" hidden>
@@ -89,6 +90,15 @@
       <button data-layout="vertical" type="button">اختصارات عمودية<span>التصنيفات فوق المجموعات</span></button>
     </div><h3>التحكم بالمشاهدة</h3><div class="form-actions"><button data-controls="compact" type="button">شريط مختصر</button><button data-controls="comfortable" type="button">أزرار أوسع</button></div>
     <p id="appearance-status" role="status">اختيار المظهر لا يوقف المشاهدة.</p><button id="close-appearance" type="button">رجوع</button></div>
+  </section>
+  <section id="imdb-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="imdb-title" hidden>
+    <div class="setup-card settings-card"><h2 id="imdb-title">التقييمات والوصف (IMDb و TMDB)</h2><p id="imdb-state" class="small-note"></p><p class="small-note">ينشئ صاحب الجهاز مفتاحًا مجانيًا من omdbapi.com ثم يكتبه هنا. عند فتح تفاصيل فيلم يُرسل اسمه وسنته إلى OMDb لجلب تقييم IMDb. المفتاح يبقى على هذا التلفزيون ولا يظهر على الشاشة.</p>
+      <form id="imdb-form" class="form-actions"><label for="imdb-key">مفتاح OMDb</label><input id="imdb-key" type="password" maxlength="20" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"><button id="imdb-save" type="submit" class="primary">تحقق واحفظ</button><button id="imdb-remove" type="button">حذف المفتاح</button></form>
+      <p id="tmdb-state" class="small-note"></p><p class="small-note">TMDB يعطي تقييمًا لكل الأفلام بدون حد يومي، ووصفًا بلغة التطبيق كتبه أشخاص (ليس ترجمة آلية) عند توفره. يُبحث باسم الفيلم وسنته. ينشئ صاحب الجهاز مفتاح API مجانيًا من themoviedb.org.</p>
+      <form id="tmdb-form" class="form-actions"><label for="tmdb-key">مفتاح TMDB</label><input id="tmdb-key" type="password" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" dir="ltr"><button id="tmdb-save" type="submit" class="primary">تحقق واحفظ</button><button id="tmdb-remove" type="button">حذف المفتاح</button></form>
+      <h3>التقييم المعروض على البطاقات والتفاصيل</h3><div class="form-actions rating-source"><button data-rating-source="both" type="button">IMDb ثم TMDB ثم المزود</button><button data-rating-source="web" type="button">IMDb ثم TMDB</button><button data-rating-source="imdb" type="button">IMDb فقط</button><button data-rating-source="tmdb" type="button">TMDB فقط</button><button data-rating-source="provider" type="button">المزود فقط</button><button data-rating-source="off" type="button">بدون تقييم</button></div>
+      <h3>جلب التقييمات لكل الأفلام</h3><p class="small-note">يعمل والتطبيق مفتوح دون تشغيل أو ضغط أزرار، الأحدث أولًا، ويحفظ على التلفزيون. IMDb حتى 800 فيلم يوميًا (حد المفتاح المجاني 1000)، وTMDB بدون حد يومي.</p><div class="form-actions"><button id="prefetch-toggle" type="button" aria-pressed="true">مفعّل — إيقاف</button></div><p id="prefetch-status" class="small-note" role="status"></p>
+      <p id="imdb-status" role="status"></p><button id="close-imdb" type="button">رجوع</button></div>
   </section>
   <section id="category-picker" class="modal" role="dialog" aria-modal="true" aria-labelledby="category-title" hidden>
     <div class="setup-card track-card"><h2 id="category-title">فلتر المجموعات</h2><p class="small-note">حسب اسم القناة، ويُستخدم اسم المجموعة عند غموضه. «الكل» يعرض جميع القنوات.</p><div id="category-list" class="track-list"></div><button id="close-category" type="button">رجوع</button></div>
@@ -100,7 +110,7 @@
     <div class="setup-card search-card"><h2 id="search-title">بحث شامل</h2><div class="search-row"><input id="channel-search" type="search" inputmode="search" autocomplete="off" maxlength="80" placeholder="ابحث في البث والأفلام والمسلسلات"><button id="clear-search" type="button" aria-label="مسح البحث">×</button></div><p id="search-status" class="small-note">اكتب حرفين على الأقل.</p><div id="search-results" class="search-results"></div><button id="close-search" type="button">رجوع</button></div>
   </section>
   <section id="details-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="details-title" hidden>
-    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div><h2 id="details-title"></h2><p id="details-year" class="details-year"></p><p id="details-rating"></p><p id="details-description"></p><p id="details-status" class="small-note"></p><div class="form-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button">مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
+    <div class="setup-card details-card"><img id="details-poster" class="details-poster" alt="" hidden><div class="details-body"><h2 id="details-title" dir="auto"></h2><p id="details-year" class="details-year"></p><p id="details-rating" class="details-rating"><bdi id="details-rating-text"></bdi></p><p id="details-extra" class="details-extra" dir="auto" hidden></p><p id="details-description" class="details-description" dir="auto"></p><p id="details-status-info" class="small-note" hidden></p><p id="details-status" class="small-note details-note"></p><div class="form-actions details-actions"><button id="details-play" class="primary" type="button">تشغيل</button><button id="details-trailer" type="button">مشاهدة الإعلان</button><button id="close-details" type="button">رجوع</button></div></div></div>
   </section>
   <section id="setup-panel" class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title" hidden>
     <form id="source-form" class="setup-card" autocomplete="off" tabindex="-1">

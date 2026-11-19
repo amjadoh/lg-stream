@@ -43,8 +43,16 @@ async function main() {
       };
       proto.pause = function () { own(this).paused = true; this.dispatchEvent(new Event('pause')); };
       window.__fetches = [];
-      window.fetch = async url => {
+      window.fetch = async (url, options) => {
         window.__fetches.push(String(url));
+        if (String(url).startsWith('https://api.themoviedb.org/3/search/movie')) return { ok: true, json: async () => ({ results: [{ id: 77, release_date: '2019-02-01', vote_average: 6.5, vote_count: 50, overview: 'Search overview' }] }) };
+        if (String(url).startsWith('https://api.themoviedb.org/')) { const english = new URL(url).searchParams.get('language') === 'en-US'; return { ok: true, json: async () => ({ id: Number(new URL(url).pathname.split('/').pop()), vote_average: 8.2, vote_count: 900, overview: english ? 'English TMDB overview' : 'وصف عربي من TMDB' }) }; }
+        if (String(url).startsWith('https://www.omdbapi.com/')) return { ok: true, json: async () => window.__omdbReply || { Response: 'True', imdbRating: '8.7', Plot: 'IMDb plot', imdbID: 'tt0133093' } };
+        if (String(url).includes('/player_api.php')) {
+          window.__infoSignal = options && options.signal;
+          if (window.__holdInfo) return new Promise(() => {});
+          return { ok: true, json: async () => ({ info: { plot: 'Provider plot for the film', rating: '7.4', genre: 'Drama', duration: '01:50:00', year: '2019', tmdb_id: '603' } }) };
+        }
         const lines = ['#EXTM3U'];
         const item = (section, group, id, title) => { lines.push('#EXTINF:-1 group-title="' + group + '",' + title); lines.push('https://media.invalid/' + section + '/user/pass/' + id + '.ts'); };
         const extra = localStorage.getItem('test-extra') === '1';
@@ -296,8 +304,125 @@ async function main() {
     assert.equal((await page.locator('body').innerText()).includes('s3cret'), false);
     assert.equal(await page.locator('#xtream-password').inputValue(), '', 'Typed credentials are cleared after use');
 
+    // Movie details: one provider request when opened, cached, cancelled on close.
+    await page.evaluate(() => { window.__fetches = []; });
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /Provider plot/.test(document.getElementById('details-description').textContent));
+    assert.match(await page.locator('#details-rating').innerText(), /7\.4\/10/);
+    assert.match(await page.locator('#details-year').innerText(), /2019/);
+    assert.match(await page.locator('#details-extra').innerText(), /Drama · 110/);
+    const infoRequests = await page.evaluate(() => window.__fetches.map(url => new URL(url)).map(url => url.pathname + ' ' + url.searchParams.get('action') + ' ' + url.searchParams.get('vod_id')));
+    assert.ok(infoRequests.includes('/player_api.php get_vod_info 500'));
+    assert.ok(infoRequests.every(request => request.startsWith('/player_api.php get_vod_info ')), 'Only movie info is requested');
+    assert.equal((await page.locator('body').innerText()).includes('s3cret'), false, 'The provider request never shows credentials');
+    await page.keyboard.press('Escape');
+    const before = await page.evaluate(() => window.__fetches.length);
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /Provider plot/.test(document.getElementById('details-description').textContent));
+    assert.equal(await page.evaluate(() => window.__fetches.length), before, 'Reopening uses the cached details');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { window.__holdInfo = true; });
+    await page.locator('#movie-grid .movie-card').nth(1).click();
+    assert.equal(await page.locator('#details-status-info').isVisible(), true, 'Loading is shown while the provider answers');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => window.__infoSignal.aborted), true, 'Closing details cancels the provider request');
+    await page.evaluate(() => { window.__holdInfo = false; });
+
+    // Ratings on the visible cards, saved on the TV; then IMDb with the owner's key.
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('#movie-grid .card-rating')).filter(badge => badge.textContent === '★ 7.4').length === 2);
+    const savedRatings = () => page.evaluate(() => new Promise(resolve => { const open = indexedDB.open('lg-stream-ratings'); open.onsuccess = () => { const request = open.result.transaction('items').objectStore('items').getAll(); request.onsuccess = () => { open.result.close(); resolve(request.result); }; }; }));
+    for (let wait = 0; wait < 30 && (await savedRatings()).filter(value => value[1] === '7.4').length < 2; wait++) await page.waitForTimeout(200);
+    assert.equal((await savedRatings()).length, 2, 'Ratings are saved on the TV in IndexedDB');
+    await page.locator('#nav-settings').click();
+    await page.locator('#settings-imdb').click();
+    assert.equal(await active(), 'imdb-key', 'The IMDb panel opens on the key field');
+    await page.locator('#imdb-key').fill('bad key');
+    await page.locator('#imdb-save').click();
+    assert.match(await page.locator('#imdb-status').innerText(), /أحرف وأرقام/);
+    await page.evaluate(() => { window.__omdbReply = { Response: 'False', Error: 'Invalid API key!' }; });
+    await page.locator('#imdb-key').fill('abc12345');
+    await page.locator('#imdb-save').click();
+    await page.waitForFunction(() => /رفض OMDb المفتاح/.test(document.getElementById('imdb-status').textContent));
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-omdb-key-v1')), null, 'A rejected key is not saved');
+    await page.evaluate(() => { window.__omdbReply = null; });
+    await page.locator('#imdb-save').click();
+    await page.waitForFunction(() => /تم الحفظ/.test(document.getElementById('imdb-status').textContent));
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-omdb-key-v1')), 'abc12345');
+    assert.equal(await page.locator('#imdb-key').inputValue(), '', 'The typed key is cleared');
+    assert.match(await page.locator('#imdb-key').getAttribute('placeholder'), /محفوظ/, 'The field itself shows the key is saved');
+    assert.equal((await page.locator('body').innerText()).includes('abc12345'), false, 'The key is never shown');
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('#movie-grid .card-rating.imdb')).filter(badge => badge.textContent === 'IMDb 8.7').length === 2);
+    const omdbRequests = await page.evaluate(() => window.__fetches.filter(url => url.startsWith('https://www.omdbapi.com/')).map(url => new URL(url).searchParams.get('t')));
+    assert.deepEqual(omdbRequests.slice(-2).sort(), ['Film A', 'Film B'], 'One IMDb lookup per visible movie');
+    const lookups = await page.evaluate(() => window.__fetches.length);
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /IMDb 8\.7/.test(document.getElementById('details-rating').textContent));
+    assert.match(await page.locator('#details-rating').innerText(), /IMDb 8\.7\/10 · .*7\.4\/10/);
+    assert.equal(await page.evaluate(() => window.__fetches.length), lookups, 'Details reuse the saved ratings');
+    await page.keyboard.press('Escape');
+    // The owner chooses which rating shows: IMDb only hides the provider rating.
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="imdb"]').click();
+    assert.equal(await page.locator('[data-rating-source="imdb"]').getAttribute('aria-pressed'), 'true');
+    assert.match(await page.locator('#prefetch-status').innerText(), /تقييمات IMDb المحفوظة: 2/);
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#movie-grid .card-rating:not(.imdb)').count(), 0, 'No provider badge with IMDb only');
+    await page.locator('#movie-grid .movie-card').first().click();
+    assert.doesNotMatch(await page.locator('#details-rating').innerText(), /7\.4/, 'Details hide the provider rating too');
+    await page.keyboard.press('Escape');
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="off"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#movie-grid .card-rating').count(), 0, 'No badges when ratings are off');
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="both"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-rating-source-v1')), 'both');
+    await page.locator('#sort-button').click();
+    assert.equal(await page.locator('#sort-menu [data-sort="rating"]').isDisabled(), false, 'Rating sort is available');
+    await page.locator('#sort-menu [data-sort="rating"]').click();
+    assert.match(await page.locator('#sort-button').innerText(), /التقييم/);
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('#imdb-remove').click();
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-omdb-key-v1')), null);
+    await page.locator('#tmdb-key').fill('0123456789abcdef0123456789abcdef');
+    await page.locator('#tmdb-save').click();
+    await page.waitForFunction(() => /تم الحفظ/.test(document.getElementById('imdb-status').textContent));
+    assert.equal((await page.locator('body').innerText()).includes('0123456789abcdef'), false, 'The TMDB key is never shown');
+    // TMDB ratings on the visible cards (searched by title and year), then details by id.
+    await page.locator('[data-rating-source="tmdb"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('#movie-grid .card-rating.tmdb')).filter(badge => badge.textContent === 'TMDB 6.5').length === 2);
+    const searches = await page.evaluate(() => window.__fetches.filter(url => url.includes('/3/search/movie')).map(url => new URL(url).searchParams.get('query')));
+    assert.deepEqual(searches.sort(), ['Film A', 'Film B'], 'One TMDB search per visible movie');
+    for (let wait = 0; wait < 30 && (await savedRatings()).filter(value => value[2] === '6.5' && value[3] === '77').length < 2; wait++) await page.waitForTimeout(200);
+    assert.equal((await savedRatings()).filter(value => value[2] === '6.5' && value[3] === '77').length, 2, 'TMDB rating and id are saved on the TV');
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /وصف عربي من TMDB/.test(document.getElementById('details-description').textContent));
+    assert.ok(await page.evaluate(() => window.__fetches.some(url => /api\.themoviedb\.org\/3\/movie\/603\?.*language=ar/.test(url))), 'The provider tmdb_id is used when known');
+    await page.waitForFunction(() => /TMDB 8\.2/.test(document.getElementById('details-rating-text').textContent));
+    assert.doesNotMatch(await page.locator('#details-rating-text').innerText(), /IMDb|المزود/, 'TMDB only hides the other ratings');
+    await page.keyboard.press('Escape');
+    // English app language: the description comes in English.
+    await page.evaluate(() => document.querySelector('[data-language="en"]').click());
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /English TMDB overview/.test(document.getElementById('details-description').textContent));
+    assert.ok(await page.evaluate(() => window.__fetches.some(url => /api\.themoviedb\.org\/3\/movie\/603\?.*language=en-US/.test(url))));
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => document.querySelector('[data-language="ar"]').click());
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="both"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('#tmdb-remove').click();
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-tmdb-key-v1')), null);
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+
     assert.deepEqual(errors, []);
-    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, TMDB ratings by search and Arabic/English TMDB descriptions, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();
