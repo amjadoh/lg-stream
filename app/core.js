@@ -624,6 +624,19 @@
     for (var index = 0; index < url.length; index += 1) { hash ^= url.charCodeAt(index); hash = Math.imul(hash, 16777619) >>> 0; }
     return (section + 3) * KEY_SPACE + hash;
   }
+  // Provider serial (Xtream stream id) for movies/series; panels assign ids in
+  // the order items are added, so a larger id is usually a newer addition.
+  function providerSerial(key) {
+    var section = Math.floor(Number(key) / KEY_SPACE);
+    return section === 2 || section === 3 ? Number(key) - section * KEY_SPACE : null;
+  }
+  // Release year written in a title, e.g. "Name (2021)" or "Name - 2021".
+  function titleYear(name, now) {
+    name = String(name || ''); var latest = (now || new Date()).getFullYear() + 1;
+    var match = /[(\[]\s*((?:19|20)\d{2})\s*[)\]]/.exec(name) || /(?:^|[\s\-–|])((?:19|20)\d{2})\s*$/.exec(name);
+    var year = match ? Number(match[1]) : 0;
+    return year >= 1900 && year <= latest ? year : 0;
+  }
   function sortedKeys(keys) { return Float64Array.from(keys).sort(); }
   function hasSortedKey(sorted, key) {
     var low = 0; var high = sorted.length - 1;
@@ -712,5 +725,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

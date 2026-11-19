@@ -48,11 +48,11 @@ Playback connects directly from the TV to the source. Users add their own source
 
 ## الحالة الحالية / Current status
 
-الإصدار الحالي [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0)، مثبت على LG OLED55CS6LA، ودُمج في الفرع الرئيسي عبر [طلب المراجعة 10](https://github.com/amjadoh/lg-stream/pull/10). يضيف شاشة مصادر البث (M3U وXtream)، وتحديثًا لا يجمّد الريموت مع شريط تقدم، وظهور الجديد أولًا، وتخصيص القنوات والمجموعات بالزر الأزرق مع تأكيد الحفظ.
+الإصدار الحالي [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0)، مثبت على LG OLED55CS6LA، ودُمج في الفرع الرئيسي عبر [طلب المراجعة 10](https://github.com/amjadoh/lg-stream/pull/10). يضيف شاشة مصادر البث (M3U وXtream)، وتحديثًا لا يجمّد الريموت مع شريط تقدم، وظهور الجديد أولًا، وتخصيص القنوات والمجموعات بالزر الأزرق مع تأكيد الحفظ. الإصدار 0.9.1 يسرّع التنقل بين صفحات الأفلام ويضيف ترتيب «الأحدث» وسنة الإنتاج من العنوان.
 
 اجتازت هذه النسخة 45 اختبار منطق وبرامج الواجهة السبعة. على التلفزيون: انخفض أطول حجب للواجهة عند الاستعادة من 8.4 إلى 1.19 ثانية وعند التحديث الكامل من 20.7 إلى 2.4 ثانية، وبقيت القائمة (331841 عنصرًا) سليمة عبر التحديثات، والتبديل بين القنوات 1.25–1.8 ثانية، و30 ثانية تشغيل بلا توقف. تجربة مسار الزر الأزرق كاملًا بالريموت ما زالت عند المالك.
 
-The current release is [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0), installed on LG OLED55CS6LA and merged into main through [pull request 10](https://github.com/amjadoh/lg-stream/pull/10). It adds a streaming sources screen (M3U and Xtream), a refresh that keeps the remote responsive with a progress bar, new items first, and blue-key channel and group customization with a save confirmation.
+The current release is [0.9.0](https://github.com/amjadoh/lg-stream/releases/tag/v0.9.0), installed on LG OLED55CS6LA and merged into main through [pull request 10](https://github.com/amjadoh/lg-stream/pull/10). It adds a streaming sources screen (M3U and Xtream), a refresh that keeps the remote responsive with a progress bar, new items first, and blue-key channel and group customization with a save confirmation. Version 0.9.1 makes moving through movie pages faster and adds a Newest sort and release years read from titles.
 
 This version passed 45 logic tests and all seven UI programs. On the TV the longest UI block fell from 8.4 s to 1.19 s on restore and from 20.7 s to 2.4 s on a full refresh, the 331,841-item catalogue survived every update, channel switches took 1.25–1.8 s, and 30 s of playback ran with no waits. The owner has yet to try the full blue-key flow on the remote.
 

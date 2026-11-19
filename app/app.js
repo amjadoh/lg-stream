@@ -249,19 +249,48 @@
     var ownSection = sectionIndex();
     var indexes = activeGroup === NEW_GROUP ? ownSection.fresh : activeGroup ? (ownSection.byGroup[activeGroup] || []) : ownSection.all;
     if ((activeSection === 'movies' || activeSection === 'series') && contentSort !== 'provider') {
-      indexes = indexes.slice();
-      indexes.sort(function (left, right) {
-        var a = sources[left] || {}; var b = sources[right] || {}; var av; var bv;
-        if (contentSort === 'alpha') return (nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '')) || left - right;
-        if (contentSort === 'year') { av = Number(a.year) || null; bv = Number(b.year) || null; }
-        if (contentSort === 'rating') { av = Number(a.rating) || null; bv = Number(b.rating) || null; }
-        if (contentSort === 'added') { av = Number(a.added) || Date.parse(a.added) || null; bv = Number(b.added) || Date.parse(b.added) || null; }
-        if (av === null && bv === null) return left - right;
-        if (av === null) return 1; if (bv === null) return -1;
-        return bv - av || left - right;
-      });
+      if (contentSort === 'alpha') {
+        indexes = indexes.slice();
+        indexes.sort(function (left, right) {
+          var a = sources[left] || {}; var b = sources[right] || {};
+          return (nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '')) || left - right;
+        });
+      } else {
+        // Each sort value is computed once per item, not once per comparison.
+        var keyed = indexes.map(function (index) { return { index: index, value: sortValue(index, contentSort) }; });
+        keyed.sort(function (a, b) {
+          if (a.value === null && b.value === null) return a.index - b.index;
+          if (a.value === null) return 1; if (b.value === null) return -1;
+          return b.value - a.value || a.index - b.index;
+        });
+        indexes = keyed.map(function (item) { return item.index; });
+      }
     }
     visibleCacheKey = cacheKey; visibleCache = indexes; return indexes;
+  }
+  function itemYear(index) {
+    var entry = sources[index]; if (!entry) return 0;
+    return Number(entry.year) || api.titleYear(entry.originalName !== undefined ? entry.originalName : entry.name);
+  }
+  function sortValue(index, sort) {
+    var entry = sources[index] || {};
+    if (sort === 'year') return itemYear(index) || null;
+    if (sort === 'rating') return Number(entry.rating) || null;
+    if (sort === 'added') return Number(entry.added) || Date.parse(entry.added) || null;
+    if (sort === 'newest') return entryKeys && entryKeys.length === sources.length ? api.providerSerial(entryKeys[index]) : null;
+    return null;
+  }
+  // Which optional sorts have data in this list; computed once per list, not per key press.
+  var sortAvailability = { key: null, fields: null };
+  function availableSorts(indexes) {
+    var key = [catalogViewRevision, activeSection, activeGroup, activeCategory, indexes.length].join('\u0001');
+    if (sortAvailability.key === key) return sortAvailability.fields;
+    var fields = { year: false, rating: false, added: false, newest: false }; var missing = 4;
+    for (var position = 0; position < indexes.length && missing; position += 1) {
+      var index = indexes[position];
+      for (var field in fields) if (!fields[field] && sortValue(index, field) !== null) { fields[field] = true; missing -= 1; }
+    }
+    sortAvailability = { key: key, fields: fields }; return fields;
   }
   function contentMaxStart(length) { return Math.max(0, Math.ceil(Math.max(0, length - contentWindowSize) / 4) * 4); }
   function setPrimary(open) {
@@ -379,7 +408,7 @@
     categoryPositions = {};
     var groups = sectionIndex().groups;
     activeGroup = state && (activeSection !== 'tv' || activeCategory === 'all' || state.filterVersion === 3) && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
-    contentSort = state && ['provider', 'year', 'rating', 'added', 'alpha'].indexOf(state.sort) >= 0 ? state.sort : 'provider';
+    contentSort = state && ['provider', 'newest', 'year', 'rating', 'added', 'alpha'].indexOf(state.sort) >= 0 ? state.sort : 'provider';
     selected = state ? Number(state.selected) || 0 : 0; channelWindowStart = state ? Number(state.channelWindowStart) || 0 : 0; contentWindowStart = state ? Number(state.contentWindowStart) || 0 : 0;
     pendingViewState = state; renderPrimary(); renderGroups(); renderChannels();
     if (state) requestAnimationFrame(function () { $('groups').scrollTop = Number(state.groupScrollTop) || 0; $('channels').scrollTop = Number(state.channelScrollTop) || 0; $('movie-browser').scrollTop = Number(state.contentScrollTop) || 0; });
@@ -610,30 +639,50 @@
     if (activeGroup === NEW_GROUP) LGI18n.text($('movie-title'), 'جديد'); else LGI18n.provider($('movie-title'), activeGroup, activeSection === 'movies' ? 'الأفلام' : 'المسلسلات', sectionIndex().groupLabels.get(activeGroup));
     $('movie-grid').replaceChildren();
     contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
-    indexes.slice(contentWindowStart, contentWindowStart + contentWindowSize).forEach(function (index) {
+    indexes.slice(contentWindowStart, contentWindowStart + contentWindowSize).forEach(function (index) { $('movie-grid').appendChild(movieCard(index)); });
+    movieGridKey = visibleCacheKey;
+    renderSortMenu(indexes); schedulePosterCheck();
+  }
+  // Scrolling the same list: keep the cards still in view and add only the new
+  // row, instead of rebuilding all cards (and reloading their posters).
+  var movieGridKey = null;
+  function renderMovieWindow() {
+    var indexes = visibleIndexes(); var grid = $('movie-grid');
+    if (movieGridKey === null || movieGridKey !== visibleCacheKey || watchChannels !== null) { renderChannels(); return; }
+    contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
+    var wanted = indexes.slice(contentWindowStart, contentWindowStart + contentWindowSize); var keep = {};
+    wanted.forEach(function (index) { keep[index] = true; });
+    Array.prototype.slice.call(grid.children).forEach(function (card) { if (!keep[card.dataset.index]) grid.removeChild(card); });
+    var current = grid.firstElementChild;
+    wanted.forEach(function (index) {
+      if (current && current.dataset.index === String(index)) { current = current.nextElementSibling; return; }
+      grid.insertBefore(movieCard(index), current);
+    });
+    schedulePosterCheck();
+  }
+  function movieCard(index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var details = sources[index] || {};
       if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
       var name = document.createElement('span'); LGI18n.provider(name, sources[index].name, activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); saveViewState(false); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
-      card.addEventListener('click', function () { openDetails(index); }); $('movie-grid').appendChild(card);
-    });
-    renderSortMenu(indexes); schedulePosterCheck();
+      card.addEventListener('click', function () { openDetails(index); });
+      return card;
   }
   function renderSortMenu(indexes) {
     Array.prototype.forEach.call($('sort-menu').querySelectorAll('button'), function (button) {
-      var sort = button.dataset.sort; var field = sort === 'year' ? 'year' : sort === 'rating' ? 'rating' : sort === 'added' ? 'added' : null;
-      button.disabled = !!field && !indexes.some(function (index) { return sources[index] && sources[index][field]; });
+      var sort = button.dataset.sort; var available = availableSorts(indexes);
+      button.disabled = Object.prototype.hasOwnProperty.call(available, sort) && !available[sort];
       button.classList.toggle('active', sort === contentSort); button.setAttribute('aria-pressed', String(sort === contentSort));
     });
-    LGI18n.text($('sort-button'), 'ترتيب: ' + ({ provider: 'المزوّد', alpha: 'أبجدي', year: 'السنة', rating: 'التقييم', added: 'تاريخ الإضافة' }[contentSort] || 'المزوّد'));
+    LGI18n.text($('sort-button'), 'ترتيب: ' + ({ provider: 'المزوّد', newest: 'الأحدث', alpha: 'أبجدي', year: 'السنة', rating: 'التقييم', added: 'تاريخ الإضافة' }[contentSort] || 'المزوّد'));
   }
   function closeDetails() { detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
   function openDetails(index) {
     cancelSwitch();
     selected = index; detailsIndex = index; var details = sources[index] || {};
     LGI18n.provider($('details-title'), details.name, activeSection === 'series' ? 'مسلسل' : 'فيلم');
-    LGI18n.text($('details-year'), details.year ? 'الإنتاج: ' + details.year : 'تاريخ الإنتاج غير متوفر');
+    var year = itemYear(index); LGI18n.text($('details-year'), year ? 'الإنتاج: ' + year : 'تاريخ الإنتاج غير متوفر');
     LGI18n.text($('details-rating'), details.rating ? 'التقييم: ' + details.rating : 'التقييم غير متوفر في بيانات القائمة');
     LGI18n.provider($('details-description'), details.description, 'الوصف غير متوفر في بيانات القائمة.');
     $('details-poster').hidden = !details.poster; detailsPanel.querySelector('.details-card').classList.toggle('no-poster', !details.poster);
@@ -804,7 +853,7 @@
     if (next === position) return true;
     if (next < contentWindowStart || next >= contentWindowStart + contentWindowSize) {
       contentWindowStart = step > 0 ? Math.floor(Math.max(0, next - (contentWindowSize - 4)) / 4) * 4 : Math.floor(next / 4) * 4;
-      contentWindowStart = Math.min(contentMaxStart(indexes.length), contentWindowStart); renderChannels();
+      contentWindowStart = Math.min(contentMaxStart(indexes.length), contentWindowStart); renderMovieWindow();
     }
     var card = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (card) card.focus(); return true;
   }
@@ -1591,7 +1640,7 @@
     if (event.deltaY > 0 && browser.scrollTop + browser.clientHeight >= browser.scrollHeight - 12) next = Math.min(contentMaxStart(indexes.length), contentWindowStart + 12);
     if (event.deltaY < 0 && browser.scrollTop <= 12) next = Math.max(0, contentWindowStart - 12);
     if (next === contentWindowStart) return;
-    contentWindowStart = next; selected = indexes[event.deltaY > 0 ? next : Math.min(indexes.length - 1, next + contentWindowSize - 1)] || selected; renderChannels(); browser.scrollTop = event.deltaY > 0 ? 0 : browser.scrollHeight;
+    contentWindowStart = next; selected = indexes[event.deltaY > 0 ? next : Math.min(indexes.length - 1, next + contentWindowSize - 1)] || selected; renderMovieWindow(); browser.scrollTop = event.deltaY > 0 ? 0 : browser.scrollHeight;
     var card = $('movie-grid').querySelector('[data-index="' + selected + '"]'); if (card) card.focus(); saveViewState(false); event.preventDefault();
   }, { passive: false });
   Array.prototype.forEach.call(document.querySelectorAll('.primary-button'), function (button) {
