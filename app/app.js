@@ -792,6 +792,12 @@
     LGI18n.provider($('details-extra'), extra.join(' · '), '');
     $('details-extra').hidden = !extra.length;
   }
+  // Key checks need the provider's reason even when it answers 401.
+  function fetchKeyCheck(url, controller) {
+    return fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' })
+      .then(function (response) { return response.json().then(function (body) { return { reached: true, status: response.status, body: body }; }, function () { return { reached: true, status: response.status, body: null }; }); })
+      .catch(function () { return { reached: false, status: 0, body: null }; });
+  }
   function fetchJson(url, controller) {
     return fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' })
       .then(function (response) { return response && response.ok && typeof response.json === 'function' ? response.json() : null; })
@@ -857,9 +863,10 @@
     if (tmdbCheck) tmdbCheck.abort();
     var controller = new AbortController(); tmdbCheck = controller; var timer = setTimeout(function () { controller.abort(); }, 10000);
     LGI18n.text($('imdb-status'), 'جارٍ التحقق من المفتاح…'); $('tmdb-save').disabled = true;
-    fetchJson(api.tmdbUrl(key, 603), controller).then(function (reply) {
+    fetchKeyCheck(api.tmdbUrl(key, 603), controller).then(function (check) {
       clearTimeout(timer); $('tmdb-save').disabled = false; if (tmdbCheck === controller) tmdbCheck = null;
-      if (controller.signal.aborted) return;
+      if (!check.reached) { LGI18n.text($('imdb-status'), 'تعذر الوصول إلى TMDB. تحقق من اتصال التلفزيون ثم أعد المحاولة.'); return; }
+      var reply = check.body;
       if (!reply || reply.id !== 603) { LGI18n.text($('imdb-status'), 'لم يقبل TMDB المفتاح. تأكد أنه API Key وليس Read Access Token.'); return; }
       tmdbKey = key; $('tmdb-key').value = ''; detailsCache.forEach(function (item) { item.arabic = undefined; });
       try { localStorage.setItem(TMDB_KEY_STORE, key); LGI18n.text($('imdb-status'), 'تم الحفظ. الوصف العربي يظهر في تفاصيل الأفلام عند توفره.'); }
@@ -878,10 +885,13 @@
     if (imdbCheck) imdbCheck.abort();
     var controller = new AbortController(); imdbCheck = controller; var timer = setTimeout(function () { controller.abort(); }, 10000);
     LGI18n.text($('imdb-status'), 'جارٍ التحقق من المفتاح…'); $('imdb-save').disabled = true;
-    fetchJson(api.omdbUrl(key, 'The Matrix', '1999'), controller).then(function (reply) {
+    fetchKeyCheck(api.omdbUrl(key, 'The Matrix', '1999'), controller).then(function (check) {
       clearTimeout(timer); $('imdb-save').disabled = false; if (imdbCheck === controller) imdbCheck = null;
-      if (controller.signal.aborted) return;
-      if (!api.omdbDetails(reply)) { LGI18n.text($('imdb-status'), 'لم يقبل OMDb المفتاح. تأكد من تفعيله من رابط البريد ثم أعد المحاولة.'); return; }
+      if (controller.signal.aborted && !check.reached) { LGI18n.text($('imdb-status'), 'تعذر الوصول إلى OMDb. تحقق من اتصال التلفزيون ثم أعد المحاولة.'); return; }
+      var reply = check.body;
+      if (!check.reached) { LGI18n.text($('imdb-status'), 'تعذر الوصول إلى OMDb. تحقق من اتصال التلفزيون ثم أعد المحاولة.'); return; }
+      if (api.omdbFailure(reply) === 'limit') { LGI18n.text($('imdb-status'), 'وصل المفتاح للحد اليومي في OMDb. جرّب غدًا.'); return; }
+      if (!api.omdbDetails(reply)) { LGI18n.text($('imdb-status'), 'رفض OMDb المفتاح: غير مفعّل أو فيه حرف خطأ. افتح رابط التفعيل في إيميل OMDb، وتأكد من الأحرف (مثل 0 و o) ثم أعد المحاولة.'); return; }
       omdbKey = key; $('imdb-key').value = ''; detailsCache.forEach(function (item) { item.imdb = undefined; });
       try { localStorage.setItem(OMDB_KEY_STORE, key); LGI18n.text($('imdb-status'), 'تم الحفظ. تقييم IMDb يظهر في تفاصيل الأفلام.'); }
       catch (_) { LGI18n.text($('imdb-status'), 'يعمل لهذه الجلسة فقط؛ تعذر الحفظ.'); }

@@ -340,7 +340,7 @@ async function main() {
     await page.evaluate(() => { window.__omdbReply = { Response: 'False', Error: 'Invalid API key!' }; });
     await page.locator('#imdb-key').fill('abc12345');
     await page.locator('#imdb-save').click();
-    await page.waitForFunction(() => /لم يقبل/.test(document.getElementById('imdb-status').textContent));
+    await page.waitForFunction(() => /رفض OMDb المفتاح/.test(document.getElementById('imdb-status').textContent));
     assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-omdb-key-v1')), null, 'A rejected key is not saved');
     await page.evaluate(() => { window.__omdbReply = null; });
     await page.locator('#imdb-save').click();
