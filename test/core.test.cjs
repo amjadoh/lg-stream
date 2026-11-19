@@ -482,3 +482,21 @@ test('Xtream login builds the same get.php playlist link', () => {
   assert.equal(api.xtreamPlaylistUrl('ftp://server.invalid', 'u', 'p'), null);
   assert.ok(api.nativeHlsPlaylist(api.xtreamPlaylistUrl('server.invalid', 'u', 'p')), 'Native HLS still recognises the built link');
 });
+
+test('newest sort uses the provider stream id and titles give a release year', () => {
+  const api = require('../app/core.js');
+  const movie = id => api.providerSerial(api.entryKey(`http://provider.invalid/movie/user/pass/${id}.mkv`));
+  assert.equal(movie(9001), 9001);
+  assert.ok(movie(9001) > movie(12), 'A later provider id sorts as newer');
+  assert.equal(api.providerSerial(api.entryKey('http://provider.invalid/series/user/pass/77.mp4')), 77);
+  assert.equal(api.providerSerial(api.entryKey('http://provider.invalid/live/user/pass/77.ts')), null, 'Live channels have no newest order');
+  assert.equal(api.providerSerial(api.entryKey('http://provider.invalid/movie/no-number.mp4')), null, 'Hashed keys are not ids');
+  const now = new Date('2026-11-19T00:00:00Z');
+  assert.equal(api.titleYear('Some Film (2021)', now), 2021);
+  assert.equal(api.titleYear('EN - Some Film [1999] 4K', now), 1999);
+  assert.equal(api.titleYear('فيلم عربي - 2024', now), 2024);
+  assert.equal(api.titleYear('Some Film 2023', now), 2023);
+  assert.equal(api.titleYear('Blade Runner 2049', now), 0, 'A number beyond next year is a title, not a year');
+  assert.equal(api.titleYear('Ocean 11', now), 0);
+  assert.equal(api.titleYear('2012 Remastered', now), 0, 'A leading number is not taken as the year');
+});

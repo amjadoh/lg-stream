@@ -135,6 +135,7 @@
   "ترتيب: ": "Sort: ",
   "المزوّد": "Provider",
   "أبجدي": "Alphabetical",
+  "الأحدث": "Newest",
   "السنة": "Year",
   "التقييم": "Rating",
   "تاريخ الإضافة": "Date added",
