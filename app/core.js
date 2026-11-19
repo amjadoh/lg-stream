@@ -751,15 +751,18 @@
   // OMDb (IMDb rating) — only with a key the owner created and typed on the TV.
   function validOmdbKey(key) { return /^[A-Za-z0-9]{6,20}$/.test(String(key || '').trim()); }
   // Provider titles carry language tags, quality marks and years; OMDb needs the plain title.
-  function omdbTitle(name) {
+  function cleanTitle(name) {
     var title = String(name || '').replace(/[\u0000-\u001f\u007f]/g, ' ');
     title = title.replace(/\[[^\]]*\]/g, ' ').replace(/\(\s*(?:19|20)\d{2}\s*\)/g, ' ');
     for (var pass = 0; pass < 2; pass += 1) title = title.replace(/^\s*(?:\|[A-Z0-9]{2,5}\|\s*|[A-Z0-9]{2,5}\s*[-:|]\s+)/, '');
     title = title.replace(/(?:^|[\s\-–|])(?:19|20)\d{2}\s*$/, ' ');
     for (var tag = 0; tag < 3; tag += 1) title = title.replace(/[\s\-|]+(?:4K|UHD|FHD|HD|HDR|SD|MULTI(?:-?SUB)?|SUB|DUB(?:BED)?|VOSTFR)\s*$/i, '');
     title = title.replace(/\s+/g, ' ').replace(/^[\s\-:|]+|[\s\-:|]+$/g, '');
-    return /[A-Za-z]/.test(title) && title.length <= 120 ? title : '';
+    return title.length <= 120 ? title : '';
   }
+  function omdbTitle(name) { var title = cleanTitle(name); return /[A-Za-z]/.test(title) ? title : ''; }
+  // TMDB also finds Arabic titles.
+  function tmdbTitle(name) { var title = cleanTitle(name); return /[A-Za-z؀-ۿ]/.test(title) ? title : ''; }
   function omdbUrl(key, title, year) {
     if (!validOmdbKey(key) || !title) return null;
     var url = new URL('https://www.omdbapi.com/');
@@ -767,17 +770,49 @@
     if (/^(?:19|20)\d{2}$/.test(String(year || ''))) url.searchParams.set('y', String(year));
     return url.href;
   }
-  // TMDB: human-written Arabic overviews, looked up by the provider's tmdb_id.
+  // TMDB: rating (no daily limit) and human-written overviews in the app language.
   function validTmdbKey(key) { return /^[A-Fa-f0-9]{32}$/.test(String(key || '').trim()); }
-  function tmdbUrl(key, id) {
+  function tmdbLanguage(lang) { return lang === 'en' ? 'en-US' : 'ar'; }
+  function tmdbUrl(key, id, lang) {
     if (!validTmdbKey(key) || !/^\d{1,9}$/.test(String(id || ''))) return null;
     var url = new URL('https://api.themoviedb.org/3/movie/' + id);
-    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('language', 'ar');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('language', tmdbLanguage(lang));
     return url.href;
   }
-  function tmdbArabicPlot(reply) {
+  function tmdbSearchUrl(key, title, year, lang) {
+    if (!validTmdbKey(key) || !title) return null;
+    var url = new URL('https://api.themoviedb.org/3/search/movie');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('query', title);
+    url.searchParams.set('include_adult', 'false'); url.searchParams.set('language', tmdbLanguage(lang));
+    if (/^(?:19|20)\d{2}$/.test(String(year || ''))) url.searchParams.set('year', String(year));
+    return url.href;
+  }
+  function tmdbPlot(reply, lang) {
     var text = reply && typeof reply === 'object' && typeof reply.overview === 'string' ? reply.overview.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim() : '';
-    return /[؀-ۿ]/.test(text) ? text.slice(0, 900) : '';
+    if (lang !== 'en' && !/[؀-ۿ]/.test(text)) return '';
+    return text.slice(0, 900);
+  }
+  function tmdbArabicPlot(reply) { return tmdbPlot(reply, 'ar'); }
+  // A movie (details or one search result) -> { id, rating, plot }. Under 5 votes
+  // the rating is noise and counts as none.
+  function tmdbMovie(reply, lang) {
+    if (!reply || typeof reply !== 'object' || !/^\d{1,9}$/.test(String(reply.id))) return null;
+    var average = Number(reply.vote_average); var votes = Number(reply.vote_count);
+    return { id: String(reply.id), rating: average > 0 && average <= 10 && votes >= 5 ? average.toFixed(1) : '', plot: tmdbPlot(reply, lang) };
+  }
+  // Best search match: the same release year (then +-1 year); without a year, the
+  // first result. No match -> null.
+  function tmdbSearchResult(reply, year, lang) {
+    var results = reply && Array.isArray(reply.results) ? reply.results.slice(0, 10) : [];
+    var wanted = /^(?:19|20)\d{2}$/.test(String(year || '')) ? Number(year) : 0; var pick = null;
+    if (!wanted) pick = results[0] || null;
+    for (var near = 0; near <= 1 && !pick && wanted; near += 1) {
+      for (var i = 0; i < results.length && !pick; i += 1) {
+        var released = Number(String(results[i] && results[i].release_date || '').slice(0, 4));
+        if (released && Math.abs(released - wanted) === near) pick = results[i];
+      }
+    }
+    return tmdbMovie(pick, lang);
   }
   // 'limit' when the daily quota is used up, 'key' for a rejected key, '' otherwise.
   function omdbFailure(reply) {
@@ -807,5 +842,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
