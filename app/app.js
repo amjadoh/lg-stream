@@ -283,14 +283,15 @@
   // Which optional sorts have data in this list; computed once per list, not per key press.
   var sortAvailability = { key: null, fields: null };
   function availableSorts(indexes) {
-    var key = [catalogViewRevision, activeSection, activeGroup, activeCategory, indexes.length].join('\u0001');
+    var key = [catalogViewRevision, activeSection, activeGroup, activeCategory, indexes.length, ratingSource].join('\u0001');
     if (sortAvailability.key === key) return sortAvailability.fields;
     var fields = { year: false, rating: false, added: false, newest: false }; var missing = 4;
     for (var position = 0; position < indexes.length && missing; position += 1) {
       var index = indexes[position];
       for (var field in fields) if (!fields[field] && sortValue(index, field) !== null) { fields[field] = true; missing -= 1; }
     }
-    if (!fields.rating && activeSection === 'movies' && (omdbKey || api.nativeHlsPlaylist(activePlaylistUrl))) fields.rating = true;
+    if (!fields.rating && activeSection === 'movies' && ((omdbKey && ratingSource !== 'provider') || (providerRatingsWanted() && api.nativeHlsPlaylist(activePlaylistUrl)))) fields.rating = true;
+    if (ratingSource === 'off') fields.rating = false;
     sortAvailability = { key: key, fields: fields }; return fields;
   }
   function contentMaxStart(length) { return Math.max(0, Math.ceil(Math.max(0, length - contentWindowSize) / 4) * 4); }
@@ -689,37 +690,142 @@
   var tmdbKey = ''; try { tmdbKey = localStorage.getItem(TMDB_KEY_STORE) || ''; } catch (_) {}
   if (!api.validTmdbKey(tmdbKey)) tmdbKey = '';
   var detailsRequest = null; var detailsCache = new Map();
-  // Saved ratings per movie (provider and IMDb), kept on this TV so each movie
-  // is looked up once. 'p'/'i' absent = not looked up yet, '' = none.
-  var RATING_STORE = 'lg-stream-ratings-v1'; var RATING_LIMIT = 6000; var OMDB_DAILY = 900;
-  var ratings = { day: '', omdb: 0, items: {} };
-  try { var storedRatings = JSON.parse(localStorage.getItem(RATING_STORE) || 'null'); if (storedRatings && storedRatings.items && typeof storedRatings.items === 'object') ratings = { day: String(storedRatings.day || ''), omdb: Number(storedRatings.omdb) || 0, items: storedRatings.items }; } catch (_) {}
-  var ratingsTimer = null;
-  function saveRatings() {
-    clearTimeout(ratingsTimer);
-    ratingsTimer = setTimeout(function () {
-      var keys = Object.keys(ratings.items);
-      if (keys.length > RATING_LIMIT) { keys.sort(function (a, b) { return (ratings.items[a].t || 0) - (ratings.items[b].t || 0); }); keys.slice(0, keys.length - RATING_LIMIT).forEach(function (key) { delete ratings.items[key]; }); }
-      try { localStorage.setItem(RATING_STORE, JSON.stringify(ratings)); } catch (_) {}
-    }, 1500);
+  // Saved ratings per movie (provider and IMDb), kept on this TV in IndexedDB
+  // so each movie is looked up once. Value [imdb, provider]: null = not looked
+  // up yet, '' = none. The daily OMDb count lives in localStorage.
+  var RATING_META = 'lg-stream-ratings-meta-v1'; var OMDB_DAILY = 900; var PREFETCH_DAILY = 800;
+  var ratings = { day: '', omdb: 0 };
+  try { var storedMeta = JSON.parse(localStorage.getItem(RATING_META) || 'null'); if (storedMeta) ratings = { day: String(storedMeta.day || ''), omdb: Number(storedMeta.omdb) || 0 }; } catch (_) {}
+  var ratingItems = new Map(); var ratingsLoaded = false; var ratingDb = null; var ratingWrites = new Map(); var ratingWriteTimer = null; var imdbKnown = 0;
+  var RATING_SOURCES = ['both', 'imdb', 'provider', 'off'];
+  var ratingSource = 'both'; try { ratingSource = localStorage.getItem('lg-stream-rating-source-v1') || 'both'; } catch (_) {}
+  if (RATING_SOURCES.indexOf(ratingSource) < 0) ratingSource = 'both';
+  var prefetchOn = true; try { prefetchOn = localStorage.getItem('lg-stream-imdb-prefetch-v1') !== 'off'; } catch (_) {}
+  function saveRatingMeta() { try { localStorage.setItem(RATING_META, JSON.stringify(ratings)); } catch (_) {} }
+  function flushRatingWrites() {
+    ratingWriteTimer = null; if (!ratingDb || !ratingWrites.size) return;
+    var writes = ratingWrites; ratingWrites = new Map();
+    try { var store = ratingDb.transaction('items', 'readwrite').objectStore('items'); writes.forEach(function (value, key) { store.put(value, key); }); } catch (_) {}
+  }
+  function queueRatingWrite(key, value) { ratingWrites.set(key, value); if (!ratingWriteTimer) ratingWriteTimer = setTimeout(flushRatingWrites, 2000); }
+  function setRatingItem(key, item) {
+    var before = ratingItems.get(key); if (before && before.i) imdbKnown -= 1; if (item.i) imdbKnown += 1;
+    ratingItems.set(key, item); queueRatingWrite(key, [item.i === undefined ? null : item.i, item.p === undefined ? null : item.p]);
+  }
+  function loadRatings() {
+    var finish = function () {
+      // One-time move of ratings saved by the first 0.9.2 builds.
+      try {
+        var legacy = JSON.parse(localStorage.getItem('lg-stream-ratings-v1') || 'null');
+        if (legacy && legacy.items) { Object.keys(legacy.items).forEach(function (key) { var old = legacy.items[key] || {}; if (!ratingItems.has(key)) setRatingItem(key, { i: old.i, p: old.p }); }); if (!localStorage.getItem(RATING_META)) { ratings = { day: String(legacy.day || ''), omdb: Number(legacy.omdb) || 0 }; saveRatingMeta(); } }
+        localStorage.removeItem('lg-stream-ratings-v1');
+      } catch (_) {}
+      ratingsLoaded = true;
+      Array.prototype.forEach.call($('movie-grid').querySelectorAll('.movie-card'), function (card) { applyCardRating(card, Number(card.dataset.index)); });
+      renderImdbSettings(); schedulePrefetch(30000);
+    };
+    try {
+      var request = indexedDB.open('lg-stream-ratings', 1);
+      request.onupgradeneeded = function () { request.result.createObjectStore('items'); };
+      request.onerror = function () { finish(); };
+      request.onsuccess = function () {
+        ratingDb = request.result;
+        var transaction = ratingDb.transaction('items', 'readonly'); var store = transaction.objectStore('items');
+        var keys = store.getAllKeys(); var values = store.getAll();
+        transaction.oncomplete = function () {
+          var keyList = keys.result || []; var valueList = values.result || [];
+          for (var position = 0; position < keyList.length; position += 1) {
+            var value = valueList[position] || []; var item = {};
+            if (typeof value[0] === 'string') item.i = value[0]; if (typeof value[1] === 'string') item.p = value[1];
+            ratingItems.set(String(keyList[position]), item); if (item.i) imdbKnown += 1;
+          }
+          finish();
+        };
+        transaction.onerror = function () { finish(); };
+      };
+    } catch (_) { finish(); }
   }
   function ratingDay() { var now = new Date(); return now.getFullYear() + '-' + (now.getMonth() + 1) + '-' + now.getDate(); }
-  function omdbAllowed() { if (ratings.day !== ratingDay()) { ratings.day = ratingDay(); ratings.omdb = 0; } return !!omdbKey && ratings.omdb < OMDB_DAILY; }
-  function noteOmdbUse() { omdbAllowed(); ratings.omdb += 1; saveRatings(); }
+  function omdbAllowed(limit) { if (ratings.day !== ratingDay()) { ratings.day = ratingDay(); ratings.omdb = 0; saveRatingMeta(); } return !!omdbKey && ratingSource !== 'provider' && ratingSource !== 'off' && ratings.omdb < (limit || OMDB_DAILY); }
+  function noteOmdbUse() { omdbAllowed(); ratings.omdb += 1; saveRatingMeta(); }
+  function providerRatingsWanted() { return ratingSource === 'both' || ratingSource === 'provider'; }
   function ratingKey(index) { return entryKeys && entryKeys.length === sources.length && index >= 0 && index < entryKeys.length ? String(entryKeys[index]) : null; }
-  function storedRating(index) { var key = ratingKey(index); return key ? ratings.items[key] || null : null; }
+  function storedRating(index) { var key = ratingKey(index); return key ? ratingItems.get(key) || null : null; }
   function rememberRating(index, provider, imdb) {
     var key = ratingKey(index); if (!key) return;
-    var item = ratings.items[key] || {};
+    var old = ratingItems.get(key) || {}; var item = { i: old.i, p: old.p };
     if (provider !== undefined) item.p = provider || '';
     if (imdb !== undefined) item.i = imdb || '';
-    item.t = Date.now(); ratings.items[key] = item; saveRatings();
+    setRatingItem(key, item);
     var card = $('movie-grid').querySelector('.movie-card[data-index="' + index + '"]'); if (card) applyCardRating(card, index);
   }
+  // Which rating is shown follows the owner's choice in Settings.
   function bestRating(index) {
+    if (ratingSource === 'off') return null;
     var item = storedRating(index) || {}; var own = sources[index] && Number(sources[index].rating) ? String(sources[index].rating) : '';
-    if (item.i) return { value: item.i, imdb: true };
+    if (ratingSource !== 'provider' && item.i) return { value: item.i, imdb: true };
+    if (ratingSource === 'imdb') return null;
     var provider = item.p || own; return provider ? { value: provider, imdb: false } : null;
+  }
+  // While the app is open and idle (no playback, no key press for 20 s),
+  // look up IMDb ratings for every movie, newest first, one every 1.5 s, at
+  // most PREFETCH_DAILY a day. Any key press cancels the request in flight.
+  var prefetchTimer = null; var prefetchRequest = null; var prefetchQueue = null; var prefetchQueueKey = null; var prefetchPosition = 0; var prefetchStopped = '';
+  function prefetchEnabled() { return prefetchOn && !!omdbKey && ratingSource !== 'provider' && ratingSource !== 'off'; }
+  function schedulePrefetch(delay) { clearTimeout(prefetchTimer); prefetchTimer = null; if (prefetchEnabled() && ratingsLoaded) prefetchTimer = setTimeout(runPrefetch, delay); }
+  function cancelPrefetchRequest() { if (prefetchRequest) { var request = prefetchRequest; prefetchRequest = null; request.abort(); } }
+  function prefetchBlocked() {
+    return document.hidden || unloading || playingIndex !== null || watchMode || playlistRunning || !detailsPanel.hidden || !!detailsRequest || !!ratingFillRequest || typeof AbortController !== 'function' || Date.now() - lastUserActivityAt < 20000;
+  }
+  function buildPrefetchQueue() {
+    var key = catalogViewRevision + ':' + sources.length;
+    if (prefetchQueueKey === key && prefetchQueue) return;
+    var movies = [];
+    for (var index = 0; index < sources.length; index += 1) if (entrySection(index) === 'movies' && ratingKey(index)) movies.push(index);
+    movies.sort(function (a, b) { return (api.providerSerial(entryKeys[b]) || 0) - (api.providerSerial(entryKeys[a]) || 0) || a - b; });
+    prefetchQueue = movies; prefetchQueueKey = key; prefetchPosition = 0;
+  }
+  function runPrefetch() {
+    prefetchTimer = null; if (!prefetchEnabled()) return;
+    if (!omdbAllowed(PREFETCH_DAILY)) { prefetchStopped = 'daily'; renderPrefetchStatus(); schedulePrefetch(30 * 60 * 1000); return; }
+    if (prefetchBlocked()) { schedulePrefetch(5000); return; }
+    buildPrefetchQueue();
+    var target = -1; var title = ''; var checked = 0;
+    while (prefetchPosition < prefetchQueue.length && checked < 3000) {
+      var index = prefetchQueue[prefetchPosition]; var item = storedRating(index) || {}; checked += 1;
+      if (item.i !== undefined) { prefetchPosition += 1; continue; }
+      var entry = sources[index]; title = api.omdbTitle(entry.originalName !== undefined ? entry.originalName : entry.name);
+      if (!title) { rememberRating(index, undefined, ''); prefetchPosition += 1; continue; }
+      target = index; break;
+    }
+    if (target < 0) { if (prefetchPosition >= prefetchQueue.length) { prefetchStopped = 'done'; renderPrefetchStatus(); } else schedulePrefetch(50); return; }
+    var controller = new AbortController(); prefetchRequest = controller;
+    var timer = setTimeout(function () { controller.abort(); }, 8000); var retryLater = false;
+    noteOmdbUse();
+    fetchJson(api.omdbUrl(omdbKey, title, itemYear(target)), controller).then(function (reply) {
+      clearTimeout(timer); if (prefetchRequest === controller) prefetchRequest = null;
+      if (controller.signal.aborted) { schedulePrefetch(5000); return; }
+      var failure = api.omdbFailure(reply);
+      if (reply === null || failure) {
+        // No retry burst: wait, then try the same movie again later.
+        if (failure === 'limit') ratings.omdb = OMDB_DAILY;
+        prefetchStopped = failure === 'key' ? 'key' : 'network'; retryLater = true;
+      } else {
+        var imdb = api.omdbDetails(reply); rememberRating(target, undefined, imdb ? imdb.rating : ''); prefetchPosition += 1; prefetchStopped = '';
+      }
+      renderPrefetchStatus();
+      schedulePrefetch(retryLater ? 10 * 60 * 1000 : 1500);
+    });
+  }
+  function renderPrefetchStatus() {
+    if (!$('prefetch-status')) return;
+    LGI18n.text($('prefetch-toggle'), prefetchOn ? 'مفعّل — إيقاف' : 'متوقف — تشغيل');
+    $('prefetch-toggle').setAttribute('aria-pressed', String(prefetchOn));
+    var total = prefetchQueue ? prefetchQueue.length : 0;
+    var text = !omdbKey ? 'يحتاج مفتاح OMDb.' : !prefetchEnabled() ? 'متوقف.' :
+      'تقييمات IMDb المحفوظة: ' + imdbKnown + (total ? ' من ' + total + ' فيلم' : '') + ' · اليوم ' + Math.min(ratings.omdb, OMDB_DAILY) + ' من ' + PREFETCH_DAILY +
+      (prefetchStopped === 'daily' ? ' · اكتمل حد اليوم، يكمل غدًا' : prefetchStopped === 'done' ? ' · اكتمل كل الأفلام' : prefetchStopped === 'key' ? ' · رفض OMDb المفتاح' : prefetchStopped === 'network' ? ' · تعذر الاتصال، يعيد لاحقًا' : '');
+    LGI18n.text($('prefetch-status'), text);
   }
   function applyCardRating(card, index) {
     var rating = bestRating(index); var badge = card.querySelector('.card-rating');
@@ -746,7 +852,7 @@
       var index = Number(cards[position].dataset.index); var entry = sources[index]; var item = storedRating(index);
       if (!entry || !ratingKey(index) || entrySection(index) !== 'movies') continue;
       item = item || {};
-      var infoUrl = item.p === undefined ? api.vodInfoUrl(activePlaylistUrl, entry.url) : null;
+      var infoUrl = item.p === undefined && providerRatingsWanted() ? api.vodInfoUrl(activePlaylistUrl, entry.url) : null;
       var title = item.i === undefined && omdbAllowed() ? api.omdbTitle(entry.originalName !== undefined ? entry.originalName : entry.name) : '';
       if (item.i === undefined && omdbKey && !title && omdbAllowed()) { rememberRating(index, undefined, ''); continue; }
       if (infoUrl || title) target = { index: index, infoUrl: infoUrl, title: title };
@@ -779,10 +885,11 @@
     var arabicPlot = document.documentElement.lang === 'ar' && arabic ? arabic : '';
     var year = itemYear(index) || info.year; var rating = details.rating || info.rating;
     LGI18n.text($('details-year'), year ? 'الإنتاج: ' + year : 'تاريخ الإنتاج غير متوفر');
-    var ratings = [];
-    if (imdb.rating) ratings.push('IMDb ' + imdb.rating + '/10');
-    if (rating) ratings.push((imdb.rating ? 'المزود ' : 'التقييم: ') + rating + '/10');
-    LGI18n.text($('details-rating-text'), ratings.length ? ratings.join(' · ') : 'التقييم غير متوفر لدى المزود');
+    var shown = [];
+    if (imdb.rating && ratingSource !== 'provider' && ratingSource !== 'off') shown.push('IMDb ' + imdb.rating + '/10');
+    if (rating && (ratingSource === 'provider' || (ratingSource === 'both'))) shown.push((shown.length ? 'المزود ' : 'التقييم: ') + rating + '/10');
+    $('details-rating').hidden = ratingSource === 'off';
+    LGI18n.text($('details-rating-text'), shown.length ? shown.join(' · ') : 'التقييم غير متوفر');
     LGI18n.provider($('details-description'), arabicPlot || details.description || info.plot || imdb.plot, 'الوصف غير متوفر لدى المزود.');
     var extra = [];
     if (info.genre) extra.push(info.genre);
@@ -856,6 +963,8 @@
     LGI18n.attribute($('imdb-key'), 'placeholder', omdbKey ? '✓ محفوظ — اكتب مفتاحًا جديدًا للاستبدال' : 'اكتب مفتاح OMDb');
     LGI18n.attribute($('tmdb-key'), 'placeholder', tmdbKey ? '✓ محفوظ — اكتب مفتاحًا جديدًا للاستبدال' : 'اكتب مفتاح TMDB');
     $('imdb-state').classList.toggle('key-on', !!omdbKey); $('tmdb-state').classList.toggle('key-on', !!tmdbKey);
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rating-source]'), function (button) { var on = button.dataset.ratingSource === ratingSource; button.classList.toggle('active', on); button.setAttribute('aria-pressed', String(on)); });
+    renderPrefetchStatus();
     LGI18n.text($('tmdb-state'), tmdbKey ? 'الوصف العربي مفعّل — المفتاح محفوظ على هذا التلفزيون' : 'الوصف العربي غير مفعّل');
     $('tmdb-remove').disabled = !tmdbKey;
     if (omdbKey || tmdbKey) LGI18n.text($('settings-imdb').querySelector('span'), (omdbKey ? 'IMDb مفعّل' : 'IMDb غير مفعّل') + ' · ' + (tmdbKey ? 'الوصف العربي مفعّل' : 'الوصف العربي غير مفعّل'));
@@ -899,10 +1008,11 @@
       omdbKey = key; $('imdb-key').value = ''; detailsCache.forEach(function (item) { item.imdb = undefined; });
       try { localStorage.setItem(OMDB_KEY_STORE, key); LGI18n.text($('imdb-status'), 'تم الحفظ. تقييم IMDb يظهر في تفاصيل الأفلام.'); }
       catch (_) { LGI18n.text($('imdb-status'), 'يعمل لهذه الجلسة فقط؛ تعذر الحفظ.'); }
-      renderImdbSettings(); $('close-imdb').focus();
+      renderImdbSettings(); schedulePrefetch(30000); $('close-imdb').focus();
     });
   }
   function removeImdbKey() {
+    cancelPrefetchRequest(); clearTimeout(prefetchTimer);
     omdbKey = ''; detailsCache.forEach(function (item) { item.imdb = undefined; }); try { localStorage.removeItem(OMDB_KEY_STORE); } catch (_) {}
     LGI18n.text($('imdb-status'), 'حُذف المفتاح من هذا التلفزيون.'); renderImdbSettings(); $('imdb-key').focus();
   }
@@ -1386,7 +1496,7 @@
   });
   $('close-track-picker').addEventListener('click', function () { closeTrackPicker(true); });
   function noteUserActivity() {
-    lastUserActivityAt = Date.now();
+    lastUserActivityAt = Date.now(); cancelPrefetchRequest();
     if (playlistRunning && playlistAutomatic) prepareForegroundAction();
   }
   function scheduleAutoUpdate() {
@@ -2117,6 +2227,20 @@
   $('imdb-remove').addEventListener('click', removeImdbKey);
   $('tmdb-form').addEventListener('submit', function (event) { event.preventDefault(); saveTmdbKey(); });
   $('tmdb-remove').addEventListener('click', removeTmdbKey);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-rating-source]'), function (button) {
+    button.addEventListener('click', function () {
+      ratingSource = button.dataset.ratingSource; try { localStorage.setItem('lg-stream-rating-source-v1', ratingSource); } catch (_) {}
+      sortRevision += 1; renderImdbSettings();
+      Array.prototype.forEach.call($('movie-grid').querySelectorAll('.movie-card'), function (card) { applyCardRating(card, Number(card.dataset.index)); });
+      cancelPrefetchRequest(); schedulePrefetch(30000);
+    });
+  });
+  $('prefetch-toggle').addEventListener('click', function () {
+    prefetchOn = !prefetchOn; try { localStorage.setItem('lg-stream-imdb-prefetch-v1', prefetchOn ? 'on' : 'off'); } catch (_) {}
+    if (!prefetchOn) { cancelPrefetchRequest(); clearTimeout(prefetchTimer); } else schedulePrefetch(30000);
+    renderImdbSettings();
+  });
+  loadRatings();
   renderImdbSettings();
   ['settings-speed', 'settings-info', 'settings-appearance', 'settings-imdb', 'manage-groups-button'].forEach(function (id) {
     $(id).addEventListener('click', function () {
