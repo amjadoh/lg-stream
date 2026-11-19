@@ -710,6 +710,43 @@
     });
     return result;
   }
+  // Provider details for one movie (Xtream get_vod_info), built from the saved
+  // get.php source; requested only when that movie's details open.
+  function vodInfoUrl(playlistSource, movieUrl) {
+    var playlist = nativeHlsPlaylist(playlistSource);
+    var match = /\/movie\/[^/?#]+\/[^/?#]+\/(\d{1,9})\.[A-Za-z0-9]{1,8}(?:[?#]|$)/i.exec(String(movieUrl || ''));
+    if (!playlist || !match) return null;
+    var info = new URL('/player_api.php', playlist.origin);
+    info.searchParams.set('username', playlist.searchParams.get('username'));
+    info.searchParams.set('password', playlist.searchParams.get('password'));
+    info.searchParams.set('action', 'get_vod_info'); info.searchParams.set('vod_id', match[1]);
+    return info.href;
+  }
+  // Keep only short plain-text fields from the provider reply.
+  function vodDetails(reply) {
+    var info = reply && typeof reply === 'object' && reply.info && typeof reply.info === 'object' && !Array.isArray(reply.info) ? reply.info : null;
+    if (!info) return null;
+    function text(value, max) {
+      if (typeof value === 'number' && isFinite(value)) value = String(value);
+      if (typeof value !== 'string') return '';
+      value = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+      return value.length > max ? value.slice(0, max - 1) + '…' : value;
+    }
+    var rating = Number(text(info.rating, 8));
+    var year = /(?:19|20)\d{2}/.exec(text(info.year, 12) || text(info.releasedate, 24));
+    var duration = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(text(info.duration, 12));
+    var minutes = duration ? Number(duration[1]) * 60 + Number(duration[2]) : 0;
+    var details = {
+      plot: text(info.plot || info.description, 900),
+      rating: rating > 0 && rating <= 10 ? String(Math.round(rating * 10) / 10) : '',
+      year: year ? year[0] : '',
+      genre: text(info.genre, 120),
+      minutes: minutes > 0 && minutes < 1000 ? minutes : 0,
+      director: text(info.director, 120),
+      cast: text(info.cast, 200)
+    };
+    return details.plot || details.rating || details.year || details.genre || details.minutes || details.director || details.cast ? details : null;
+  }
   // Xtream login typed on the TV becomes the same get.php playlist link.
   function xtreamPlaylistUrl(server, username, password) {
     var raw = String(server || '').trim(); username = String(username || '').trim(); password = String(password || '');
@@ -725,5 +762,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));
