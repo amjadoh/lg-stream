@@ -347,6 +347,7 @@ async function main() {
     await page.waitForFunction(() => /تم الحفظ/.test(document.getElementById('imdb-status').textContent));
     assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-omdb-key-v1')), 'abc12345');
     assert.equal(await page.locator('#imdb-key').inputValue(), '', 'The typed key is cleared');
+    assert.match(await page.locator('#imdb-key').getAttribute('placeholder'), /محفوظ/, 'The field itself shows the key is saved');
     assert.equal((await page.locator('body').innerText()).includes('abc12345'), false, 'The key is never shown');
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
     await page.locator('.primary-button[data-section="movies"]').click();
