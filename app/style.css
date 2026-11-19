@@ -152,6 +152,17 @@ input::placeholder { color: #7f90a7; }
 .details-card .details-description { line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 7; overflow: hidden; unicode-bidi: plaintext; text-align: start; }
 .details-card .details-note { margin: 4px 0 0; font-size: 16px; line-height: 1.5; }
 .details-card .details-actions { flex-shrink: 0; margin-top: 22px; }
+/* Large, distance-readable details: sizes follow the screen height so 720p and 1080p look the same. */
+#details-panel .details-card { width: 88vw; max-width: none; max-height: 94vh; padding: 3.4vh 3.6vw; grid-template-columns: 25vh 1fr; gap: 2.6vw; border-radius: 2.4vh; }
+#details-panel .details-card.no-poster { grid-template-columns: minmax(0, 1fr); }
+#details-panel .details-poster { width: 25vh; height: 37vh; }
+#details-panel .details-body h2 { font-size: 4.2vh; line-height: 1.25; margin: 0 0 1.2vh; }
+#details-panel .details-body .details-year, #details-panel .details-body .details-rating { font-size: 2.9vh; line-height: 1.4; margin: 0 0 .8vh; }
+#details-panel .details-body .details-extra { font-size: 2.4vh; line-height: 1.45; margin: 0 0 1.2vh; }
+#details-panel .details-body .details-description { font-size: 3.1vh; line-height: 1.55; -webkit-line-clamp: 8; color: #e3eaf3; margin: 0; }
+#details-panel .details-body .details-note { font-size: 1.9vh; margin: 1.2vh 0 0; }
+#details-panel .details-actions { margin-top: 2.4vh; }
+#details-panel .details-actions button { font-size: 3vh; padding: 1.2vh 2.4vw; }
 .setup-divider { margin: 26px 0 8px; padding-top: 20px; border-top: 1px solid #3b4d64; font-size: 22px; }
 .playlist-status { min-height: 28px; margin: 10px 0 !important; color: #f6d28a !important; }
 #clear-sources { color: #ffc6b5; }

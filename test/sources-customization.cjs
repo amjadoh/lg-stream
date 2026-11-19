@@ -330,7 +330,9 @@ async function main() {
 
     // Ratings on the visible cards, saved on the TV; then IMDb with the owner's key.
     await page.waitForFunction(() => Array.from(document.querySelectorAll('#movie-grid .card-rating')).filter(badge => badge.textContent === '★ 7.4').length === 2);
-    await page.waitForFunction(() => /"p":"7.4"/.test(localStorage.getItem('lg-stream-ratings-v1') || ''), null, { timeout: 5000 });
+    const savedRatings = () => page.evaluate(() => new Promise(resolve => { const open = indexedDB.open('lg-stream-ratings'); open.onsuccess = () => { const request = open.result.transaction('items').objectStore('items').getAll(); request.onsuccess = () => { open.result.close(); resolve(request.result); }; }; }));
+    for (let wait = 0; wait < 30 && (await savedRatings()).filter(value => value[1] === '7.4').length < 2; wait++) await page.waitForTimeout(200);
+    assert.equal((await savedRatings()).length, 2, 'Ratings are saved on the TV in IndexedDB');
     await page.locator('#nav-settings').click();
     await page.locator('#settings-imdb').click();
     assert.equal(await active(), 'imdb-key', 'The IMDb panel opens on the key field');
@@ -360,6 +362,24 @@ async function main() {
     assert.match(await page.locator('#details-rating').innerText(), /IMDb 8\.7\/10 · .*7\.4\/10/);
     assert.equal(await page.evaluate(() => window.__fetches.length), lookups, 'Details reuse the saved ratings');
     await page.keyboard.press('Escape');
+    // The owner chooses which rating shows: IMDb only hides the provider rating.
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="imdb"]').click();
+    assert.equal(await page.locator('[data-rating-source="imdb"]').getAttribute('aria-pressed'), 'true');
+    assert.match(await page.locator('#prefetch-status').innerText(), /تقييمات IMDb المحفوظة: 2/);
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#movie-grid .card-rating:not(.imdb)').count(), 0, 'No provider badge with IMDb only');
+    await page.locator('#movie-grid .movie-card').first().click();
+    assert.doesNotMatch(await page.locator('#details-rating').innerText(), /7\.4/, 'Details hide the provider rating too');
+    await page.keyboard.press('Escape');
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="off"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#movie-grid .card-rating').count(), 0, 'No badges when ratings are off');
+    await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
+    await page.locator('[data-rating-source="both"]').click();
+    await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-rating-source-v1')), 'both');
     await page.locator('#sort-button').click();
     assert.equal(await page.locator('#sort-menu [data-sort="rating"]').isDisabled(), false, 'Rating sort is available');
     await page.locator('#sort-menu [data-sort="rating"]').click();
@@ -382,7 +402,7 @@ async function main() {
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
 
     assert.deepEqual(errors, []);
-    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key and rating sort, Arabic TMDB descriptions, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, Arabic TMDB descriptions, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();
