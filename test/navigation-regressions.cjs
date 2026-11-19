@@ -158,6 +158,8 @@ async function main() {
       for (let column = 0; column < 4; column++) {
         await page.keyboard.press('ArrowUp');
         assert.equal(await page.evaluate(() => document.activeElement.id), 'sort-button');
+        for (let extra = 0; extra < 3; extra++) await page.keyboard.press('ArrowUp');
+        assert.equal(await page.evaluate(() => document.activeElement.id), 'sort-button', 'Holding Up stops at the sort button instead of leaving the cards');
         await page.keyboard.press('ArrowDown');
         await focusedIndex(base + column, 'movie-card');
         if (column < 3) await page.keyboard.press('ArrowLeft');

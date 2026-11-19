@@ -515,10 +515,47 @@ test('movie details come from the provider get_vod_info for the saved Xtream sou
   assert.equal(api.vodInfoUrl(source, 'http://cdn.invalid/live/viewer/s3cret/5.ts'), null);
 
   const details = api.vodDetails({ info: { plot: '  A\nplot  ', rating: '7.46', releasedate: '2021-05-01', genre: 'Drama', duration: '01:52:10', director: '', cast: 42, mpaa: { x: 1 } } });
-  assert.deepEqual(details, { plot: 'A plot', rating: '7.5', year: '2021', genre: 'Drama', minutes: 112, director: '', cast: '42' });
+  assert.deepEqual(details, { plot: 'A plot', rating: '7.5', year: '2021', genre: 'Drama', minutes: 112, director: '', cast: '42', tmdb: '' });
+  assert.equal(api.vodDetails({ info: { plot: 'x', tmdb_id: '603' } }).tmdb, '603');
+  assert.equal(api.vodDetails({ info: { plot: 'x', tmdb_id: 'abc' } }).tmdb, '');
   assert.equal(api.vodDetails({ info: { plot: '', rating: '0', year: '', genre: '' } }), null, 'Empty provider info shows nothing');
   assert.equal(api.vodDetails({ info: { rating: '57' } }), null, 'A rating outside 0-10 is ignored');
   assert.equal(api.vodDetails({ info: [] }), null);
   assert.equal(api.vodDetails('not json'), null);
   assert.equal(api.vodDetails({ info: { plot: 'x'.repeat(2000) } }).plot.length, 900, 'Long text is capped');
+});
+
+test('OMDb lookups use a plain title, the year and only a valid key', () => {
+  const api = require('../app/core.js');
+  assert.equal(api.omdbTitle('EN - The Matrix (1999)'), 'The Matrix');
+  assert.equal(api.omdbTitle('|AR| Inception [MULTI-SUB] 4K'), 'Inception');
+  assert.equal(api.omdbTitle('4K - Dune: Part Two - 2024'), 'Dune: Part Two');
+  assert.equal(api.omdbTitle('فيلم عربي (2020)'), '', 'Arabic-only titles are not sent');
+  assert.equal(api.validOmdbKey('abc12345'), true);
+  assert.equal(api.validOmdbKey('abc 12345'), false);
+  assert.equal(api.validOmdbKey(''), false);
+  const url = new URL(api.omdbUrl('abc12345', 'The Matrix', 1999));
+  assert.equal(url.origin, 'https://www.omdbapi.com');
+  assert.deepEqual([url.searchParams.get('t'), url.searchParams.get('y'), url.searchParams.get('type')], ['The Matrix', '1999', 'movie']);
+  assert.equal(api.omdbUrl('bad key', 'The Matrix', 1999), null);
+  assert.equal(api.omdbUrl('abc12345', '', 1999), null);
+  assert.deepEqual(api.omdbDetails({ Response: 'True', imdbRating: '8.7', Plot: 'A hacker learns.', imdbID: 'tt0133093' }), { rating: '8.7', plot: 'A hacker learns.', id: 'tt0133093' });
+  assert.deepEqual(api.omdbDetails({ Response: 'True', imdbRating: 'N/A', Plot: 'Only plot', imdbID: 'x' }), { rating: '', plot: 'Only plot', id: '' });
+  assert.equal(api.omdbDetails({ Response: 'False', Error: 'Movie not found!' }), null);
+  assert.equal(api.omdbFailure({ Response: 'False', Error: 'Request limit reached!' }), 'limit');
+  assert.equal(api.omdbFailure({ Response: 'False', Error: 'Invalid API key!' }), 'key');
+  assert.equal(api.omdbFailure({ Response: 'False', Error: 'Movie not found!' }), '', 'Not found is an answer, not a failure');
+});
+
+test('Arabic descriptions come from TMDB by id with a valid key only', () => {
+  const api = require('../app/core.js');
+  const key = '0123456789abcdef0123456789abcdef';
+  const url = new URL(api.tmdbUrl(key, '603'));
+  assert.equal(url.origin + url.pathname, 'https://api.themoviedb.org/3/movie/603');
+  assert.equal(url.searchParams.get('language'), 'ar');
+  assert.equal(api.tmdbUrl('short', '603'), null);
+  assert.equal(api.tmdbUrl(key, '60a'), null);
+  assert.equal(api.tmdbArabicPlot({ overview: '  مبرمج يكتشف\nالحقيقة ' }), 'مبرمج يكتشف الحقيقة');
+  assert.equal(api.tmdbArabicPlot({ overview: 'English fallback only' }), '', 'An untranslated overview is not shown as Arabic');
+  assert.equal(api.tmdbArabicPlot(null), '');
 });
