@@ -500,3 +500,25 @@ test('newest sort uses the provider stream id and titles give a release year', (
   assert.equal(api.titleYear('Ocean 11', now), 0);
   assert.equal(api.titleYear('2012 Remastered', now), 0, 'A leading number is not taken as the year');
 });
+
+test('movie details come from the provider get_vod_info for the saved Xtream source only', () => {
+  const api = require('../app/core.js');
+  const source = 'http://server.invalid:8080/get.php?username=viewer&password=s3cret%26x&type=m3u_plus&output=ts';
+  const info = new URL(api.vodInfoUrl(source, 'http://cdn.invalid/movie/viewer/s3cret/123456.mkv?x=1'));
+  assert.equal(info.origin, 'http://server.invalid:8080', 'The request goes to the saved source server, not a CDN host');
+  assert.equal(info.pathname, '/player_api.php');
+  assert.equal(info.searchParams.get('action'), 'get_vod_info');
+  assert.equal(info.searchParams.get('vod_id'), '123456');
+  assert.equal(info.searchParams.get('password'), 's3cret&x');
+  assert.equal(api.vodInfoUrl(source, 'http://cdn.invalid/series/viewer/s3cret/77.mp4'), null, 'Episodes have no movie id');
+  assert.equal(api.vodInfoUrl('https://lists.invalid/my.m3u', 'http://cdn.invalid/movie/u/p/5.mkv'), null, 'A plain M3U link has no Xtream API');
+  assert.equal(api.vodInfoUrl(source, 'http://cdn.invalid/live/viewer/s3cret/5.ts'), null);
+
+  const details = api.vodDetails({ info: { plot: '  A\nplot  ', rating: '7.46', releasedate: '2021-05-01', genre: 'Drama', duration: '01:52:10', director: '', cast: 42, mpaa: { x: 1 } } });
+  assert.deepEqual(details, { plot: 'A plot', rating: '7.5', year: '2021', genre: 'Drama', minutes: 112, director: '', cast: '42' });
+  assert.equal(api.vodDetails({ info: { plot: '', rating: '0', year: '', genre: '' } }), null, 'Empty provider info shows nothing');
+  assert.equal(api.vodDetails({ info: { rating: '57' } }), null, 'A rating outside 0-10 is ignored');
+  assert.equal(api.vodDetails({ info: [] }), null);
+  assert.equal(api.vodDetails('not json'), null);
+  assert.equal(api.vodDetails({ info: { plot: 'x'.repeat(2000) } }).plot.length, 900, 'Long text is capped');
+});

@@ -43,8 +43,13 @@ async function main() {
       };
       proto.pause = function () { own(this).paused = true; this.dispatchEvent(new Event('pause')); };
       window.__fetches = [];
-      window.fetch = async url => {
+      window.fetch = async (url, options) => {
         window.__fetches.push(String(url));
+        if (String(url).includes('/player_api.php')) {
+          window.__infoSignal = options && options.signal;
+          if (window.__holdInfo) return new Promise(() => {});
+          return { ok: true, json: async () => ({ info: { plot: 'Provider plot for the film', rating: '7.4', genre: 'Drama', duration: '01:50:00', year: '2019' } }) };
+        }
         const lines = ['#EXTM3U'];
         const item = (section, group, id, title) => { lines.push('#EXTINF:-1 group-title="' + group + '",' + title); lines.push('https://media.invalid/' + section + '/user/pass/' + id + '.ts'); };
         const extra = localStorage.getItem('test-extra') === '1';
@@ -296,8 +301,31 @@ async function main() {
     assert.equal((await page.locator('body').innerText()).includes('s3cret'), false);
     assert.equal(await page.locator('#xtream-password').inputValue(), '', 'Typed credentials are cleared after use');
 
+    // Movie details: one provider request when opened, cached, cancelled on close.
+    await page.evaluate(() => { window.__fetches = []; });
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /Provider plot/.test(document.getElementById('details-description').textContent));
+    assert.match(await page.locator('#details-rating').innerText(), /7\.4 \/ 10/);
+    assert.match(await page.locator('#details-year').innerText(), /2019/);
+    assert.match(await page.locator('#details-extra').innerText(), /Drama · 110/);
+    const infoRequests = await page.evaluate(() => window.__fetches.map(url => new URL(url)).map(url => url.pathname + ' ' + url.searchParams.get('action') + ' ' + url.searchParams.get('vod_id')));
+    assert.deepEqual(infoRequests, ['/player_api.php get_vod_info 500']);
+    assert.equal((await page.locator('body').innerText()).includes('s3cret'), false, 'The provider request never shows credentials');
+    await page.keyboard.press('Escape');
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.waitForFunction(() => /Provider plot/.test(document.getElementById('details-description').textContent));
+    assert.equal(await page.evaluate(() => window.__fetches.length), 1, 'Reopening uses the cached details');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { window.__holdInfo = true; });
+    await page.locator('#movie-grid .movie-card').nth(1).click();
+    assert.equal(await page.locator('#details-status-info').isVisible(), true, 'Loading is shown while the provider answers');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.evaluate(() => window.__infoSignal.aborted), true, 'Closing details cancels the provider request');
+    await page.evaluate(() => { window.__holdInfo = false; });
+
     assert.deepEqual(errors, []);
-    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();

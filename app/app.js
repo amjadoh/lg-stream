@@ -677,19 +677,62 @@
     });
     LGI18n.text($('sort-button'), 'ترتيب: ' + ({ provider: 'المزوّد', newest: 'الأحدث', alpha: 'أبجدي', year: 'السنة', rating: 'التقييم', added: 'تاريخ الإضافة' }[contentSort] || 'المزوّد'));
   }
-  function closeDetails() { detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
+  // Provider details (description, rating, genre…) for one movie, fetched only
+  // when its details open: one request, no retry, cancelled on close.
+  var detailsRequest = null; var providerDetails = new Map();
+  function cancelDetailsRequest() { if (detailsRequest) { var request = detailsRequest; detailsRequest = null; request.abort(); } }
+  function showDetailsText(index, info) {
+    var details = sources[index] || {}; info = info || {};
+    var year = itemYear(index) || info.year; var rating = details.rating || info.rating;
+    LGI18n.text($('details-year'), year ? 'الإنتاج: ' + year : 'تاريخ الإنتاج غير متوفر');
+    LGI18n.text($('details-rating'), rating ? 'التقييم: ' + rating + ' / 10' : 'التقييم غير متوفر لدى المزود');
+    LGI18n.provider($('details-description'), details.description || info.plot, 'الوصف غير متوفر لدى المزود.');
+    var extra = [];
+    if (info.genre) extra.push(info.genre);
+    if (info.minutes) extra.push(info.minutes + (document.documentElement.lang === 'ar' ? ' دقيقة' : ' min'));
+    if (info.director) extra.push(info.director);
+    if (info.cast) extra.push(info.cast);
+    LGI18n.provider($('details-extra'), extra.join(' · '), '');
+    $('details-extra').hidden = !extra.length;
+  }
+  function loadProviderDetails(index) {
+    cancelDetailsRequest();
+    var entry = sources[index]; var cacheKey = entryKeys && entryKeys.length === sources.length ? entryKeys[index] : entry && entry.url;
+    if (!entry || entrySection(index) !== 'movies') return;
+    if (providerDetails.has(cacheKey)) { showDetailsText(index, providerDetails.get(cacheKey)); return; }
+    var url = api.vodInfoUrl(activePlaylistUrl, entry.url);
+    if (!url || typeof AbortController !== 'function') return;
+    var controller = new AbortController(); detailsRequest = controller;
+    var timer = setTimeout(function () { controller.abort(); }, 8000);
+    LGI18n.text($('details-status-info'), 'جارٍ جلب التفاصيل من المزود…'); $('details-status-info').hidden = false;
+    fetch(url, { signal: controller.signal, cache: 'no-store', credentials: 'omit' })
+      .then(function (response) { return response && response.ok && typeof response.json === 'function' ? response.json() : null; })
+      .then(function (reply) {
+        if (controller.signal.aborted) return;
+        var info = api.vodDetails(reply);
+        if (providerDetails.size >= 200) providerDetails.delete(providerDetails.keys().next().value);
+        providerDetails.set(cacheKey, info);
+        if (detailsIndex === index) showDetailsText(index, info);
+      })
+      .catch(function () {})
+      .then(function () {
+        clearTimeout(timer);
+        if (detailsRequest === controller) detailsRequest = null;
+        if (detailsIndex === index) $('details-status-info').hidden = true;
+      });
+  }
+  function closeDetails() { cancelDetailsRequest(); detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
   function openDetails(index) {
     cancelSwitch();
     selected = index; detailsIndex = index; var details = sources[index] || {};
     LGI18n.provider($('details-title'), details.name, activeSection === 'series' ? 'مسلسل' : 'فيلم');
-    var year = itemYear(index); LGI18n.text($('details-year'), year ? 'الإنتاج: ' + year : 'تاريخ الإنتاج غير متوفر');
-    LGI18n.text($('details-rating'), details.rating ? 'التقييم: ' + details.rating : 'التقييم غير متوفر في بيانات القائمة');
-    LGI18n.provider($('details-description'), details.description, 'الوصف غير متوفر في بيانات القائمة.');
+    $('details-status-info').hidden = true; showDetailsText(index, null);
     $('details-poster').hidden = !details.poster; detailsPanel.querySelector('.details-card').classList.toggle('no-poster', !details.poster);
     if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
     LGI18n.text($('details-status'), details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.');
     LGI18n.text($('details-trailer'), details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube');
     detailsPanel.hidden = false; saveViewState(true); $('details-play').focus();
+    loadProviderDetails(index);
   }
   var player = api.createPlayer({
     createVideo: function () {
@@ -1573,9 +1616,10 @@
   $('close-search').addEventListener('click', closeSearch);
   $('close-details').addEventListener('click', closeDetails);
   $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); detailsPanel.querySelector('.details-card').classList.add('no-poster'); });
-  $('details-play').addEventListener('click', function () { var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
+  $('details-play').addEventListener('click', function () { cancelDetailsRequest(); var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
   $('details-trailer').addEventListener('click', function () {
     if (!prepareForegroundAction()) return;
+    cancelDetailsRequest();
     var index = detailsIndex; var details = sources[index] || {};
     saveViewState(true);
     if (details.trailer) {
