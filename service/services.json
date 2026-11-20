@@ -1,0 +1,10 @@
+{
+  "id": "com.amjadoh.lgstream.service",
+  "description": "LG Stream background helper",
+  "services": [
+    {
+      "name": "com.amjadoh.lgstream.service",
+      "description": "Returns to LG Stream after a YouTube trailer"
+    }
+  ]
+}

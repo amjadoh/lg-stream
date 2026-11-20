@@ -978,10 +978,38 @@
       .then(function (response) { return response && response.ok && typeof response.json === 'function' ? response.json() : null; })
       .catch(function () { return null; });
   }
+  function detailsCacheKey(index) { return entryKeys && entryKeys.length === sources.length ? entryKeys[index] : sources[index].url; }
+  // The official trailer from TMDB, looked up when the trailer button is
+  // pressed: one videos request (plus a title search if the movie's TMDB id is
+  // still unknown). Resolves '' when there is none, null when cancelled.
+  var trailerRequest = null;
+  function cancelTrailerRequest() { if (trailerRequest) { var request = trailerRequest; trailerRequest = null; request.abort(); } }
+  function findTmdbTrailer(index) {
+    if (!tmdbKey || entrySection(index) !== 'movies' || typeof AbortController !== 'function') return Promise.resolve('');
+    var cacheKey = detailsCacheKey(index); var cached = detailsCache.get(cacheKey);
+    if (!cached) { cached = { info: undefined, imdb: undefined, tmdb: undefined }; detailsCache.set(cacheKey, cached); }
+    if (cached.trailer !== undefined) return Promise.resolve(cached.trailer);
+    cancelTrailerRequest();
+    var controller = new AbortController(); trailerRequest = controller;
+    var timer = setTimeout(function () { controller.abort(); }, 8000);
+    var stored = storedRating(index) || {}; var known = (cached.info && cached.info.tmdb) || stored.d;
+    var findId = known ? Promise.resolve(known) : tmdbLookup(index, cached.info, controller, appLanguage()).then(function (result) { return result && result.movie ? result.movie.id : ''; });
+    return findId.then(function (id) {
+      if (!id || controller.signal.aborted) return '';
+      return fetchJson(api.tmdbVideosUrl(tmdbKey, id), controller).then(function (reply) {
+        var key = api.tmdbTrailer(reply, appLanguage());
+        if (reply !== null && !controller.signal.aborted) cached.trailer = key;
+        return key;
+      });
+    }).then(function (key) {
+      clearTimeout(timer); if (trailerRequest === controller) trailerRequest = null;
+      return controller.signal.aborted ? null : key;
+    });
+  }
   function loadProviderDetails(index) {
     cancelDetailsRequest();
     var entry = sources[index]; if (!entry || entrySection(index) !== 'movies') return;
-    var cacheKey = entryKeys && entryKeys.length === sources.length ? entryKeys[index] : entry.url;
+    var cacheKey = detailsCacheKey(index);
     var cached = detailsCache.get(cacheKey) || { info: undefined, imdb: undefined, tmdb: undefined };
     var infoUrl = cached.info === undefined ? api.vodInfoUrl(activePlaylistUrl, entry.url) : null;
     var stored = storedRating(index) || {}; var lang = appLanguage();
@@ -1089,7 +1117,7 @@
     if (tmdbCheck) { tmdbCheck.abort(); tmdbCheck = null; $('tmdb-save').disabled = false; }
     $('imdb-key').value = ''; $('tmdb-key').value = '';
   }
-  function closeDetails() { cancelDetailsRequest(); detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
+  function closeDetails() { cancelDetailsRequest(); cancelTrailerRequest(); detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
   function openDetails(index) {
     cancelSwitch();
     selected = index; detailsIndex = index; var details = sources[index] || {};
@@ -1097,8 +1125,9 @@
     $('details-status-info').hidden = true; showDetailsText(index, null);
     $('details-poster').hidden = !details.poster; detailsPanel.querySelector('.details-card').classList.toggle('no-poster', !details.poster);
     if (details.poster) $('details-poster').src = details.poster; else $('details-poster').removeAttribute('src');
-    LGI18n.text($('details-status'), details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.');
-    LGI18n.text($('details-trailer'), details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube');
+    var officialTrailer = !!tmdbKey && activeSection === 'movies';
+    LGI18n.text($('details-status'), officialTrailer ? 'يُفتح الإعلان الرسمي في تطبيق YouTube، وعند الرجوع منه أو انتهائه تعود إلى هذا الفيلم.' : details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.');
+    LGI18n.text($('details-trailer'), officialTrailer || details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube');
     detailsPanel.hidden = false; saveViewState(true); $('details-play').focus();
     loadProviderDetails(index);
   }
@@ -1985,29 +2014,64 @@
   $('close-details').addEventListener('click', closeDetails);
   $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); detailsPanel.querySelector('.details-card').classList.add('no-poster'); });
   $('details-play').addEventListener('click', function () { cancelDetailsRequest(); var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
-  $('details-trailer').addEventListener('click', function () {
-    if (!prepareForegroundAction()) return;
-    cancelDetailsRequest();
-    var index = detailsIndex; var details = sources[index] || {};
-    saveViewState(true);
-    if (details.trailer) {
-      detailsPanel.hidden = true; detailsIndex = null; playingIndex = null; $('movie-browser').hidden = true; $('empty-state').hidden = true;
-      LGI18n.provider($('channel-title'), null, 'الإعلان'); if (player.start(details.trailer, 'trailer', performance.now())) setWatchMode(true); return;
-    }
+  // The packaged background service brings LG Stream back when the trailer
+  // stops in YouTube; the web app itself is suspended there (measured on the TV).
+  var trailerWatchArmed = false; var serviceBridge = null;
+  // done(ok) runs once: on the service's reply, or after 2 s without one.
+  function callTrailerService(method, done) {
+    var finished = false; var bridge = null;
+    var finish = function (ok) { if (finished) return; finished = true; clearTimeout(timer); if (serviceBridge === bridge) serviceBridge = null; if (done) done(ok); };
+    var timer = setTimeout(function () { finish(false); }, 2000);
+    try {
+      bridge = new window.PalmServiceBridge(); serviceBridge = bridge;
+      bridge.onservicecallback = function (raw) { var ok = false; try { ok = JSON.parse(raw).returnValue === true; } catch (_) {} finish(ok); };
+      bridge.call('luna://com.amjadoh.lgstream.service/' + method, '{}');
+    } catch (_) { finish(false); }
+  }
+  // YouTube refuses its embedded player inside a local webOS app (error 153,
+  // measured on the TV), so trailers open in the YouTube app.
+  function openYoutube(target, video) {
     stop();
-    var target = api.youtubeSearchTarget(details.name, details.year);
     if (!target || typeof window.PalmServiceBridge !== 'function') { LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube مباشرة على هذا الجهاز.'); return; }
-    LGI18n.text($('details-status'), 'جارٍ إرسال البحث إلى تطبيق YouTube…');
+    LGI18n.text($('details-status'), video ? 'جارٍ فتح الإعلان في تطبيق YouTube…' : 'جارٍ إرسال البحث إلى تطبيق YouTube…');
     try {
       youtubeBridge = new window.PalmServiceBridge();
       youtubeBridge.onservicecallback = function (raw) {
         var accepted = false;
         try { accepted = JSON.parse(raw).returnValue === true; } catch (_) {}
-        LGI18n.text($('details-status'), accepted ? 'أُرسل طلب البحث إلى تطبيق YouTube.' : 'تعذر فتح تطبيق YouTube.');
+        LGI18n.text($('details-status'), !accepted ? 'تعذر فتح تطبيق YouTube.' : video ? 'فُتح الإعلان في تطبيق YouTube.' : 'أُرسل طلب البحث إلى تطبيق YouTube.');
         youtubeBridge = null;
+        if (!accepted && trailerWatchArmed) { trailerWatchArmed = false; callTrailerService('stopWatch'); }
       };
-      youtubeBridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({ id: 'youtube.leanback.v4', params: { contentTarget: target } }));
-    } catch (_) { youtubeBridge = null; LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube.'); }
+    } catch (_) { youtubeBridge = null; LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube.'); return; }
+    var launch = function () {
+      try { youtubeBridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({ id: 'youtube.leanback.v4', params: { contentTarget: target } })); }
+      catch (_) { youtubeBridge = null; LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube.'); }
+    };
+    // Arm the return before YouTube opens: once YouTube is in front, webOS
+    // suspends this page and a request still in flight is lost (measured).
+    if (!video) { launch(); return; }
+    callTrailerService('watchTrailer', function (ok) { trailerWatchArmed = ok; launch(); });
+  }
+  // Order: the official TMDB trailer, the provider's trailer, then a YouTube search.
+  $('details-trailer').addEventListener('click', function () {
+    if (trailerRequest || !prepareForegroundAction()) return;
+    cancelDetailsRequest();
+    var index = detailsIndex; var details = sources[index] || {};
+    if (index === null) return;
+    saveViewState(true);
+    if (tmdbKey && entrySection(index) === 'movies') LGI18n.text($('details-status'), 'جارٍ البحث عن الإعلان الرسمي…');
+    findTmdbTrailer(index).then(function (key) {
+      if (key === null || detailsIndex !== index) return;
+      if (key) { openYoutube(api.youtubeVideoTarget(key), true); return; }
+      if (details.trailer) {
+        detailsPanel.hidden = true; detailsIndex = null; playingIndex = null; $('movie-browser').hidden = true; $('empty-state').hidden = true;
+        LGI18n.provider($('channel-title'), null, 'الإعلان'); if (player.start(details.trailer, 'trailer', performance.now())) setWatchMode(true); return;
+      }
+      var cached = detailsCache.get(detailsCacheKey(index)); var providerVideo = cached && cached.info ? cached.info.youtube : '';
+      if (providerVideo) { openYoutube(api.youtubeVideoTarget(providerVideo), true); return; }
+      openYoutube(api.youtubeSearchTarget(details.name, details.year), false);
+    });
   });
   $('sort-button').addEventListener('click', function () {
     var open = $('sort-menu').hidden; $('sort-menu').hidden = !open; $('sort-button').setAttribute('aria-expanded', String(open));
@@ -2997,6 +3061,7 @@
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
+    if (!document.hidden && trailerWatchArmed) { trailerWatchArmed = false; callTrailerService('stopWatch'); }
     if (!document.hidden) { restoreRetryAt = 0; scheduleAutoUpdate(); }
   });
   window.addEventListener('pageshow', function () { unloading = false; restoreRetryAt = 0; scheduleAutoUpdate(); });

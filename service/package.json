@@ -1,0 +1,7 @@
+{
+  "name": "com.amjadoh.lgstream.service",
+  "version": "1.0.0",
+  "description": "LG Stream background helper: returns to the app after a YouTube trailer",
+  "main": "service.js",
+  "private": true
+}
