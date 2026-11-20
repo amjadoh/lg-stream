@@ -342,6 +342,13 @@
     return value.toLocaleLowerCase().replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/[٠-٩]/g, function (digit) { return String(digit.charCodeAt(0) - 0x0660); }).replace(/[\u0640\u064b-\u065f]/g, '').replace(/سبورتس/g, 'سبورت');
   }
 
+  // A YouTube video id, alone or inside a watch/share link.
+  function youtubeId(value) {
+    var match = /^(?:https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|tv\?(?:.*&)?v=)|youtu\.be\/))?([A-Za-z0-9_-]{11})(?:[?&#].*)?$/.exec(String(value || '').trim());
+    return match ? match[1] : '';
+  }
+  // Opens the YouTube TV app directly on one video.
+  function youtubeVideoTarget(id) { id = youtubeId(id); return id ? 'https://www.youtube.com/tv?v=' + id : null; }
   function youtubeSearchTarget(name, year) {
     var title = String(name || '').trim().replace(/\s+/g, ' ');
     var releaseYear = String(year || '').trim();
@@ -744,7 +751,8 @@
       minutes: minutes > 0 && minutes < 1000 ? minutes : 0,
       director: text(info.director, 120),
       cast: text(info.cast, 200),
-      tmdb: /^\d{1,9}$/.test(text(info.tmdb_id, 12)) ? text(info.tmdb_id, 12) : ''
+      tmdb: /^\d{1,9}$/.test(text(info.tmdb_id, 12)) ? text(info.tmdb_id, 12) : '',
+      youtube: youtubeId(text(info.youtube_trailer, 120))
     };
     return details.plot || details.rating || details.year || details.genre || details.minutes || details.director || details.cast ? details : null;
   }
@@ -800,6 +808,25 @@
     var average = Number(reply.vote_average); var votes = Number(reply.vote_count);
     return { id: String(reply.id), rating: average > 0 && average <= 10 && votes >= 5 ? average.toFixed(1) : '', plot: tmdbPlot(reply, lang) };
   }
+  function tmdbVideosUrl(key, id) {
+    if (!validTmdbKey(key) || !/^\d{1,9}$/.test(String(id || ''))) return null;
+    var url = new URL('https://api.themoviedb.org/3/movie/' + id + '/videos');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('include_video_language', 'ar,en,null');
+    return url.href;
+  }
+  // The official YouTube trailer: trailer before teaser, the app language
+  // before English before others, official before fan uploads.
+  function tmdbTrailer(reply, lang) {
+    var videos = reply && Array.isArray(reply.results) ? reply.results : []; var best = ''; var bestScore = -1;
+    for (var i = 0; i < videos.length && i < 60; i += 1) {
+      var video = videos[i] || {}; var id = video.site === 'YouTube' ? youtubeId(video.key) : '';
+      if (!id || (video.type !== 'Trailer' && video.type !== 'Teaser')) continue;
+      var language = video.iso_639_1 === (lang === 'en' ? 'en' : 'ar') ? 2 : video.iso_639_1 === 'en' ? 1 : 0;
+      var score = (video.type === 'Trailer' ? 8 : 0) + language * 2 + (video.official === true ? 1 : 0);
+      if (score > bestScore) { best = id; bestScore = score; }
+    }
+    return best;
+  }
   // Best search match: the same release year (then +-1 year); without a year, the
   // first result. No match -> null.
   function tmdbSearchResult(reply, year, lang) {
@@ -842,5 +869,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, tmdbVideosUrl: tmdbVideosUrl, tmdbTrailer: tmdbTrailer, youtubeId: youtubeId, youtubeVideoTarget: youtubeVideoTarget, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

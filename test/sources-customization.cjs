@@ -43,8 +43,11 @@ async function main() {
       };
       proto.pause = function () { own(this).paused = true; this.dispatchEvent(new Event('pause')); };
       window.__fetches = [];
+      window.__bridgeCalls = [];
+      window.PalmServiceBridge = class { call(uri, payload) { window.__bridgeCalls.push({ uri, payload: JSON.parse(payload) }); queueMicrotask(() => this.onservicecallback(JSON.stringify({ returnValue: true }))); } };
       window.fetch = async (url, options) => {
         window.__fetches.push(String(url));
+        if (/^https:\/\/api\.themoviedb\.org\/3\/movie\/\d+\/videos/.test(String(url))) return { ok: true, json: async () => ({ results: [{ site: 'YouTube', type: 'Teaser', key: 'TeaserVideo', iso_639_1: 'ar' }, { site: 'YouTube', type: 'Trailer', key: 'OfficialTrl', iso_639_1: 'en', official: true }] }) };
         if (String(url).startsWith('https://api.themoviedb.org/3/search/movie')) return { ok: true, json: async () => ({ results: [{ id: 77, release_date: '2019-02-01', vote_average: 6.5, vote_count: 50, overview: 'Search overview' }] }) };
         if (String(url).startsWith('https://api.themoviedb.org/')) { const english = new URL(url).searchParams.get('language') === 'en-US'; return { ok: true, json: async () => ({ id: Number(new URL(url).pathname.split('/').pop()), vote_average: 8.2, vote_count: 900, overview: english ? 'English TMDB overview' : 'وصف عربي من TMDB' }) }; }
         if (String(url).startsWith('https://www.omdbapi.com/')) return { ok: true, json: async () => window.__omdbReply || { Response: 'True', imdbRating: '8.7', Plot: 'IMDb plot', imdbID: 'tt0133093' } };
@@ -416,13 +419,32 @@ async function main() {
     await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
     await page.locator('[data-rating-source="both"]').click();
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+    // Trailer: the official TMDB trailer opens in the YouTube app, looked up once.
+    await page.locator('#movie-grid .movie-card').first().click();
+    assert.equal(await page.locator('#details-trailer').innerText(), 'مشاهدة الإعلان');
+    await page.locator('#details-trailer').click();
+    await page.waitForFunction(() => window.__bridgeCalls.length === 2);
+    assert.equal(await page.evaluate(() => window.__bridgeCalls[0].uri), 'luna://com.amjadoh.lgstream.service/watchTrailer', 'The return watch is armed before YouTube opens');
+    const trailerLaunch = await page.evaluate(() => window.__bridgeCalls[1]);
+    assert.deepEqual([trailerLaunch.uri, trailerLaunch.payload.id, trailerLaunch.payload.params.contentTarget], ['luna://com.webos.applicationManager/launch', 'youtube.leanback.v4', 'https://www.youtube.com/tv?v=OfficialTrl']);
+    await page.waitForFunction(() => /فُتح الإعلان/.test(document.getElementById('details-status').textContent));
+    const videoRequests = () => page.evaluate(() => window.__fetches.filter(url => url.includes('/videos')).length);
+    assert.equal(await videoRequests(), 1);
+    await page.locator('#details-trailer').click();
+    await page.waitForFunction(() => window.__bridgeCalls.length === 4);
+    assert.equal(await videoRequests(), 1, 'The trailer is looked up once');
+    // Coming back to LG Stream ends the watch in the background service.
+    await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForFunction(() => window.__bridgeCalls.some(call => call.uri === 'luna://com.amjadoh.lgstream.service/stopWatch'));
+    await page.evaluate(() => { delete document.hidden; });
+    await page.keyboard.press('Escape');
     await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
     await page.locator('#tmdb-remove').click();
     assert.equal(await page.evaluate(() => localStorage.getItem('lg-stream-tmdb-key-v1')), null);
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
 
     assert.deepEqual(errors, []);
-    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, TMDB ratings by search and Arabic/English TMDB descriptions, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, TMDB ratings by search, Arabic/English TMDB descriptions, official TMDB trailer in the YouTube app with the return watch, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();

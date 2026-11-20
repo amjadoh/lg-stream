@@ -515,7 +515,9 @@ test('movie details come from the provider get_vod_info for the saved Xtream sou
   assert.equal(api.vodInfoUrl(source, 'http://cdn.invalid/live/viewer/s3cret/5.ts'), null);
 
   const details = api.vodDetails({ info: { plot: '  A\nplot  ', rating: '7.46', releasedate: '2021-05-01', genre: 'Drama', duration: '01:52:10', director: '', cast: 42, mpaa: { x: 1 } } });
-  assert.deepEqual(details, { plot: 'A plot', rating: '7.5', year: '2021', genre: 'Drama', minutes: 112, director: '', cast: '42', tmdb: '' });
+  assert.deepEqual(details, { plot: 'A plot', rating: '7.5', year: '2021', genre: 'Drama', minutes: 112, director: '', cast: '42', tmdb: '', youtube: '' });
+  assert.equal(api.vodDetails({ info: { plot: 'x', youtube_trailer: 'https://www.youtube.com/watch?v=m8e-FF8MsqU' } }).youtube, 'm8e-FF8MsqU');
+  assert.equal(api.vodDetails({ info: { plot: 'x', youtube_trailer: 'not a video' } }).youtube, '');
   assert.equal(api.vodDetails({ info: { plot: 'x', tmdb_id: '603' } }).tmdb, '603');
   assert.equal(api.vodDetails({ info: { plot: 'x', tmdb_id: 'abc' } }).tmdb, '');
   assert.equal(api.vodDetails({ info: { plot: '', rating: '0', year: '', genre: '' } }), null, 'Empty provider info shows nothing');
@@ -584,4 +586,31 @@ test('TMDB search finds a movie by title and year, in the app language', () => {
   assert.equal(api.tmdbSearchResult(null, 1999), null);
   assert.equal(api.tmdbPlot({ overview: 'English only' }, 'ar'), '', 'Arabic mode does not show English as Arabic');
   assert.equal(api.tmdbPlot({ overview: 'English only' }, 'en'), 'English only');
+});
+
+test('Trailers: the official TMDB YouTube trailer opens the YouTube app on that video', () => {
+  const api = require('../app/core.js');
+  const key = '0123456789abcdef0123456789abcdef';
+  const url = new URL(api.tmdbVideosUrl(key, '603'));
+  assert.equal(url.origin + url.pathname, 'https://api.themoviedb.org/3/movie/603/videos');
+  assert.equal(url.searchParams.get('include_video_language'), 'ar,en,null');
+  assert.equal(api.tmdbVideosUrl(key, 'x'), null);
+  const videos = { results: [
+    { site: 'YouTube', type: 'Featurette', key: 'AAAAAAAAAAA', iso_639_1: 'ar', official: true },
+    { site: 'Vimeo', type: 'Trailer', key: 'BBBBBBBBBBB', iso_639_1: 'ar' },
+    { site: 'YouTube', type: 'Teaser', key: 'CCCCCCCCCCC', iso_639_1: 'ar', official: true },
+    { site: 'YouTube', type: 'Trailer', key: 'DDDDDDDDDDD', iso_639_1: 'en', official: false },
+    { site: 'YouTube', type: 'Trailer', key: 'EEEEEEEEEEE', iso_639_1: 'en', official: true },
+    { site: 'YouTube', type: 'Trailer', key: 'bad key', iso_639_1: 'ar', official: true }
+  ] };
+  assert.equal(api.tmdbTrailer(videos, 'en'), 'EEEEEEEEEEE', 'Official English trailer in English');
+  assert.equal(api.tmdbTrailer(videos, 'ar'), 'EEEEEEEEEEE', 'A trailer beats a teaser even in Arabic');
+  videos.results.push({ site: 'YouTube', type: 'Trailer', key: 'FFFFFFFFFFF', iso_639_1: 'ar', official: false });
+  assert.equal(api.tmdbTrailer(videos, 'ar'), 'FFFFFFFFFFF', 'An Arabic trailer first in Arabic');
+  assert.equal(api.tmdbTrailer({ results: [{ site: 'YouTube', type: 'Clip', key: 'GGGGGGGGGGG' }] }, 'ar'), '', 'Clips are not trailers');
+  assert.equal(api.tmdbTrailer(null, 'ar'), '');
+  assert.equal(api.youtubeId('https://youtu.be/m8e-FF8MsqU'), 'm8e-FF8MsqU');
+  assert.equal(api.youtubeId('https://evil.example/watch?v=m8e-FF8MsqU'), '');
+  assert.equal(api.youtubeVideoTarget('m8e-FF8MsqU'), 'https://www.youtube.com/tv?v=m8e-FF8MsqU');
+  assert.equal(api.youtubeVideoTarget('x'), null);
 });
