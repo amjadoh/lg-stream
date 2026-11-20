@@ -423,15 +423,20 @@ async function main() {
     await page.locator('#movie-grid .movie-card').first().click();
     assert.equal(await page.locator('#details-trailer').innerText(), 'مشاهدة الإعلان');
     await page.locator('#details-trailer').click();
-    await page.waitForFunction(() => window.__bridgeCalls.length === 1);
-    const trailerLaunch = await page.evaluate(() => window.__bridgeCalls[0]);
+    await page.waitForFunction(() => window.__bridgeCalls.length === 2);
+    assert.equal(await page.evaluate(() => window.__bridgeCalls[0].uri), 'luna://com.amjadoh.lgstream.service/watchTrailer', 'The return watch is armed before YouTube opens');
+    const trailerLaunch = await page.evaluate(() => window.__bridgeCalls[1]);
     assert.deepEqual([trailerLaunch.uri, trailerLaunch.payload.id, trailerLaunch.payload.params.contentTarget], ['luna://com.webos.applicationManager/launch', 'youtube.leanback.v4', 'https://www.youtube.com/tv?v=OfficialTrl']);
     await page.waitForFunction(() => /فُتح الإعلان/.test(document.getElementById('details-status').textContent));
     const videoRequests = () => page.evaluate(() => window.__fetches.filter(url => url.includes('/videos')).length);
     assert.equal(await videoRequests(), 1);
     await page.locator('#details-trailer').click();
-    await page.waitForFunction(() => window.__bridgeCalls.length === 2);
+    await page.waitForFunction(() => window.__bridgeCalls.length === 4);
     assert.equal(await videoRequests(), 1, 'The trailer is looked up once');
+    // Coming back to LG Stream ends the watch in the background service.
+    await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => false }); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForFunction(() => window.__bridgeCalls.some(call => call.uri === 'luna://com.amjadoh.lgstream.service/stopWatch'));
+    await page.evaluate(() => { delete document.hidden; });
     await page.keyboard.press('Escape');
     await page.locator('#nav-settings').click(); await page.locator('#settings-imdb').click();
     await page.locator('#tmdb-remove').click();
@@ -439,7 +444,7 @@ async function main() {
     await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
 
     assert.deepEqual(errors, []);
-    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, TMDB ratings by search, Arabic/English TMDB descriptions, official TMDB trailer in the YouTube app, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
+    console.log('Sources and customization: card focus, counts, new items first, rename, stop/activate, delete, Xtream login, provider movie details, card ratings, IMDb key, rating choice and rating sort, TMDB ratings by search, Arabic/English TMDB descriptions, official TMDB trailer in the YouTube app with the return watch, blue-key menu and legend, pointer hold, move, hide, channel rename, multi-select, group order, organizer and reset passed. Synthetic catalogue only.');
   } finally {
     if (browser) await browser.close();
     preview.kill();

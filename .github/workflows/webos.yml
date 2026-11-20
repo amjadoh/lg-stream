@@ -3,7 +3,7 @@ name: webOS checks and package
 on:
   push:
     branches: [main, 'codex/**']
-    paths: ['app/**', 'test/**', 'scripts/**', 'package*.json', '.github/workflows/**']
+    paths: ['app/**', 'service/**', 'test/**', 'scripts/**', 'package*.json', '.github/workflows/**']
   workflow_dispatch:
 
 permissions:
