@@ -172,7 +172,7 @@ async function main() {
     await page.locator('#episode-panel').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#media-controls').isVisible(), false);
     assert.equal(await page.evaluate(() => document.activeElement.dataset.index === String(document.querySelector('#episode-items .current').dataset.index)), true, 'The list opens on the playing episode');
-    assert.match(await page.locator('#episode-items .current').innerText(), /تشتغل الآن/);
+    assert.match(await page.locator('#episode-items .current').innerText(), /قيد التشغيل/);
     const panelBox = await page.locator('#episode-panel').boundingBox();
     assert.ok(panelBox.x > 1100 && panelBox.width < 700, 'The list is a narrow column on the right; the video stays visible');
     await page.screenshot({ path: path.join(root, 'artifacts/ui-episode-list-1080.png') });

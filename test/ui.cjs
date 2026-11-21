@@ -742,6 +742,26 @@ async function main() {
     await page.locator('#sort-menu [data-sort="newest"]').click();
     assert.match(await page.locator('#sort-button').innerText(), /الأحدث/);
     assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), '105', 'Newest puts the highest provider id first');
+    // A new sort starts at the first card at the top; a second press on Year reverses it.
+    const firstCard = () => page.locator('#movie-grid .movie-card').first().getAttribute('data-index');
+    const atTop = () => page.evaluate(() => document.activeElement === document.querySelector('#movie-grid .movie-card') && document.getElementById('movie-browser').scrollTop === 0);
+    assert.equal(await atTop(), true, 'After sorting, the first card at the top is focused');
+    await page.locator('#movie-grid .movie-card').last().focus(); await page.keyboard.press('ArrowDown');
+    await page.locator('#sort-button').click();
+    await page.locator('#sort-menu [data-sort="year"]').click();
+    assert.match(await page.locator('#sort-button').innerText(), /السنة ↓/);
+    assert.equal(await atTop(), true);
+    const newestYearFirst = await firstCard();
+    await page.locator('#sort-button').click();
+    assert.equal(await page.locator('#sort-menu [data-sort="year"] .sort-arrow').innerText(), '↓');
+    await page.locator('#sort-menu [data-sort="year"]').click();
+    assert.match(await page.locator('#sort-button').innerText(), /السنة ↑/, 'A second press reverses the order');
+    assert.notEqual(await firstCard(), newestYearFirst, 'Oldest year first after reversing');
+    assert.equal(await atTop(), true);
+    await page.locator('#sort-button').click();
+    assert.equal(await page.locator('#sort-menu [data-sort="year"] .sort-arrow').innerText(), '↑');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-sort-menu-1080.png') });
+    await page.keyboard.press('Escape');
     await page.locator('#sort-button').click();
     await page.locator('#sort-menu [data-sort="year"]').click();
     await page.locator('#groups [data-group="أفلام VOD"]').click();

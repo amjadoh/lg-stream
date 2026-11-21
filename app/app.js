@@ -27,6 +27,8 @@
   var transportSaving = false;
   var selected = 0;
   var contentSort = 'provider'; var sortRevision = 0;
+  // Year, rating and A-Z can be reversed: a second press on the active one flips it.
+  var sortReverse = false; var REVERSIBLE_SORTS = ['alpha', 'year', 'rating'];
   var contentWindowStart = 0;
   var contentWindowSize = 24;
   var channelWindowStart = 0;
@@ -254,7 +256,7 @@
   }
   function visibleIndexes() {
     if (watchChannels !== null) return watchChannels;
-    var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeGroup, activeCategory, contentSort, contentSort === 'rating' ? sortRevision : 0].join('\u0001');
+    var cacheKey = [catalogViewRevision, activeSection === 'favorites' ? favoritesRevision : 0, activeSection, activeGroup, activeCategory, contentSort, sortReverse, contentSort === 'rating' ? sortRevision : 0].join('\u0001');
     if (cacheKey === visibleCacheKey) return visibleCache;
     var ownSection = sectionIndex();
     var indexes = activeGroup === NEW_GROUP ? ownSection.fresh : activeGroup ? (ownSection.byGroup[activeGroup] || []) : ownSection.all;
@@ -263,7 +265,8 @@
         indexes = indexes.slice();
         indexes.sort(function (left, right) {
           var a = sources[left] || {}; var b = sources[right] || {};
-          return (nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '')) || left - right;
+          var order = nameCollator ? nameCollator.compare(a.name || '', b.name || '') : (a.name || '').localeCompare(b.name || '');
+          return (sortReverse ? -order : order) || left - right;
         });
       } else {
         // Each sort value is computed once per item, not once per comparison.
@@ -271,7 +274,7 @@
         keyed.sort(function (a, b) {
           if (a.value === null && b.value === null) return a.index - b.index;
           if (a.value === null) return 1; if (b.value === null) return -1;
-          return b.value - a.value || a.index - b.index;
+          return (sortReverse ? a.value - b.value : b.value - a.value) || a.index - b.index;
         });
         indexes = keyed.map(function (item) { return item.index; });
       }
@@ -451,7 +454,7 @@
     if (!activeCatalogRevision || !sources.length) return;
     try {
       // Persist the provider-order index so existing saved views survive display reordering.
-      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, filterVersion: 3, groupIndex: sectionIndex().groups.indexOf(activeGroup), sort: contentSort, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
+      localStorage.setItem(VIEW_KEY, JSON.stringify({ revision: activeCatalogRevision, section: activeSection, category: activeCategory, filterVersion: 3, groupIndex: sectionIndex().groups.indexOf(activeGroup), sort: contentSort, sortReverse: sortReverse, selected: selected, favorites: Object.keys(favorites).map(Number), channelWindowStart: watchChannels === null ? channelWindowStart : watchChannelsWindow, contentWindowStart: contentWindowStart, groupScrollTop: $('groups').scrollTop, channelScrollTop: $('channels').scrollTop, contentScrollTop: $('movie-browser').scrollTop, detailsOpen: !!detailsOpen }));
     } catch (_) {}
   }
   function scheduleViewSave() { if (unloading) return; clearTimeout(viewTimer); viewTimer = setTimeout(function () { saveViewState(detailsIndex !== null); }, 120); }
@@ -524,6 +527,7 @@
     var groups = sectionIndex().groups;
     activeGroup = state && (activeSection !== 'tv' || activeCategory === 'all' || state.filterVersion === 3) && state.groupIndex >= 0 && groups[state.groupIndex] ? groups[state.groupIndex] : '';
     contentSort = state && ['provider', 'newest', 'year', 'rating', 'added', 'alpha'].indexOf(state.sort) >= 0 ? state.sort : 'provider';
+    sortReverse = !!(state && state.sortReverse) && REVERSIBLE_SORTS.indexOf(contentSort) >= 0;
     selected = state ? Number(state.selected) || 0 : 0; channelWindowStart = state ? Number(state.channelWindowStart) || 0 : 0; contentWindowStart = state ? Number(state.contentWindowStart) || 0 : 0;
     pendingViewState = state; renderPrimary(); renderGroups(); renderChannels();
     if (state) requestAnimationFrame(function () { $('groups').scrollTop = Number(state.groupScrollTop) || 0; $('channels').scrollTop = Number(state.channelScrollTop) || 0; $('movie-browser').scrollTop = Number(state.contentScrollTop) || 0; });
@@ -855,8 +859,14 @@
       var sort = button.dataset.sort; var available = availableSorts(indexes);
       button.disabled = Object.prototype.hasOwnProperty.call(available, sort) && !available[sort];
       button.classList.toggle('active', sort === contentSort); button.setAttribute('aria-pressed', String(sort === contentSort));
+      if (REVERSIBLE_SORTS.indexOf(sort) >= 0) {
+        var arrow = button.querySelector('.sort-arrow');
+        if (!arrow) { arrow = document.createElement('span'); arrow.className = 'sort-arrow'; arrow.setAttribute('aria-hidden', 'true'); arrow.dataset.providerText = 'true'; button.appendChild(arrow); }
+        arrow.textContent = sort === contentSort && sortReverse ? '↑' : '↓';
+      }
     });
     LGI18n.text($('sort-button'), 'ترتيب: ' + ({ provider: 'المزوّد', newest: 'الأحدث', alpha: 'أبجدي', year: 'السنة', rating: 'التقييم', added: 'تاريخ الإضافة' }[contentSort] || 'المزوّد'));
+    if (REVERSIBLE_SORTS.indexOf(contentSort) >= 0) $('sort-button').appendChild(document.createTextNode(sortReverse ? ' ↑' : ' ↓'));
   }
   // Movie details from the provider (get_vod_info) and, with the owner's OMDb
   // key, the IMDb rating. Fetched only when details open: at most one request
@@ -1358,6 +1368,9 @@
     if (state === 'watched') return list[position + 1] ? { item: list[position + 1], mode: 'next' } : { item: list[position], mode: 'again' };
     return { item: list[position], mode: state === 'partial' ? 'resume' : 'start' };
   }
+  // "18 min left" for a part-watched movie or episode.
+  function minutesLeft(progress) { return Math.max(1, Math.ceil((progress[1] - progress[0]) / 60)); }
+  function remainingLabel(progress) { return tr('متبقٍّ ', '') + minutesLeft(progress) + tr(' د', ' min left'); }
   function episodeLabel(view, item) {
     if (!item) return '';
     if (item.season > 0) return tr('م', 'S') + item.season + ' ' + tr('ح', 'E') + item.episode;
@@ -1422,7 +1435,7 @@
     $('series-description').textContent = plot || (view.loading ? tr('جارٍ جلب الوصف…', 'Loading the description…') : '');
     var next = view.next; var label = episodeLabel(view, next.item);
     var button = $('series-continue'); button.dataset.providerText = 'true';
-    button.textContent = next.mode === 'resume' ? tr('متابعة ', 'Continue ') + label : next.mode === 'next' ? tr('التالية: ', 'Next: ') + label : tr('تشغيل ', 'Play ') + label;
+    button.textContent = next.mode === 'resume' ? tr('استئناف ', 'Resume ') + label : next.mode === 'next' ? tr('الحلقة التالية: ', 'Next: ') + label : tr('تشغيل ', 'Play ') + label;
   }
   function renderSeriesSeasons() {
     var view = seriesView; var list = $('series-seasons'); list.replaceChildren();
@@ -1454,8 +1467,8 @@
       var number = document.createElement('span'); number.className = 'episode-number'; number.textContent = tr('الحلقة ', 'Episode ') + (item.episode || position + 1);
       var details = []; var seconds = episodeSeconds(view, item.index);
       if (seconds) details.push(Math.max(1, Math.round(seconds / 60)) + tr(' د', ' min'));
-      if (state === 'watched') details.push(tr('شوهدت', 'Watched'));
-      else if (state === 'partial') details.push(tr('وقفت عند ', 'Stopped at ') + Math.floor(progress[0] / 60) + tr(' د', ' min'));
+      if (state === 'watched') details.push(tr('تمت المشاهدة', 'Watched'));
+      else if (state === 'partial') details.push(remainingLabel(progress));
       var meta = document.createElement('span'); meta.className = 'episode-meta'; meta.textContent = details.join(' · ');
       button.appendChild(number); button.appendChild(meta);
       if (state === 'partial') { var bar = document.createElement('span'); bar.className = 'episode-bar'; var fill = document.createElement('i'); fill.style.width = Math.min(100, Math.round(progress[0] / progress[1] * 100)) + '%'; bar.appendChild(fill); button.appendChild(bar); }
@@ -1498,8 +1511,8 @@
     var at = resumePoint(index);
     if (!at || known) { pendingResume = at && known ? { index: index, at: at, done: false } : null; play(); return; }
     resumeChoice = { index: index, at: at, play: play, back: document.activeElement };
-    $('resume-title').textContent = tr('وقفت عند ', 'You stopped at ') + timeLabel(at);
-    $('resume-continue').textContent = tr('متابعة من ', 'Resume from ') + timeLabel(at);
+    $('resume-note').textContent = tr('توقفت المشاهدة عند ', 'You stopped at ') + timeLabel(at) + tr('، ويتبقى ', ' · ') + minutesLeft(episodeProgressOf(index)) + tr(' د.', ' min left');
+    $('resume-continue').textContent = tr('الاستئناف من ', 'Resume from ') + timeLabel(at);
     $('resume-prompt').hidden = false; $('resume-continue').focus();
   }
   function chooseResume(resume) {
@@ -1583,7 +1596,7 @@
       if (current) button.classList.add('current'); else if (state === 'watched') button.classList.add('watched');
       var label = document.createElement('span'); label.textContent = tr('الحلقة ', 'Episode ') + (item.episode || at + 1) + (state === 'watched' && !current ? ' ✓' : '');
       var details = document.createElement('span'); details.className = 'episode-row-meta'; var seconds = episodeSeconds(series, item.index);
-      details.textContent = current ? tr('تشتغل الآن', 'Playing now') : state === 'partial' ? tr('وقفت عند ', 'Stopped at ') + Math.floor(progress[0] / 60) + tr(' د', ' min') : seconds ? Math.max(1, Math.round(seconds / 60)) + tr(' د', ' min') : '';
+      details.textContent = current ? tr('قيد التشغيل', 'Now playing') : state === 'partial' ? remainingLabel(progress) : seconds ? Math.max(1, Math.round(seconds / 60)) + tr(' د', ' min') : '';
       button.appendChild(label); button.appendChild(details);
       button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest' }); });
       button.addEventListener('click', function () { if (item.index === playingIndex) closeEpisodePanel(true); else startEpisode(item.index); });
@@ -1633,7 +1646,8 @@
     }, 1000);
     return true;
   }
-  function renderNextEpisode() { $('next-episode-text').textContent = tr('الحلقة التالية: ', 'Next episode: ') + nextEpisodeState.label + tr(' خلال ', ' in ') + nextEpisodeState.seconds; }
+  function renderNextEpisode() { $('next-episode-text').textContent = tr('تبدأ الحلقة التالية (', 'Next episode (') + nextEpisodeState.label + tr(') خلال ', ') starts in ') + secondsLabel(nextEpisodeState.seconds); }
+  function secondsLabel(count) { return appLanguage() === 'en' ? count + (count === 1 ? ' second' : ' seconds') : count === 1 ? 'ثانية واحدة' : count === 2 ? 'ثانيتين' : count + (count <= 10 ? ' ثوانٍ' : ' ثانية'); }
   function cancelNextEpisode() { clearInterval(nextEpisodeTimer); nextEpisodeTimer = null; nextEpisodeState = null; $('next-episode').hidden = true; }
   $('next-episode-now').addEventListener('click', function () { if (nextEpisodeState) startEpisode(nextEpisodeState.index); });
   $('next-episode-cancel').addEventListener('click', function () { cancelNextEpisode(); exitPlayback(); });
@@ -2683,7 +2697,13 @@
   });
   Array.prototype.forEach.call($('sort-menu').querySelectorAll('button'), function (button) {
     button.addEventListener('click', function (event) {
-      contentSort = event.currentTarget.dataset.sort; sortRevision += 1; contentWindowStart = 0; $('sort-menu').hidden = true; $('sort-button').setAttribute('aria-expanded', 'false'); renderChannels(); saveViewState(false); $('sort-button').focus();
+      var sort = event.currentTarget.dataset.sort;
+      sortReverse = sort === contentSort && REVERSIBLE_SORTS.indexOf(sort) >= 0 ? !sortReverse : false;
+      contentSort = sort; sortRevision += 1; contentWindowStart = 0; $('sort-menu').hidden = true; $('sort-button').setAttribute('aria-expanded', 'false');
+      // The new order starts at its first card, at the top.
+      var ordered = visibleIndexes(); if (ordered.length) selected = ordered[0];
+      $('movie-browser').scrollTop = 0; renderChannels(); saveViewState(false);
+      var first = $('movie-grid').querySelector('.movie-card'); (first || $('sort-button')).focus();
     });
   });
   $('movie-browser').addEventListener('scroll', function () { schedulePosterCheck(); scheduleViewSave(); });
