@@ -95,6 +95,9 @@ h1 { font-size: 28px; margin: 0 0 8px; }
 .sort-menu { position: sticky; z-index: 4; top: 48px; width: 290px; margin: -18px 0 18px auto; padding: 8px; border: 1px solid #52657e; border-radius: 14px; background: #101a27; box-shadow: 0 12px 32px #000; }
 .sort-menu button { display: block; width: 100%; padding: 9px 12px; text-align: right; font-size: 17px; }
 .sort-menu button.active { color: #f6d28a; border-color: #c9912f; }
+/* Direction arrow on Year, Rating and A-Z: dim until the sort is chosen. */
+.sort-menu .sort-arrow { float: left; margin-inline-start: 10px; opacity: .45; font-weight: bold; font-size: 20px; line-height: 1; }
+.sort-menu button.active .sort-arrow { opacity: 1; }
 .movie-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
 .movie-card { position: relative; overflow: hidden; min-width: 0; min-height: 230px; height: auto; padding: 20px; text-align: right; white-space: normal; display: flex; flex-direction: column; justify-content: flex-end; background: linear-gradient(145deg, #345569, #172432 65%); border-radius: 18px; }
 .movie-card .card-rating { position: absolute; z-index: 2; top: 10px; right: 10px; left: auto; padding: 3px 8px; border-radius: 7px; background: rgba(3,7,19,.82); color: #e8edf4; font-size: 16px; font-weight: 700; line-height: 1.3; direction: ltr; }
@@ -266,7 +269,8 @@ input::placeholder { color: #7f90a7; }
    video, and the countdown to the next episode. */
 #resume-prompt { z-index: 30; }
 .resume-card { min-width: 560px; }
-.resume-card h2 { margin: 0 0 22px; }
+.resume-card h2 { margin: 0 0 8px; }
+.resume-note { margin: 0 0 22px; color: #b5c2d3; font-size: 24px; }
 .episode-controls { display: flex; gap: 10px; margin-bottom: 10px; }
 .media-controls .episode-controls button, body[data-controls] .media-controls .episode-controls button { padding: 6px 14px; font-size: 21px; }
 .episode-controls[hidden] { display: none; }
