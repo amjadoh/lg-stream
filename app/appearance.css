@@ -90,5 +90,7 @@ body[data-theme="cinema"] .library-panel .primary-panel { grid-row: 1; }
 body[data-theme="cinema"][data-layout="tabs"] .library-panel .primary-panel { grid-row: 1 / 3; }
 body:not([data-layout="tabs"]) .library-panel { grid-template-rows: minmax(0, 1fr); }
 .primary-panel .nav-icon { width: 28px; height: 28px; flex: 0 0 auto; }
-input, .search-section, .speed-connection, .speed-results li, .group-switch { background: var(--panel); color: var(--text); border-color: var(--line); }
-.search-section h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }
+input, .speed-connection, .speed-results li, .group-switch { background: var(--panel); color: var(--text); border-color: var(--line); }
+.search-section h3, .search-history h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }
+.search-page .search-channel, .search-page .history-item, .search-page .search-strip .movie-card { border-color: var(--line); background-color: var(--panel); }
+.search-page .search-channel:focus, .search-page .history-item:focus, .search-page .search-strip .movie-card:focus { border-color: var(--focus-ring); background-color: var(--focus); color: var(--focus-text); }
