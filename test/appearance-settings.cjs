@@ -90,7 +90,7 @@ async function main() {
     await key('Enter', 'manage-groups-button');
     assert.equal(await page.locator('#setup-panel').isVisible(), false);
     await page.screenshot({ animations: 'disabled', path: path.join(root, 'artifacts/ui-settings-home-1080.png') });
-    assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series']);
+    assert.deepEqual(await page.locator('.primary-panel button').evaluateAll(nodes => nodes.map(n => n.id || n.dataset.section)), ['nav-search', 'favorites', 'tv', 'movies', 'series', 'nav-mylist']);
     assert.equal(await page.locator('#settings-sources').count(), 0, 'Sources live only next to Settings, not duplicated inside it');
     await key('ArrowLeft', 'settings-speed');
     await key('ArrowRight', 'manage-groups-button'); await key('ArrowDown', 'settings-info'); await key('Enter', 'close-diagnostics');
@@ -196,7 +196,10 @@ async function main() {
       await key('ArrowRight'); await key('Enter');
       assert.match(await page.locator('#details-rating').innerText(), /8.4/);
       // A series episode opens its controls on the episodes button, above the timeline.
-      await key('Enter'); await key('Enter', section === 'series' ? 'episode-list' : 'media-toggle');
+      await key('Enter');
+      // At an episode's start OK first belongs to Skip intro, shown for 5 s.
+      if (section === 'series') await page.waitForFunction(() => document.querySelector('video') && document.getElementById('intro-skip').hidden, null, { timeout: 8000 });
+      await key('Enter', section === 'series' ? 'episode-list' : 'media-toggle');
       assert.equal(await page.locator('#audio-language').isDisabled(), true);
       assert.equal(await page.locator('#subtitle-language').isDisabled(), true);
       await key(section === 'series' ? 'ArrowDown' : 'ArrowUp', 'seek-position'); await key('ArrowUp', 'seek-back');

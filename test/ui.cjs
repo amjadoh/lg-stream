@@ -959,6 +959,8 @@ async function main() {
     await page.locator('#series-episodes .episode-card').first().click();
     await setMediaTracks([{ language: 'ar', enabled: true }, { language: 'en', enabled: false }], [{ kind: 'captions', language: 'ar', mode: 'disabled' }]);
     const seriesTrackStarts = await page.evaluate(() => window.__mediaStarts);
+    // At an episode's start OK first belongs to Skip intro, shown for 5 s.
+    await page.waitForFunction(() => document.getElementById('intro-skip').hidden, null, { timeout: 8000 });
     await page.keyboard.press('Enter');
     await page.locator('#subtitle-language').focus();
     await page.keyboard.press('Enter');

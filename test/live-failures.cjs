@@ -290,11 +290,14 @@ async function main() {
     await page.keyboard.press('PageUp'); await current(4);
     await page.keyboard.press('PageDown'); await current(2);
     await page.keyboard.press('Escape');
-    // VOD error still exits; it must not inherit the live-only stay-in-view rule.
+    // A VOD error offers its own bounded retry (not the live reconnect); Back cancels it and leaves playback.
     await page.locator('#channels [data-index="1"]').click();
     await page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('error')));
+    await page.locator('#vod-retry').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'vod-retry-cancel');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#vod-retry').isVisible(), false);
     assert.equal(await page.locator('body').evaluate(node => node.classList.contains('watch-mode')), false);
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'retry-button');
     await page.locator('#groups-filter').focus(); await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="movies"]').click();
     await page.locator('#groups [data-group=""]').click();

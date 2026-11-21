@@ -38,7 +38,10 @@ async function main() {
       Object.defineProperty(proto, 'currentTime', { configurable: true, get() { return own(this).time; }, set(value) { own(this).time = value; } });
       Object.defineProperty(proto, 'duration', { configurable: true, get() { return own(this).duration; } });
       proto.load = function () {};
+      Object.defineProperty(proto, 'error', { configurable: true, get() { return own(this).error || null; } });
       proto.play = function () {
+        // __failPlays refusals first, as a provider still holding the last connection would (MEDIA_ERR_SRC_NOT_SUPPORTED).
+        if (window.__failPlays > 0) { window.__failPlays -= 1; window.__mediaFails = (window.__mediaFails || 0) + 1; own(this).error = { code: 4 }; queueMicrotask(() => this.dispatchEvent(new Event('error'))); return Promise.resolve(); }
         own(this).paused = false; window.__mediaStarts = (window.__mediaStarts || 0) + 1;
         queueMicrotask(() => { if (!this.isConnected || own(this).paused) return; this.dispatchEvent(new Event('playing')); });
         // Steady progress so the player sees a live picture, as a real decoder would.
@@ -270,6 +273,73 @@ async function main() {
     await page.locator('#series-panel').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
 
+    // Skip intro: the button shows for 5 s; without a saved intro OK jumps
+    // 90 s; "Intro ends here" saves the series' intro; later episodes jump
+    // to its end, or skip on their own when automatic skipping is chosen.
+    const now = () => page.evaluate(() => document.querySelector('video').currentTime);
+    const press = id => page.evaluate(name => document.getElementById(name).click(), id);
+    await page.locator('#movie-grid .movie-card', { hasText: 'Delta' }).click();
+    await page.locator('#series-continue').click();
+    await page.waitForFunction(() => document.querySelector('video'));
+    await page.evaluate(() => window.__setMedia(10, 2400));
+    await page.locator('#intro-skip').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#intro-skip-button').innerText(), 'تخطي المقدمة');
+    await page.screenshot({ path: path.join(root, 'test-results', 'ui-intro-skip.png') });
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#intro-skip').isVisible(), false);
+    assert.ok(Math.abs(await now() - 100) < 2, 'No saved intro: 90 s on');
+    assert.equal(await page.locator('#media-controls').isVisible(), false, 'OK skipped instead of opening the controls');
+    await page.evaluate(() => window.__setMedia(95, 2400));
+    await press('intro-mark');
+    assert.match(await page.locator('#intro-mark').innerText(), /0:01:35/);
+    assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('lg-stream-intros-v1'))).Delta, [10, 95], 'Starts where Skip was pressed, ends at the mark');
+    await press('episode-next'); await page.waitForTimeout(300);
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__setMedia(12, 2400));
+    await page.locator('#intro-skip').waitFor({ state: 'visible' });
+    await page.waitForTimeout(5300);
+    assert.equal(await page.locator('#intro-skip').isVisible(), false, 'Hidden after 5 s');
+    await press('episode-next'); await page.waitForTimeout(300);
+    await page.evaluate(() => window.__setMedia(12, 2400));
+    await page.locator('#intro-skip').waitFor({ state: 'visible' });
+    await page.keyboard.press('Enter');
+    assert.ok(Math.abs(await now() - 95) < 2, 'Saved intro: to its end');
+    await press('episode-next'); await page.waitForTimeout(300);
+    await page.evaluate(() => window.__setMedia(5, 2400));
+    assert.equal(await page.locator('#intro-skip').isVisible(), false, 'Before the saved start nothing shows');
+    await page.evaluate(() => document.querySelector('[data-intro="auto"]').click());
+    await page.evaluate(() => window.__setMedia(20, 2400));
+    assert.ok(Math.abs(await now() - 95) < 2, 'Automatic: skipped without a key');
+    assert.equal(await page.locator('#intro-skip-text').innerText(), 'تم تخطي المقدمة');
+    await page.evaluate(() => document.querySelector('[data-intro="button"]').click());
+    await page.keyboard.press('Escape'); if (await page.locator('video').count()) await page.keyboard.press('Escape');
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+
+    // A refused episode is retried after 3 s and plays; four refusals in a row
+    // (first attempt + three retries) return to the series page with the reason.
+    await page.evaluate(() => { window.__failPlays = 1; });
+    const startsBefore = await page.evaluate(() => window.__mediaStarts || 0);
+    await page.locator('#movie-grid .movie-card', { hasText: 'Beta' }).click();
+    await page.locator('#series-continue').click();
+    await page.locator('#vod-retry').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#vod-retry-text').innerText(), /1 من 3/);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'vod-retry-cancel');
+    await page.screenshot({ path: path.join(root, 'test-results', 'ui-vod-retry.png') });
+    await page.waitForFunction(count => (window.__mediaStarts || 0) > count, startsBefore, { timeout: 5000 });
+    assert.equal(await page.locator('#vod-retry').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.body.classList.contains('watch-mode')), true, 'The retry plays full screen');
+    await page.keyboard.press('Escape');
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    await page.evaluate(() => { window.__failPlays = 4; window.__mediaFails = 0; });
+    await page.locator('#series-continue').click();
+    await page.waitForFunction(() => /ثلاث محاولات/.test(document.getElementById('series-status').textContent), null, { timeout: 24000 });
+    assert.equal(await page.evaluate(() => window.__mediaFails), 4, 'The first attempt and all three retries were refused');
+    assert.equal(await page.evaluate(() => window.__failPlays), 0);
+    assert.equal(await page.locator('#series-panel').isVisible(), true);
+    assert.equal(await page.locator('video').count(), 0);
+    await page.keyboard.press('Escape');
+
     // A movie stopped part way asks too; Back on the question returns to its details.
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
@@ -291,6 +361,75 @@ async function main() {
     await page.locator('#details-play').click();
     await page.locator('#resume-continue').click();
     await page.waitForFunction(() => document.querySelector('video'));
+
+    // My List: the part-watched movie is in Continue watching; the details
+    // button and the blue button add items; the list opens them, and Back from
+    // a page or from playback returns to the list.
+    const blue = () => page.evaluate(() => { for (const type of ['keydown', 'keyup']) document.activeElement.dispatchEvent(new KeyboardEvent(type, { key: 'ColorF3Blue', keyCode: 406, which: 406, bubbles: true, cancelable: true })); });
+    const rows = () => page.locator('#mylist-rows .search-section').evaluateAll(list => list.map(item => item.dataset.row));
+    const inList = () => page.evaluate(() => document.getElementById('mylist-panel').contains(document.activeElement));
+    await page.evaluate(() => window.__setMedia(900, 5400));
+    await page.keyboard.press('Escape'); if (await page.locator('video').count()) await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('video'));
+    await page.locator('#nav-mylist').click();
+    await page.locator('#mylist-panel').waitFor({ state: 'visible' });
+    assert.equal((await rows())[0], 'continue');
+    assert.equal((await rows()).includes('movies'), false, 'Nothing added yet');
+    const film = page.locator('#mylist-rows [data-row="continue"].movie-card', { hasText: 'Film One' });
+    assert.match(await film.innerText(), /متبقٍّ [0-9]+ د/);
+    assert.equal(await film.locator('.mylist-progress').count(), 1);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#mylist-panel').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'nav-mylist');
+
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#movie-grid .movie-card').first().click();
+    assert.equal(await page.locator('#details-mylist').innerText(), 'أضف إلى قائمتي');
+    await page.locator('#details-mylist').click();
+    assert.equal(await page.locator('#details-mylist').innerText(), 'في قائمتي ✓');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#movie-grid .movie-card').first().locator('.mylist-mark').count(), 1, 'Listed cards carry the bookmark');
+    await page.locator('.primary-button[data-section="series"]').click();
+    const seriesCard = page.locator('#movie-grid .movie-card').first(); const seriesName = (await seriesCard.innerText()).trim();
+    await seriesCard.focus(); await blue();
+    await page.locator('#item-menu').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#menu-select').isVisible(), false, 'Cards offer only My List');
+    assert.equal(await page.locator('#menu-mylist').innerText(), 'إضافة إلى قائمتي');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#item-menu').isVisible(), false);
+    assert.equal(await seriesCard.locator('.mylist-mark').count(), 1);
+    assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('lg-stream-my-list-v1'))).items.map(item => item.k.charAt(0)), ['s', 'm'], 'Newest first; keys only');
+    assert.equal(await page.evaluate(() => /https?:|\/\//.test(localStorage.getItem('lg-stream-my-list-v1'))), false, 'No links stored');
+
+    await page.locator('#nav-mylist').click();
+    assert.deepEqual(await rows(), ['continue', 'movies', 'series']);
+    await page.screenshot({ path: path.join(root, 'test-results', 'ui-mylist.png') });
+    await page.locator('#mylist-rows [data-row="series"].movie-card').first().click();
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#series-title').innerText(), new RegExp(seriesName.split('\n')[0]));
+    assert.equal(await page.locator('#series-mylist').innerText(), 'في قائمتي ✓');
+    await page.keyboard.press('Escape');
+    assert.equal(await inList(), true, 'Back from the series page returns to My List');
+    await page.locator('#mylist-rows [data-row="movies"].movie-card').first().click();
+    await page.locator('#details-panel').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+    assert.equal(await inList(), true, 'Back from the details returns to My List');
+    await page.locator('#mylist-rows [data-row="movies"].movie-card').first().focus(); await blue();
+    assert.equal(await page.locator('#menu-mylist').innerText(), 'إزالة من قائمتي');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await rows(), ['continue', 'series']);
+    assert.equal(await inList(), true);
+    // Continue watching plays from where it stopped; Back returns to the list.
+    await film.click();
+    await page.waitForFunction(() => document.querySelector('video'));
+    assert.equal(await page.locator('#mylist-panel').isVisible(), false);
+    assert.equal(await page.locator('#resume-prompt').isVisible(), false, 'Continue does not ask');
+    await page.keyboard.press('Escape'); if (await page.locator('video').count()) await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('video'));
+    await page.locator('#mylist-panel').waitFor({ state: 'visible' });
+    assert.equal(await inList(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#mylist-panel').isVisible(), false);
     assert.deepEqual(errors, []);
     console.log('Series page: provider categories, one card per series, details, seasons/episodes navigation, play and Back to the page, watched mark and next episode passed. Synthetic media only.');
   } finally {
