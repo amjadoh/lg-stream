@@ -308,8 +308,16 @@
     var patterns = hints.map(catalogWordPattern);
     if (compactBrand) patterns.push(catalogBrands.find(function (brand) { return brand[0] === catalogBrand(compactBrand); })[1].source);
     var aliasHint = patterns.length ? new RegExp(patterns.join('|'), 'iu') : null;
+    // A series is one result: its provider group holds all of its episodes, so
+    // episodes collapse to the first one of each series (the card shows the series).
+    var seenSeries = Object.create(null);
     function collect(index, section) {
       if (!matches[section]) return;
+      if (section === 'series') {
+        var seriesKey = entries[index].group ? 'g' + entries[index].group : 'i' + index;
+        if (seenSeries[seriesKey]) return;
+        seenSeries[seriesKey] = true;
+      }
       counts[section] += 1;
       var list = matches[section];
       if (list.length < limit || index < list[list.length - 1]) {
@@ -318,8 +326,18 @@
       }
     }
     var matched = [];
+    var groupMatches = Object.create(null);
+    function groupMatch(group) {
+      if (!group) return false;
+      if (!(group in groupMatches)) groupMatches[group] = group.toLocaleLowerCase().indexOf(query) >= 0;
+      return groupMatches[group];
+    }
     function direct(index) {
-      if ((entries[index].name || '').toLocaleLowerCase().indexOf(query) < 0) return;
+      if ((entries[index].name || '').toLocaleLowerCase().indexOf(query) < 0) {
+        // An episode also matches through its series name (the group).
+        if (!groupMatch(entries[index].group) || sectionForIndex(index) !== 'series') return;
+        matched.push(index); collect(index, 'series'); return;
+      }
       matched.push(index); collect(index, sectionForIndex(index));
     }
     if (candidates) candidates.forEach(direct);
@@ -854,6 +872,139 @@
     var details = { rating: rating > 0 && rating <= 10 ? String(rating) : '', plot: plot, id: id };
     return details.rating || details.plot ? details : null;
   }
+  // ---- Series -------------------------------------------------------------
+  // The provider sends every episode as its own playlist item; the item's
+  // group is the series. Season and episode numbers come from names such as
+  // "Title.S01.E05", "Title S1E5" or "Title S01 E05".
+  var episodePattern = /(?:^|[^A-Za-z0-9])S(\d{1,3})\s*[.\-_ ]?\s*E(\d{1,4})(?![0-9])/i;
+  function episodeNumbers(name) {
+    var match = episodePattern.exec(String(name || ''));
+    return match ? { season: Number(match[1]), episode: Number(match[2]) } : null;
+  }
+  // Seasons in order, each with its episodes in order. Items without numbers
+  // keep the provider's order in a last group (season 0).
+  function seriesSeasons(entries, indexes) {
+    var seasons = new Map();
+    indexes.forEach(function (index, position) {
+      var numbers = episodeNumbers(entries[index] && entries[index].name);
+      var season = numbers ? numbers.season : 0;
+      if (!seasons.has(season)) seasons.set(season, []);
+      seasons.get(season).push({ index: index, season: season, episode: numbers ? numbers.episode : 0, position: position });
+    });
+    return Array.from(seasons.keys()).sort(function (a, b) { return (a === 0) - (b === 0) || a - b; }).map(function (season) {
+      var episodes = seasons.get(season).sort(function (a, b) { return a.episode - b.episode || a.position - b.position; });
+      return { season: season, episodes: episodes };
+    });
+  }
+  function plainText(value, max) {
+    if (typeof value === 'number' && isFinite(value)) value = String(value);
+    if (typeof value !== 'string') return '';
+    value = value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    return value.length > max ? value.slice(0, max - 1) + '…' : value;
+  }
+  // Xtream player_api link for the saved get.php source (same account).
+  function xtreamApiUrl(playlistSource, action, params) {
+    var playlist = nativeHlsPlaylist(playlistSource);
+    if (!playlist || !/^[a-z_]{3,40}$/.test(action)) return null;
+    var url = new URL('/player_api.php', playlist.origin);
+    url.searchParams.set('username', playlist.searchParams.get('username'));
+    url.searchParams.set('password', playlist.searchParams.get('password'));
+    url.searchParams.set('action', action);
+    Object.keys(params || {}).forEach(function (name) { url.searchParams.set(name, String(params[name])); });
+    return url.href;
+  }
+  // get_series_categories + get_series -> the compact map the TV keeps:
+  // category names in the provider's order, and per series name
+  // [category position or -1, series id].
+  function seriesCatalog(categoriesReply, seriesReply) {
+    if (!Array.isArray(categoriesReply) || !Array.isArray(seriesReply)) return null;
+    var categories = []; var positions = Object.create(null);
+    categoriesReply.forEach(function (item) {
+      if (!item || typeof item !== 'object') return;
+      var id = String(item.category_id); var name = plainText(item.category_name, 80);
+      if (!name || id in positions) return;
+      positions[id] = categories.length; categories.push(name);
+    });
+    var series = Object.create(null); var count = 0;
+    seriesReply.forEach(function (item) {
+      if (!item || typeof item !== 'object') return;
+      var name = typeof item.name === 'string' ? item.name.trim() : ''; var id = Number(item.series_id);
+      if (!name || name.length > 200 || !(id > 0 && id < 1e10) || Object.prototype.hasOwnProperty.call(series, name)) return;
+      var category = String(item.category_id); series[name] = [category in positions ? positions[category] : -1, id]; count += 1;
+    });
+    return count ? { categories: categories, series: series } : null;
+  }
+  // The series section from the episode index (groups = series names): one
+  // card per series (its first episode) inside the provider's categories.
+  // Series the provider does not list fall into "أخرى". Without a catalogue
+  // there are no category groups, only all series.
+  function seriesSectionIndex(base, catalog, otherLabel) {
+    var all = []; var first = Object.create(null);
+    base.groups.forEach(function (name) { first[name] = base.byGroup[name][0]; all.push(first[name]); });
+    var groups = []; var byGroup = Object.create(null);
+    if (catalog) {
+      var lists = catalog.categories.map(function () { return []; }); var other = [];
+      base.groups.forEach(function (name) {
+        var info = catalog.series[name.trim()];
+        (info && info[0] >= 0 && lists[info[0]] ? lists[info[0]] : other).push(first[name]);
+      });
+      var add = function (label, list) {
+        if (!list.length) return;
+        if (byGroup[label]) byGroup[label] = byGroup[label].concat(list); else { groups.push(label); byGroup[label] = list; }
+      };
+      catalog.categories.forEach(function (label, position) { add(label, lists[position]); });
+      add(otherLabel || 'أخرى', other);
+    }
+    return { all: all, groups: groups, byGroup: byGroup };
+  }
+  // get_series_info -> plot, year, genre, rating, trailer and each
+  // episode's length in seconds by its stream id.
+  function seriesInfo(reply) {
+    if (!reply || typeof reply !== 'object' || Array.isArray(reply)) return null;
+    var info = reply.info && typeof reply.info === 'object' && !Array.isArray(reply.info) ? reply.info : {};
+    var durations = Object.create(null);
+    var episodes = reply.episodes && typeof reply.episodes === 'object' ? reply.episodes : {};
+    Object.keys(episodes).slice(0, 200).forEach(function (season) {
+      (Array.isArray(episodes[season]) ? episodes[season] : []).slice(0, 3000).forEach(function (episode) {
+        if (!episode || typeof episode !== 'object') return;
+        var id = String(episode.id || ''); var seconds = Number(episode.info && episode.info.duration_secs);
+        if (/^\d{1,10}$/.test(id) && seconds > 0 && seconds < 36000) durations[id] = Math.round(seconds);
+      });
+    });
+    var year = /(?:19|20)\d{2}/.exec(plainText(info.releaseDate || info.release_date || '', 24));
+    var rating = Number(plainText(info.rating, 8));
+    return { plot: plainText(info.plot, 900), year: year ? year[0] : '', genre: plainText(info.genre, 120), rating: rating > 0 && rating <= 10 ? String(Math.round(rating * 10) / 10) : '', youtube: youtubeId(plainText(info.youtube_trailer, 120)), durations: durations };
+  }
+  function tmdbTvSearchUrl(key, title, lang) {
+    if (!validTmdbKey(key) || !title) return null;
+    var url = new URL('https://api.themoviedb.org/3/search/tv');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('query', title);
+    url.searchParams.set('include_adult', 'false'); url.searchParams.set('language', tmdbLanguage(lang));
+    return url.href;
+  }
+  // The first TV result -> { id, rating, plot, year }.
+  function tmdbTvResult(reply, lang) {
+    var pick = reply && Array.isArray(reply.results) ? reply.results[0] : null;
+    var show = tmdbMovie(pick, lang); if (!show) return null;
+    var year = /^(?:19|20)\d{2}/.exec(String(pick.first_air_date || ''));
+    show.year = year ? year[0] : ''; return show;
+  }
+  function tmdbTvVideosUrl(key, id) {
+    if (!validTmdbKey(key) || !/^\d{1,9}$/.test(String(id || ''))) return null;
+    var url = new URL('https://api.themoviedb.org/3/tv/' + id + '/videos');
+    url.searchParams.set('api_key', String(key).trim()); url.searchParams.set('include_video_language', 'ar,en,null');
+    return url.href;
+  }
+  // Watch progress [seconds, length]: 'watched' near the end, 'partial' after
+  // the first half minute, '' otherwise.
+  function episodeProgress(item) {
+    if (!Array.isArray(item)) return '';
+    var position = Number(item[0]); var length = Number(item[1]);
+    if (!(length > 0) || !(position >= 0)) return '';
+    if (position / length >= 0.92 || length - position <= 90) return 'watched';
+    return position >= 30 ? 'partial' : '';
+  }
+
   // Xtream login typed on the TV becomes the same get.php playlist link.
   function xtreamPlaylistUrl(server, username, password) {
     var raw = String(server || '').trim(); username = String(username || '').trim(); password = String(password || '');
@@ -869,5 +1020,5 @@
       return validateSource(link.href);
     } catch (_) { return null; }
   }
-  return { entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, tmdbVideosUrl: tmdbVideosUrl, tmdbTrailer: tmdbTrailer, youtubeId: youtubeId, youtubeVideoTarget: youtubeVideoTarget, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
+  return { episodeNumbers: episodeNumbers, seriesSeasons: seriesSeasons, xtreamApiUrl: xtreamApiUrl, seriesCatalog: seriesCatalog, seriesSectionIndex: seriesSectionIndex, seriesInfo: seriesInfo, tmdbTvSearchUrl: tmdbTvSearchUrl, tmdbTvResult: tmdbTvResult, tmdbTvVideosUrl: tmdbTvVideosUrl, episodeProgress: episodeProgress, entryKey: entryKey, providerSerial: providerSerial, titleYear: titleYear, sortedKeys: sortedKeys, hasSortedKey: hasSortedKey, newItemFlags: newItemFlags, moveBlock: moveBlock, buildDisplayOrder: buildDisplayOrder, xtreamPlaylistUrl: xtreamPlaylistUrl, vodInfoUrl: vodInfoUrl, vodDetails: vodDetails, validOmdbKey: validOmdbKey, omdbTitle: omdbTitle, omdbUrl: omdbUrl, omdbDetails: omdbDetails, omdbFailure: omdbFailure, validTmdbKey: validTmdbKey, tmdbUrl: tmdbUrl, tmdbArabicPlot: tmdbArabicPlot, tmdbTitle: tmdbTitle, tmdbSearchUrl: tmdbSearchUrl, tmdbPlot: tmdbPlot, tmdbMovie: tmdbMovie, tmdbSearchResult: tmdbSearchResult, tmdbVideosUrl: tmdbVideosUrl, tmdbTrailer: tmdbTrailer, youtubeId: youtubeId, youtubeVideoTarget: youtubeVideoTarget, nativeHlsPlaylist: nativeHlsPlaylist, nativeHlsSource: nativeHlsSource, groupCategory: groupCategory, channelCategory: channelCategory, validateSource: validateSource, qualityLabel: qualityLabel, buildSectionIndex: buildSectionIndex, orderedCatalogGroups: orderedCatalogGroups, groupDisplayNames: groupDisplayNames, arabicGroupName: arabicGroupName, arabicCatalogName: arabicCatalogName, compactChannelName: compactChannelName, channelTitle: channelTitle, pictureScale: pictureScale, searchCatalog: searchCatalog, youtubeSearchTarget: youtubeSearchTarget, createSwitchScheduler: createSwitchScheduler, createPlayer: createPlayer };
 }));

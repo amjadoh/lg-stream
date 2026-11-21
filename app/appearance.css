@@ -90,5 +90,22 @@ body[data-theme="cinema"] .library-panel .primary-panel { grid-row: 1; }
 body[data-theme="cinema"][data-layout="tabs"] .library-panel .primary-panel { grid-row: 1 / 3; }
 body:not([data-layout="tabs"]) .library-panel { grid-template-rows: minmax(0, 1fr); }
 .primary-panel .nav-icon { width: 28px; height: 28px; flex: 0 0 auto; }
-input, .search-section, .speed-connection, .speed-results li, .group-switch { background: var(--panel); color: var(--text); border-color: var(--line); }
-.search-section h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }
+input, .speed-connection, .speed-results li, .group-switch { background: var(--panel); color: var(--text); border-color: var(--line); }
+.search-section h3, .search-history h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }
+.search-page .search-channel, .search-page .history-item, .search-page .search-strip .movie-card { border-color: var(--line); background-color: var(--panel); }
+.search-page .search-channel:focus, .search-page .history-item:focus, .search-page .search-strip .movie-card:focus { border-color: var(--focus-ring); background-color: var(--focus); color: var(--focus-text); }
+/* Episodes stand out from the page: a lighter navy card with the accent on its
+   reading edge; watched ones step back so the next episode is easy to spot. */
+.series-page .episode-card { border-color: #2d3b52; border-inline-start: 4px solid var(--accent); background: linear-gradient(160deg, #1d2a3e, #141d2c); }
+.series-page .episode-card .episode-number { color: var(--accent); }
+.series-page .episode-card .episode-meta { color: var(--muted); }
+.series-page .episode-card.watched { border-inline-start-color: #3d6b4b; background: #0f1622; }
+.series-page .episode-card.watched .episode-number { color: var(--muted); }
+.series-page .episode-card:focus, .series-page .episode-card.watched:focus { border-color: var(--focus-ring); background: var(--focus); color: var(--focus-text); }
+.series-page .episode-card:focus .episode-number { color: var(--focus-text); }
+.episode-row { border-color: #2d3b52; border-inline-start: 4px solid var(--accent); background: linear-gradient(160deg, #1d2a3e, #141d2c); color: var(--accent); }
+.episode-row .episode-row-meta { color: var(--muted); }
+.episode-row.watched { border-inline-start-color: #3d6b4b; background: #0f1622; color: var(--muted); }
+.episode-row.current .episode-row-meta { color: var(--accent); }
+.episode-row:focus, .episode-row.watched:focus { border-color: var(--focus-ring); background: var(--focus); color: var(--focus-text); }
+.series-card .series-meta, .series-seasons button[aria-pressed="true"] { color: var(--accent); }

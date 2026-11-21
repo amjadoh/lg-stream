@@ -614,3 +614,83 @@ test('Trailers: the official TMDB YouTube trailer opens the YouTube app on that 
   assert.equal(api.youtubeVideoTarget('m8e-FF8MsqU'), 'https://www.youtube.com/tv?v=m8e-FF8MsqU');
   assert.equal(api.youtubeVideoTarget('x'), null);
 });
+
+test('search shows each series once, found by an episode or by the series name', () => {
+  const entries = [
+    { name: 'Al Bayt.S01.E01', group: 'البيت الكبير' },
+    { name: 'Al Bayt.S01.E02', group: 'البيت الكبير' },
+    { name: 'Al Bayt.S02.E01', group: 'البيت الكبير' },
+    { name: 'Other.S01.E01', group: 'مسلسل آخر' },
+    { name: 'Al Bayt (film)', group: 'أفلام' },
+    { name: 'Lone episode' }, { name: 'Lone episode' }
+  ];
+  const section = index => index === 4 ? 'movies' : 'series';
+  const byEpisode = searchCatalog(entries, 'al bayt', section, 12);
+  assert.deepEqual(byEpisode.matches.series, [0]);
+  assert.equal(byEpisode.counts.series, 1);
+  assert.deepEqual(byEpisode.matches.movies, [4]);
+  const byName = searchCatalog(entries, 'البيت', section, 12);
+  assert.deepEqual(byName.matches.series, [0], 'The series name finds the series even when episode names differ');
+  assert.equal(byName.counts.series, 1);
+  const narrowed = searchCatalog(entries, 'البيت الك', section, 12, null, byName.matched);
+  assert.deepEqual(narrowed.matches.series, [0], 'Narrowing keeps series found by name');
+  assert.equal(searchCatalog(entries, 'lone', section, 12).counts.series, 2, 'Episodes without a group stay separate');
+});
+
+test('reads season and episode numbers from provider names', () => {
+  const api = require('../app/core.js');
+  assert.deepEqual(api.episodeNumbers('Al Bayt.S01.E05'), { season: 1, episode: 5 });
+  assert.deepEqual(api.episodeNumbers('Show S2E10'), { season: 2, episode: 10 });
+  assert.deepEqual(api.episodeNumbers('مسلسل S03 E07'), { season: 3, episode: 7 });
+  assert.equal(api.episodeNumbers('Bus 5 Express'), null);
+  assert.equal(api.episodeNumbers('ClassicS01E01'), null, 'Numbers glued to a word are not an episode marker');
+});
+
+test('orders seasons and episodes, unnumbered items last in provider order', () => {
+  const api = require('../app/core.js');
+  const entries = [{ name: 'X.S02.E01' }, { name: 'X.S01.E02' }, { name: 'Bonus' }, { name: 'X.S01.E01' }, { name: 'Extra' }];
+  const seasons = api.seriesSeasons(entries, [0, 1, 2, 3, 4]);
+  assert.deepEqual(seasons.map(s => s.season), [1, 2, 0]);
+  assert.deepEqual(seasons[0].episodes.map(e => e.index), [3, 1]);
+  assert.deepEqual(seasons[2].episodes.map(e => e.index), [2, 4]);
+});
+
+test('builds the compact series catalogue and series section by category', () => {
+  const api = require('../app/core.js');
+  const catalog = api.seriesCatalog(
+    [{ category_id: '7', category_name: 'Arabic' }, { category_id: '9', category_name: 'Turkish' }, { category_id: '7', category_name: 'dup' }],
+    [{ name: 'Alpha ', series_id: 11, category_id: '7' }, { name: 'Beta', series_id: '12', category_id: '9' }, { name: 'Gamma', series_id: 13, category_id: '99' }, { name: '', series_id: 1 }, { name: 'Bad', series_id: 'x' }]);
+  assert.deepEqual(catalog.categories, ['Arabic', 'Turkish']);
+  assert.deepEqual({ ...catalog.series }, { Alpha: [0, 11], Beta: [1, 12], Gamma: [-1, 13] });
+  const base = { groups: ['Beta', 'Alpha', 'Unknown'], byGroup: { Beta: [4, 5], Alpha: [1, 2, 3], Unknown: [8] }, all: [1, 2, 3, 4, 5, 8] };
+  const view = api.seriesSectionIndex(base, catalog, 'Other');
+  assert.deepEqual(view.all, [4, 1, 8], 'One card per series: its first episode');
+  assert.deepEqual(view.groups, ['Arabic', 'Turkish', 'Other'], 'Provider category order, unlisted series last');
+  assert.deepEqual({ ...view.byGroup }, { Arabic: [1], Turkish: [4], Other: [8] });
+  assert.deepEqual(api.seriesSectionIndex(base, null).groups, [], 'Without the catalogue: all series, no categories');
+  assert.equal(api.seriesCatalog(null, []), null);
+});
+
+test('reads series info and keeps only plain fields', () => {
+  const api = require('../app/core.js');
+  const info = api.seriesInfo({ info: { plot: ' A\nplot ', releaseDate: '2021-05-01', rating: '7.46', youtube_trailer: 'dQw4w9WgXcQ', genre: 'Drama' }, episodes: { 1: [{ id: '501', info: { duration_secs: 2650 } }, { id: 'x', info: { duration_secs: 10 } }], 2: [{ id: 502, info: {} }] } });
+  assert.deepEqual({ ...info, durations: { ...info.durations } }, { plot: 'A plot', year: '2021', genre: 'Drama', rating: '7.5', youtube: 'dQw4w9WgXcQ', durations: { 501: 2650 } });
+  assert.equal(api.seriesInfo([]), null);
+  const url = new URL(api.xtreamApiUrl('http://p.test:8080/get.php?username=u&password=p%26x&type=m3u_plus', 'get_series_info', { series_id: 12 }));
+  assert.equal(url.pathname, '/player_api.php');
+  assert.deepEqual([url.searchParams.get('username'), url.searchParams.get('password'), url.searchParams.get('action'), url.searchParams.get('series_id')], ['u', 'p&x', 'get_series_info', '12']);
+  assert.equal(api.xtreamApiUrl('https://plain.test/list.m3u', 'get_series'), null);
+});
+
+test('TMDB TV lookup and episode progress', () => {
+  const api = require('../app/core.js');
+  const key = '0123456789abcdef0123456789abcdef';
+  assert.equal(new URL(api.tmdbTvSearchUrl(key, 'Show', 'en')).pathname, '/3/search/tv');
+  assert.equal(new URL(api.tmdbTvVideosUrl(key, 42)).pathname, '/3/tv/42/videos');
+  assert.deepEqual(api.tmdbTvResult({ results: [{ id: 42, vote_average: 8.04, vote_count: 50, overview: 'Story', first_air_date: '2019-02-03' }] }, 'en'), { id: '42', rating: '8.0', plot: 'Story', year: '2019' });
+  assert.equal(api.tmdbTvResult({ results: [] }, 'en'), null);
+  assert.equal(api.episodeProgress([2500, 2650]), 'watched');
+  assert.equal(api.episodeProgress([600, 2650]), 'partial');
+  assert.equal(api.episodeProgress([10, 2650]), '');
+  assert.equal(api.episodeProgress(null), '');
+});

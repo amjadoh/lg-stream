@@ -177,11 +177,20 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
     await page.locator('#channel-search').fill('مشترك');
-    await page.waitForFunction(() => document.getElementById('search-status').textContent.includes('5 نتيجة'));
+    await page.waitForFunction(() => document.getElementById('search-status').textContent.includes('4 نتيجة'));
     assert.doesNotMatch(await page.locator('#search-results').innerText(), /مشترك بث/);
     assert.match(await page.locator('#search-results').innerText(), /مشترك فيلم/);
-    assert.match(await page.locator('#search-results').innerText(), /مشترك حلقة/);
-    await page.locator('#close-search').click();
+    assert.doesNotMatch(await page.locator('#search-results').innerText(), /مشترك حلقة/, 'Search shows the series, not its episodes');
+    assert.equal(await page.locator('#search-results [data-section="series"] .search-strip > button').count(), 1, 'Two episodes of one series are one result');
+    assert.match(await page.locator('#search-results [data-section="series"]').innerText(), /مشتركة/);
+    await page.locator('#search-results [data-section="series"] .search-strip > button').click();
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => document.getElementById('series-panel').contains(document.activeElement)), true, 'Choosing a series opens its page');
+    assert.match(await page.locator('#series-title').innerText(), /مشتركة/);
+    assert.match(await page.locator('#series-episodes').innerText(), /حلقة/);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#series-panel').isVisible(), false);
+    await chooseSection('tv');
 
     // Reopening and a same-source refresh preserve OFF and all original data.
     await page.reload();
@@ -206,7 +215,7 @@ async function main() {
     await chooseSection('movies');
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 0, 'Movie visibility is scoped independently');
     await chooseSection('series');
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 2);
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 1, 'Two episodes of one series are one series card');
     await chooseSection('tv');
     await page.locator('#groups [data-group="مجموعة 1"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 1);
