@@ -1320,12 +1320,13 @@
   function episodeProgressOf(index) { var key = episodeKey(index); return key && Object.prototype.hasOwnProperty.call(seriesProgress.items, key) ? seriesProgress.items[key] : null; }
   function trackEpisode(video, force, ended) {
     var index = playingIndex;
-    if (index === null || !sources[index] || entrySection(index) !== 'series' || !video || !isFinite(video.duration) || !(video.duration > 0)) return;
+    var section = index === null || !sources[index] ? '' : entrySection(index);
+    if ((section !== 'series' && section !== 'movies') || !video || !isFinite(video.duration) || !(video.duration > 0)) return;
     if (pendingResume && pendingResume.index === index && !pendingResume.done) return;
-    var key = episodeKey(index); var name = sources[index].group; if (!key || !name) return;
+    var key = episodeKey(index); var name = section === 'series' ? sources[index].group : ''; if (!key || (section === 'series' && !name)) return;
     var position = ended ? video.duration : video.currentTime; if (!(position >= 0)) return;
     seriesProgress.items[key] = [Math.round(position), Math.round(video.duration), Date.now()];
-    seriesProgress.last[name] = key;
+    if (name) seriesProgress.last[name] = key;
     var keys = Object.keys(seriesProgress.items);
     if (keys.length > SERIES_PROGRESS_LIMIT) {
       keys.sort(function (a, b) { return seriesProgress.items[a][2] - seriesProgress.items[b][2]; });
@@ -1338,7 +1339,7 @@
   function resumeEpisode(video) {
     if (!pendingResume || pendingResume.index !== playingIndex || pendingResume.done) return;
     pendingResume.done = true;
-    if (isFinite(video.duration) && video.duration > pendingResume.at + 60) { try { video.currentTime = pendingResume.at; } catch (_) {} }
+    if (isFinite(video.duration) && video.duration > pendingResume.at + 10) { try { video.currentTime = pendingResume.at; } catch (_) {} }
   }
   function seriesEpisodes(name) {
     var list = [];
@@ -1489,12 +1490,37 @@
     }
     renderSeriesInfo(); renderSeriesEpisodes();
   }
-  function playEpisode(index) {
+  // A movie or episode stopped part way asks where to start, unless it was
+  // finished or only its last 10 seconds remain.
+  var resumeChoice = null;
+  function resumePoint(index) { var progress = episodeProgressOf(index); return progress && progress[0] >= 30 && progress[1] - progress[0] > 10 ? progress[0] : 0; }
+  function withResume(index, play, known) {
+    var at = resumePoint(index);
+    if (!at || known) { pendingResume = at && known ? { index: index, at: at, done: false } : null; play(); return; }
+    resumeChoice = { index: index, at: at, play: play, back: document.activeElement };
+    $('resume-title').textContent = tr('وقفت عند ', 'You stopped at ') + timeLabel(at);
+    $('resume-continue').textContent = tr('متابعة من ', 'Resume from ') + timeLabel(at);
+    $('resume-prompt').hidden = false; $('resume-continue').focus();
+  }
+  function chooseResume(resume) {
+    var choice = resumeChoice; resumeChoice = null; $('resume-prompt').hidden = true; if (!choice) return;
+    pendingResume = resume ? { index: choice.index, at: choice.at, done: false } : null;
+    choice.play();
+  }
+  function cancelResume() {
+    var choice = resumeChoice; resumeChoice = null; $('resume-prompt').hidden = true;
+    if (!choice) return;
+    if (watchMode) document.body.focus();
+    else if (choice.cancel) choice.cancel();
+    else if (choice.back && choice.back.isConnected && choice.back.offsetParent) choice.back.focus();
+    else focusSelected();
+  }
+  $('resume-continue').addEventListener('click', function () { chooseResume(true); });
+  $('resume-restart').addEventListener('click', function () { chooseResume(false); });
+  function playEpisode(index, known) {
     var view = seriesView; if (!view || !sources[index]) return;
-    var progress = episodeProgressOf(index);
-    pendingResume = api.episodeProgress(progress) === 'partial' ? { index: index, at: progress[0], done: false } : null;
-    var name = view.name; closeSeriesPanel(false); seriesReturn = name; selected = index;
-    activateChannel(index);
+    var name = view.name;
+    withResume(index, function () { closeSeriesPanel(false); seriesReturn = name; selected = index; activateChannel(index); }, known);
   }
   // The series of the playing episode: its seasons, and the episodes before
   // and after it in season order.
@@ -1520,11 +1546,11 @@
     if (!sources[index]) return;
     var series = playingSeries(); var video = $('video-host').querySelector('video');
     if (video) trackEpisode(video, true);
-    cancelNextEpisode(); closeEpisodePanel(false);
-    var progress = episodeProgressOf(index);
-    pendingResume = api.episodeProgress(progress) === 'partial' ? { index: index, at: progress[0], done: false } : null;
-    if (series) seriesReturn = series.name;
-    selected = index; requestChannel(index, false);
+    cancelNextEpisode(); closeEpisodePanel(false); $('media-controls').hidden = true;
+    withResume(index, function () {
+      if (series) seriesReturn = series.name;
+      selected = index; requestChannel(index, false);
+    });
   }
   function updateEpisodeControls() {
     var series = playingSeries(); $('episode-controls').hidden = !series; if (!series) return;
@@ -1645,7 +1671,7 @@
     if (inActions && key === 'ArrowDown') { var below = activeSeason() || episodeTarget(); if (below) below.focus(); event.preventDefault(); return true; }
     return false;
   }
-  $('series-continue').addEventListener('click', function () { if (seriesView && seriesView.next.item) playEpisode(seriesView.next.item.index); });
+  $('series-continue').addEventListener('click', function () { if (seriesView && seriesView.next.item) playEpisode(seriesView.next.item.index, seriesView.next.mode === 'resume'); });
   $('close-series').addEventListener('click', function () { closeSeriesPanel(true); });
   $('series-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); seriesPanel.querySelector('.series-head').classList.add('no-poster'); });
   // Trailer: TMDB's official one, else the provider's, else a YouTube search.
@@ -1703,6 +1729,7 @@
     onState: function (state) {
       if (state.channel) trackInterruptions(state);
       lastState = state.state;
+      if (state.state === 'playing') scheduleControlsHide();
       document.body.dataset.state = state.state;
       LGI18n.text($('status'), labels[state.state] || 'جاهز');
       if (state.state === 'error' && state.errorCode) LGI18n.text($('status'), LGI18n.original($('status')) + ' (' + state.errorCode + ')');
@@ -2130,6 +2157,18 @@
     renderChannels();
     document.body.focus();
   }
+  // Movie and episode controls hide 10 s after the last key press while the
+  // picture plays; paused, failed, seeking or with a picker open they stay.
+  var CONTROLS_HIDE_MS = 10000; var controlsHideTimer = null;
+  function scheduleControlsHide() {
+    clearTimeout(controlsHideTimer); controlsHideTimer = null;
+    if (!watchMode || !isOnDemand() || $('media-controls').hidden) return;
+    controlsHideTimer = setTimeout(function () {
+      controlsHideTimer = null;
+      if (!watchMode || !isOnDemand() || $('media-controls').hidden || !$('track-picker').hidden || pendingSeek !== null || lastState !== 'playing') return;
+      $('media-controls').hidden = true; document.body.focus();
+    }, CONTROLS_HIDE_MS);
+  }
   function showPlaybackControls() {
     if (!$('track-picker').hidden) return;
     closeWatchChannels();
@@ -2139,6 +2178,7 @@
     $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions(); updateEpisodeControls();
     LGI18n.text($('media-toggle'), retryablePlayback() ? 'إعادة المحاولة' : lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت');
     ($('episode-controls').hidden ? $('media-toggle') : $('episode-list')).focus();
+    scheduleControlsHide();
   }
   $('media-toggle').addEventListener('click', function () { cancelSwitch(); if (retryablePlayback()) requestChannel(playingIndex, false, true); else player.toggle(); });
   $('media-close').addEventListener('click', function () { cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true; document.body.focus(); });
@@ -2572,7 +2612,11 @@
   $('close-search').addEventListener('click', closeSearch);
   $('close-details').addEventListener('click', closeDetails);
   $('details-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); detailsPanel.querySelector('.details-card').classList.add('no-poster'); });
-  $('details-play').addEventListener('click', function () { cancelDetailsRequest(); var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index !== null) activateChannel(index); });
+  $('details-play').addEventListener('click', function () {
+    cancelDetailsRequest(); var index = detailsIndex; detailsPanel.hidden = true; detailsIndex = null; if (index === null) return;
+    withResume(index, function () { activateChannel(index); });
+    if (resumeChoice) resumeChoice.cancel = function () { openDetails(index); };
+  });
   // The packaged background service brings LG Stream back when the trailer
   // stops in YouTube; the web app itself is suspended there (measured on the TV).
   var trailerWatchArmed = false; var serviceBridge = null;
@@ -2787,7 +2831,7 @@
 
 
   function extraDialog() {
-    return ['exit-confirm', 'category-picker', 'appearance-panel', 'imdb-panel', 'settings-home', 'item-menu', 'rename-panel', 'edit-confirm', 'series-panel'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['resume-prompt', 'exit-confirm', 'category-picker', 'appearance-panel', 'imdb-panel', 'settings-home', 'item-menu', 'rename-panel', 'edit-confirm', 'series-panel'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   var exitReturn = null;
   function focusSection() {
@@ -2830,6 +2874,7 @@
   function closeExtraDialog() {
     var panel = extraDialog(); if (!panel) return;
     panel.hidden = true;
+    if (panel.id === 'resume-prompt') { panel.hidden = false; cancelResume(); return; }
     if (panel.id === 'exit-confirm') { if (exitReturn && exitReturn.isConnected && exitReturn.offsetParent) exitReturn.focus(); else focusSection(); exitReturn = null; }
     else if (panel.id === 'settings-home') { settingsReturn = null; setPrimary(false); $('nav-settings').focus(); }
     else if (panel.id === 'appearance-panel') returnToSettings();
@@ -3403,6 +3448,7 @@
   document.addEventListener('pointermove', noteUserActivity, { capture: true, passive: true });
   document.addEventListener('keydown', function (event) {
     noteUserActivity();
+    if (watchMode) setTimeout(scheduleControlsHide, 0);
     var code = event.keyCode;
     var key = event.key;
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
@@ -3438,7 +3484,7 @@
       return;
     }
     // CH+/CH- while an episode plays: next or previous episode.
-    if (watchMode && isOnDemand() && (code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown')) {
+    if (watchMode && isOnDemand() && !extraDialog() && (code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown')) {
       event.preventDefault(); if (event.repeat) return;
       var playingShow = playingSeries(); var forward = code === 33 || code === 427 || key === 'PageUp';
       var episodeTarget = playingShow && (forward ? playingShow.next : playingShow.prev);
