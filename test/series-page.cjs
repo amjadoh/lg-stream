@@ -128,6 +128,7 @@ async function main() {
     await page.locator('#series-panel').waitFor({ state: 'visible' });
     assert.equal(await page.locator('video').count(), 0, 'Back releases the episode');
     assert.equal(await page.locator('#series-episodes .episode-card.watched').count(), 1, 'The finished episode is marked');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-series-watched-1080.png') });
     assert.match(await page.locator('#series-continue').innerText(), /2/, 'Continue offers the next episode');
     const stored = await page.evaluate(() => localStorage.getItem('lg-stream-series-progress-v1'));
     assert.doesNotMatch(stored, /media\.invalid|user|pass/, 'Progress stores keys only, never links or credentials');
@@ -150,6 +151,7 @@ async function main() {
     await page.keyboard.press('ArrowDown');
     assert.equal(await focusedCell(), 0);
     await page.keyboard.press('ArrowLeft'); assert.equal(await focusedCell(), 1);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-series-grid-focus-1080.png') });
     await page.keyboard.press('ArrowDown'); assert.equal(await focusedCell(), 6);
     for (let row = 2; row < 8; row++) await page.keyboard.press('ArrowDown');
     assert.equal(await focusedCell(), 36);
