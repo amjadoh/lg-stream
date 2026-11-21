@@ -298,13 +298,115 @@
   function setPrimary(open) {
     document.querySelector('.library-panel').classList.toggle('primary-open', open); applyPictureFit();
   }
+  // Recent searches stay on this TV only: at most 10 words, newest first.
+  var SEARCH_HISTORY_KEY = 'lg-stream-search-history-v1'; var SEARCH_HISTORY_LIMIT = 10; var SEARCH_ROW_LIMIT = 30;
+  var searchHistory = [];
+  try { var savedHistory = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]'); if (Array.isArray(savedHistory)) searchHistory = savedHistory.filter(function (word) { return typeof word === 'string' && word.trim().length >= 2; }).map(function (word) { return word.trim().slice(0, 80); }).slice(0, SEARCH_HISTORY_LIMIT); } catch (_) {}
+  function saveSearchHistory() { try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(searchHistory)); } catch (_) {} }
+  function rememberSearch(word) {
+    word = String(word || '').trim().slice(0, 80); if (word.length < 2) return;
+    var lower = word.toLocaleLowerCase();
+    searchHistory = [word].concat(searchHistory.filter(function (item) { return item.toLocaleLowerCase() !== lower; })).slice(0, SEARCH_HISTORY_LIMIT);
+    saveSearchHistory();
+  }
+  function renderSearchHistory() {
+    var list = $('search-history-list'); list.replaceChildren();
+    var show = !searchPanel.hidden && $('channel-search').value.trim().length < 2 && searchHistory.length > 0;
+    $('search-history').hidden = !show; if (!show) return;
+    searchHistory.forEach(function (word, position) {
+      var button = document.createElement('button'); button.type = 'button'; button.className = 'history-item'; button.dataset.position = position;
+      button.dataset.providerText = 'true'; button.textContent = word;
+      button.addEventListener('click', function () { runSavedSearch(word); });
+      list.appendChild(button);
+    });
+  }
+  function runSavedSearch(word) {
+    clearTimeout(searchTimer); searchTimer = null;
+    $('channel-search').value = word; renderSearch();
+    if (!focusFirstResult()) $('channel-search').focus();
+  }
+  function forgetSearch(button) {
+    var position = Number(button.dataset.position); if (!(position >= 0)) return;
+    searchHistory.splice(position, 1); saveSearchHistory(); renderSearchHistory();
+    var items = $('search-history-list').querySelectorAll('.history-item');
+    if (items.length) items[Math.min(position, items.length - 1)].focus(); else $('channel-search').focus();
+  }
+  function searchStrips() { return Array.prototype.slice.call($('search-results').querySelectorAll('.search-strip')); }
+  // Pressing Down/OK from the search box (or choosing a saved word) selects the first result.
+  function focusFirstResult() {
+    var first = $('search-results').querySelector('.search-strip > button'); if (!first) return false;
+    rememberSearch($('channel-search').value); first.focus(); return true;
+  }
+  function focusStripItem(strip, x) {
+    var items = Array.prototype.slice.call(strip.children); if (!items.length) return;
+    var bounds = strip.getBoundingClientRect(); var best = items[0]; var score = Infinity;
+    items.forEach(function (item) {
+      var rect = item.getBoundingClientRect(); if (rect.right <= bounds.left || rect.left >= bounds.right) return;
+      var distance = Math.abs((rect.left + rect.right) / 2 - x); if (distance < score) { score = distance; best = item; }
+    });
+    best.focus();
+  }
+  // Rows of the search page: left/right inside a row, up/down between rows.
+  function searchKey(event, key) {
+    var focused = document.activeElement;
+    if (focused === $('channel-search') || focused === $('clear-search') || focused === $('close-search')) {
+      if (key === 'ArrowDown' || (key === 'Enter' && focused === $('channel-search'))) {
+        if (searchTimer) { clearTimeout(searchTimer); searchTimer = null; renderSearch(); }
+        var firstHistory = $('search-history').hidden ? null : $('clear-search-history');
+        if (focusFirstResult()) { event.preventDefault(); return true; }
+        if (key === 'ArrowDown' && firstHistory) { firstHistory.focus(); event.preventDefault(); return true; }
+      }
+      return false;
+    }
+    if ($('search-history').contains(focused)) {
+      if (key === 'ArrowUp' && (focused === $('clear-search-history') || focused.getBoundingClientRect().top - $('search-history-list').getBoundingClientRect().top < 10)) {
+        if (focused === $('clear-search-history')) $('channel-search').focus(); else $('clear-search-history').focus();
+        event.preventDefault(); return true;
+      }
+      if (key === 'ArrowDown' && focused === $('clear-search-history')) {
+        var firstWord = $('search-history-list').querySelector('button'); if (firstWord) firstWord.focus();
+        event.preventDefault(); return true;
+      }
+      return false;
+    }
+    var strip = focused.parentNode; if (!strip || !strip.classList || !strip.classList.contains('search-strip')) return false;
+    var strips = searchStrips(); var row = strips.indexOf(strip);
+    var items = Array.prototype.slice.call(strip.children); var at = items.indexOf(focused);
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
+      if (items[at + step]) items[at + step].focus();
+    } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+      var rect = focused.getBoundingClientRect(); var x = (rect.left + rect.right) / 2;
+      var target = strips[row + (key === 'ArrowDown' ? 1 : -1)];
+      if (target) focusStripItem(target, x); else if (key === 'ArrowUp') $('channel-search').focus();
+    } else return false;
+    event.preventDefault(); return true;
+  }
   function closeSearch() { lastSearch = null;
     clearTimeout(searchTimer); searchTimer = null;
-    searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); LGI18n.text($('search-status'), 'اكتب حرفين على الأقل.');
+    searchPanel.hidden = true; $('channel-search').value = ''; $('search-results').replaceChildren(); $('search-history').hidden = true; LGI18n.text($('search-status'), 'اكتب حرفين على الأقل.');
     setPrimary(false); var group = $('groups').querySelector('.group-button.active') || $('groups').querySelector('button'); if (group) group.focus();
+  }
+  function searchCard(index, section) {
+    var button = document.createElement('button'); button.type = 'button'; button.dataset.index = index;
+    var item = sources[index] || {};
+    if (section === 'tv') {
+      button.className = 'search-channel';
+      if (item.poster) { var logo = document.createElement('img'); logo.alt = ''; logo.loading = 'lazy'; logo.src = item.poster; logo.addEventListener('error', function () { this.remove(); }); button.appendChild(logo); }
+      var label = document.createElement('span'); LGI18n.provider(label, item.name, 'عنصر', arabicChannelName(index, '')); button.appendChild(label);
+    } else {
+      button.className = 'movie-card';
+      if (item.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.loading = 'lazy'; poster.src = item.poster; poster.addEventListener('error', function () { this.remove(); }); button.appendChild(poster); }
+      var name = document.createElement('span'); LGI18n.provider(name, item.name, section === 'movies' ? 'فيلم' : 'مسلسل'); button.appendChild(name);
+      if (section === 'movies') applyCardRating(button, index);
+    }
+    button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+    button.addEventListener('click', function () { rememberSearch($('channel-search').value); closeSearch(); if (section !== 'tv') stop(); activeCategory = 'all'; activeSection = section; activeGroup = item.group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section === 'tv') activateChannel(index); else openDetails(index); });
+    return button;
   }
   function renderSearch() {
     var query = $('channel-search').value.trim().toLocaleLowerCase(); $('search-results').replaceChildren();
+    renderSearchHistory();
     if (query.length < 2) { LGI18n.text($('search-status'), 'اكتب حرفين على الأقل.'); return; }
     var sections = [['tv', 'البث المباشر'], ['movies', 'الأفلام'], ['series', 'المسلسلات']]; var total = 0;
     if (searchLiveRevision !== catalogViewRevision) {
@@ -313,21 +415,19 @@
       searchLiveRevision = catalogViewRevision;
     }
     var narrowing = lastSearch && lastSearch.revision === catalogViewRevision && lastSearch.sources === sources && query.indexOf(lastSearch.query) === 0;
-    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, 12, searchLiveIndexes, narrowing ? lastSearch.matched : null);
+    var results = api.searchCatalog(sources, query, function (index) { return entryVisible(index) ? entrySection(index) : null; }, SEARCH_ROW_LIMIT, searchLiveIndexes, narrowing ? lastSearch.matched : null);
     lastSearch = { query: query, revision: catalogViewRevision, sources: sources, matched: results.matched };
     sections.forEach(function (section) {
       var matches = results.matches[section[0]]; var count = results.counts[section[0]];
-      total += count;
-      var box = document.createElement('section'); box.className = 'search-section';
+      total += count; if (!count) return;
+      var box = document.createElement('section'); box.className = 'search-section'; box.dataset.section = section[0];
       var title = document.createElement('h3'); LGI18n.text(title, section[1] + ' (' + count + ')'); box.appendChild(title);
-      matches.forEach(function (index) {
-        var button = document.createElement('button'); button.type = 'button'; LGI18n.provider(button, sources[index].name, 'عنصر', arabicChannelName(index, ''));
-        button.addEventListener('click', function () { closeSearch(); if (section[0] !== 'tv') stop(); activeCategory = 'all'; activeSection = section[0]; activeGroup = sources[index].group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section[0] === 'tv') activateChannel(index); else openDetails(index); });
-        box.appendChild(button);
-      });
+      var strip = document.createElement('div'); strip.className = 'search-strip';
+      matches.forEach(function (index) { strip.appendChild(searchCard(index, section[0])); });
+      box.appendChild(strip);
       $('search-results').appendChild(box);
     });
-    LGI18n.text($('search-status'), total ? 'وُجد ' + total + ' نتيجة. تظهر أول 12 نتيجة في كل قسم.' : 'لا توجد نتائج.');
+    LGI18n.text($('search-status'), total ? 'وُجد ' + total + ' نتيجة. تظهر أول 30 نتيجة في كل صف.' : 'لا توجد نتائج.');
   }
   function openSearch() { lastSearch = null; cancelSwitch(); setPrimary(false); searchPanel.hidden = false; renderSearch(); $('channel-search').focus(); }
   function renderPrimary() {
@@ -2009,6 +2109,7 @@
     event.preventDefault();
   }, { passive: false });
   $('clear-search').addEventListener('click', function () { $('channel-search').value = ''; renderSearch(); $('channel-search').focus(); });
+  $('clear-search-history').addEventListener('click', function () { searchHistory = []; saveSearchHistory(); renderSearchHistory(); $('channel-search').focus(); });
   $('nav-search').addEventListener('click', openSearch);
   $('close-search').addEventListener('click', closeSearch);
   $('close-details').addEventListener('click', closeDetails);
@@ -2890,6 +2991,10 @@
     var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : extraDialog();
     if (dialog) {
       if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
+      if (dialog === searchPanel) {
+        if (code === BLUE_KEY && document.activeElement.classList.contains('history-item')) { event.preventDefault(); if (!event.repeat) forgetSearch(document.activeElement); return; }
+        if (searchKey(event, key)) return;
+      }
       if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager') && !$('manager-visibility').hidden) {
         if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
         else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
