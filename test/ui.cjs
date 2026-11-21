@@ -930,11 +930,13 @@ async function main() {
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="series"]').click();
-    await page.locator('#groups [data-group="مسلسلات VOD"]').click();
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 14);
+    assert.equal(await page.locator('#groups [data-group="مسلسلات VOD"]').count(), 0, 'A series is not listed as a group');
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 1, '14 episodes of one series are one series card');
     await page.screenshot({ path: path.join(root, 'artifacts/ui-movies-1080.png') });
     await page.locator('#movie-grid .movie-card').first().click();
-    await page.locator('#details-play').click();
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#series-episodes .episode-card').count(), 14);
+    await page.locator('#series-episodes .episode-card').first().click();
     await setMediaTracks([{ language: 'ar', enabled: true }, { language: 'en', enabled: false }], [{ kind: 'captions', language: 'ar', mode: 'disabled' }]);
     const seriesTrackStarts = await page.evaluate(() => window.__mediaStarts);
     await page.keyboard.press('Enter');
@@ -958,6 +960,7 @@ async function main() {
     assert.equal(await page.locator('#track-list button').count(), 0);
     assert.equal(await page.locator('video').count(), 0);
     assert.equal(await page.evaluate(() => window.__mediaStarts), seriesTrackStarts, 'Returning from a track picker must not restart series playback');
+    if (await page.locator('#series-panel').isVisible()) await page.keyboard.press('Escape');
     await page.locator('#groups .group-button').first().focus();
     await page.keyboard.press('ArrowLeft');
     await page.locator('.primary-button[data-section="tv"]').click();

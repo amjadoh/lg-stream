@@ -184,8 +184,12 @@ async function main() {
     assert.equal(await page.locator('#search-results [data-section="series"] .search-strip > button').count(), 1, 'Two episodes of one series are one result');
     assert.match(await page.locator('#search-results [data-section="series"]').innerText(), /مشتركة/);
     await page.locator('#search-results [data-section="series"] .search-strip > button').click();
-    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card') && document.getElementById('movie-grid').contains(document.activeElement)), true, 'Choosing a series opens its episodes');
-    assert.match(await page.locator('#movie-grid').innerText(), /مشترك حلقة 0/);
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => document.getElementById('series-panel').contains(document.activeElement)), true, 'Choosing a series opens its page');
+    assert.match(await page.locator('#series-title').innerText(), /مشتركة/);
+    assert.match(await page.locator('#series-episodes').innerText(), /حلقة/);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#series-panel').isVisible(), false);
     await chooseSection('tv');
 
     // Reopening and a same-source refresh preserve OFF and all original data.
@@ -211,7 +215,7 @@ async function main() {
     await chooseSection('movies');
     assert.equal(await page.locator('#movie-grid .movie-card').count(), 0, 'Movie visibility is scoped independently');
     await chooseSection('series');
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 2);
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 1, 'Two episodes of one series are one series card');
     await chooseSection('tv');
     await page.locator('#groups [data-group="مجموعة 1"]').click();
     assert.equal(await page.locator('#channels .channel-button').count(), 1);

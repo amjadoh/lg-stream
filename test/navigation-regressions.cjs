@@ -44,7 +44,8 @@ async function main() {
         const lines = ['#EXTM3U'];
         for (const [kind, group, count] of [['live', 'بث الاختبار', 95], ['movie', 'أفلام الاختبار', 45], ['series', 'حلقات الاختبار', 45]]) {
           for (let index = 0; index < count; index++) {
-            lines.push(`#EXTINF:-1 group-title="${group}",${group} ${index + 1}`);
+            // Each series is its own provider group; the series section shows one card per series.
+            lines.push(`#EXTINF:-1 group-title="${kind === 'series' ? `${group} ${index + 1}` : group}",${group} ${index + 1}`);
             lines.push(`https://media.example.test/${kind}/${index + 1}.m3u8`);
           }
         }
@@ -150,7 +151,7 @@ async function main() {
     await page.keyboard.press('Escape'); await page.keyboard.press('ArrowRight');
     await focusedIndex(45);
 
-    for (const [section, group, base] of [['movies', 'أفلام الاختبار', 95], ['series', 'حلقات الاختبار', 140]]) {
+    for (const [section, group, base] of [['movies', 'أفلام الاختبار', 95], ['series', '', 140]]) {
       await chooseSection(section, group);
       await focusedIndex(base, 'movie-card');
       // Every first-row column has a useful upward exit and returns to the same
@@ -218,9 +219,14 @@ async function main() {
       for (let step = 0; step < 6 && await page.locator('#movie-grid .movie-card').first().getAttribute('data-index') !== String(base); step++) await wheelAtBoundary('#movie-browser', false);
       assert.equal(await page.locator('#movie-grid .movie-card').first().getAttribute('data-index'), String(base));
       await page.locator('#movie-grid .movie-card').first().click();
-      assert.equal(await page.locator('#details-poster').isVisible(), false);
-      const detailsWidth = await page.locator('.details-card > div').evaluate(element => element.getBoundingClientRect().width);
-      assert.ok(detailsWidth > 600, 'Content without a poster uses the full details width, not the 240px poster column');
+      if (section === 'series') {
+        await page.locator('#series-panel').waitFor({ state: 'visible' });
+        assert.equal(await page.locator('#series-poster').isVisible(), false, 'A series without a poster hides the poster box');
+      } else {
+        assert.equal(await page.locator('#details-poster').isVisible(), false);
+        const detailsWidth = await page.locator('.details-card > div').evaluate(element => element.getBoundingClientRect().width);
+        assert.ok(detailsWidth > 600, 'Content without a poster uses the full details width, not the 240px poster column');
+      }
       await page.keyboard.press('Escape');
     }
     assert.equal(await page.evaluate(() => window.__navigationMediaStarts), 2, 'Only two explicit channel selections start playback; drawer and catalogue browsing do not');
