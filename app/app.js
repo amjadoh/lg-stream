@@ -1431,7 +1431,7 @@
       button.textContent = season.season > 0 ? tr('الموسم ', 'Season ') + season.season : tr('أخرى', 'Other');
       button.setAttribute('aria-pressed', String(season.season === view.season));
       button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); showSeason(season.season); });
-      button.addEventListener('click', function () { showSeason(season.season); var first = $('series-episodes').querySelector('.episode-card'); if (first) first.focus(); });
+      button.addEventListener('click', function () { showSeason(season.season); button.focus(); });
       list.appendChild(button);
     });
   }

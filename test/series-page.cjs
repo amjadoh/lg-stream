@@ -111,6 +111,7 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#series-episodes .episode-card').count(), 1, 'Season 2 replaces the episode row');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.season), '2', 'OK on a season keeps focus on it');
     await page.locator('#series-seasons button').first().click();
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('episode-card')), true);
