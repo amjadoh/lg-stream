@@ -177,11 +177,16 @@ async function main() {
     await page.keyboard.press('ArrowLeft');
     await page.locator('#nav-search').click();
     await page.locator('#channel-search').fill('مشترك');
-    await page.waitForFunction(() => document.getElementById('search-status').textContent.includes('5 نتيجة'));
+    await page.waitForFunction(() => document.getElementById('search-status').textContent.includes('4 نتيجة'));
     assert.doesNotMatch(await page.locator('#search-results').innerText(), /مشترك بث/);
     assert.match(await page.locator('#search-results').innerText(), /مشترك فيلم/);
-    assert.match(await page.locator('#search-results').innerText(), /مشترك حلقة/);
-    await page.locator('#close-search').click();
+    assert.doesNotMatch(await page.locator('#search-results').innerText(), /مشترك حلقة/, 'Search shows the series, not its episodes');
+    assert.equal(await page.locator('#search-results [data-section="series"] .search-strip > button').count(), 1, 'Two episodes of one series are one result');
+    assert.match(await page.locator('#search-results [data-section="series"]').innerText(), /مشتركة/);
+    await page.locator('#search-results [data-section="series"] .search-strip > button').click();
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card') && document.getElementById('movie-grid').contains(document.activeElement)), true, 'Choosing a series opens its episodes');
+    assert.match(await page.locator('#movie-grid').innerText(), /مشترك حلقة 0/);
+    await chooseSection('tv');
 
     // Reopening and a same-source refresh preserve OFF and all original data.
     await page.reload();
