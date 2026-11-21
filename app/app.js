@@ -1496,6 +1496,128 @@
     var name = view.name; closeSeriesPanel(false); seriesReturn = name; selected = index;
     activateChannel(index);
   }
+  // The series of the playing episode: its seasons, and the episodes before
+  // and after it in season order.
+  var playingSeriesCache = null;
+  function playingSeries() {
+    var index = playingIndex;
+    if (index === null || !sources[index] || entrySection(index) !== 'series' || !sources[index].group) return null;
+    var name = sources[index].group;
+    if (!playingSeriesCache || playingSeriesCache.name !== name || playingSeriesCache.revision !== catalogViewRevision || playingSeriesCache.sources !== sources) {
+      var seasons = api.seriesSeasons(sources, seriesEpisodes(name)); var flat = [];
+      seasons.forEach(function (season) { season.episodes.forEach(function (item) { flat.push(item); }); });
+      playingSeriesCache = { name: name, revision: catalogViewRevision, sources: sources, seasons: seasons, flat: flat };
+    }
+    var cache = playingSeriesCache; var position = -1;
+    for (var at = 0; at < cache.flat.length; at += 1) if (cache.flat[at].index === index) { position = at; break; }
+    if (position < 0) return null;
+    var info = seriesInfoFor(name); var cached = info && seriesInfoCache.has(info[1]) ? seriesInfoCache.get(info[1]) : null;
+    return { name: name, seasons: cache.seasons, flat: cache.flat, current: cache.flat[position], prev: cache.flat[position - 1] || null, next: cache.flat[position + 1] || null, info: cached };
+  }
+  // Another episode of the playing series: save where this one stopped, then
+  // replace it (one media element; the next starts only after this one stops).
+  function startEpisode(index) {
+    if (!sources[index]) return;
+    var series = playingSeries(); var video = $('video-host').querySelector('video');
+    if (video) trackEpisode(video, true);
+    cancelNextEpisode(); closeEpisodePanel(false);
+    var progress = episodeProgressOf(index);
+    pendingResume = api.episodeProgress(progress) === 'partial' ? { index: index, at: progress[0], done: false } : null;
+    if (series) seriesReturn = series.name;
+    selected = index; requestChannel(index, false);
+  }
+  function updateEpisodeControls() {
+    var series = playingSeries(); $('episode-controls').hidden = !series; if (!series) return;
+    $('episode-prev').hidden = !series.prev; $('episode-next').hidden = !series.next;
+    $('episode-prev').textContent = series.prev ? tr('الحلقة السابقة · ', 'Previous · ') + episodeLabel(series, series.prev) : '';
+    $('episode-next').textContent = series.next ? tr('الحلقة التالية · ', 'Next · ') + episodeLabel(series, series.next) : '';
+  }
+  $('episode-prev').addEventListener('click', function () { var series = playingSeries(); if (series && series.prev) startEpisode(series.prev.index); });
+  $('episode-next').addEventListener('click', function () { var series = playingSeries(); if (series && series.next) startEpisode(series.next.index); });
+  $('episode-list').addEventListener('click', openEpisodePanel);
+  // Side list of the playing series' episodes, over the running video.
+  var episodePanel = $('episode-panel'); var episodePanelSeason = null;
+  function openEpisodePanel() {
+    var series = playingSeries(); if (!series) return;
+    cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true;
+    episodePanelSeason = series.current.season;
+    LGI18n.provider($('episode-panel-title'), series.name, 'مسلسل');
+    episodePanel.hidden = false; renderEpisodePanel(series.current.index);
+  }
+  function renderEpisodePanel(focusIndex) {
+    var series = playingSeries(); if (!series) { closeEpisodePanel(false); return; }
+    var season = series.seasons.find(function (item) { return item.season === episodePanelSeason; }) || series.seasons[0];
+    episodePanelSeason = season.season; var position = series.seasons.indexOf(season);
+    $('episode-season').hidden = series.seasons.length < 2;
+    $('episode-season').textContent = '‹ ' + (season.season > 0 ? tr('الموسم ', 'Season ') + season.season : tr('أخرى', 'Other')) + tr(' من ', ' of ') + series.seasons.length + ' ›';
+    var list = $('episode-items'); list.replaceChildren(); var target = null;
+    season.episodes.forEach(function (item, at) {
+      var button = document.createElement('button'); button.type = 'button'; button.className = 'episode-row'; button.dataset.index = item.index; button.dataset.providerText = 'true';
+      var progress = episodeProgressOf(item.index); var state = api.episodeProgress(progress); var current = item.index === playingIndex;
+      if (current) button.classList.add('current'); else if (state === 'watched') button.classList.add('watched');
+      var label = document.createElement('span'); label.textContent = tr('الحلقة ', 'Episode ') + (item.episode || at + 1) + (state === 'watched' && !current ? ' ✓' : '');
+      var details = document.createElement('span'); details.className = 'episode-row-meta'; var seconds = episodeSeconds(series, item.index);
+      details.textContent = current ? tr('تشتغل الآن', 'Playing now') : state === 'partial' ? tr('وقفت عند ', 'Stopped at ') + Math.floor(progress[0] / 60) + tr(' د', ' min') : seconds ? Math.max(1, Math.round(seconds / 60)) + tr(' د', ' min') : '';
+      button.appendChild(label); button.appendChild(details);
+      button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest' }); });
+      button.addEventListener('click', function () { if (item.index === playingIndex) closeEpisodePanel(true); else startEpisode(item.index); });
+      list.appendChild(button);
+      if (item.index === focusIndex) target = button;
+    });
+    (target || list.firstElementChild).focus();
+    episodePanel.dataset.seasonPosition = String(position);
+  }
+  function closeEpisodePanel(showControls) {
+    if (episodePanel.hidden) return;
+    episodePanel.hidden = true; $('episode-items').replaceChildren();
+    if (showControls && watchMode) { showPlaybackControls(); $('episode-list').focus(); } else document.body.focus();
+  }
+  function episodePanelKey(event, key) {
+    var rows = Array.prototype.slice.call($('episode-items').children); var at = rows.indexOf(document.activeElement);
+    if (key === 'Enter') { event.preventDefault(); if (!event.repeat && at >= 0) rows[at].click(); return true; }
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      var target = rows[Math.max(0, Math.min(rows.length - 1, (at < 0 ? 0 : at) + (key === 'ArrowDown' ? 1 : -1)))];
+      if (target) target.focus(); event.preventDefault(); return true;
+    }
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      var series = playingSeries(); event.preventDefault(); if (!series) return true;
+      var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
+      var position = Number(episodePanel.dataset.seasonPosition) + step;
+      if (position >= 0 && position < series.seasons.length) {
+        episodePanelSeason = series.seasons[position].season;
+        renderEpisodePanel(series.current.season === episodePanelSeason ? series.current.index : -1);
+      }
+      return true;
+    }
+    if (key === 'Tab') { event.preventDefault(); return true; }
+    return false;
+  }
+  // When an episode ends, the next one starts after a 10 second countdown
+  // unless the viewer cancels.
+  var nextEpisodeTimer = null; var nextEpisodeState = null;
+  function offerNextEpisode() {
+    var series = playingSeries(); if (!series || !series.next) return false;
+    cancelNextEpisode(); closeEpisodePanel(false); cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true;
+    nextEpisodeState = { index: series.next.index, seconds: 10, label: episodeLabel(series, series.next) };
+    $('next-episode').hidden = false; renderNextEpisode(); $('next-episode-now').focus();
+    nextEpisodeTimer = setInterval(function () {
+      if (!nextEpisodeState) return;
+      nextEpisodeState.seconds -= 1;
+      if (nextEpisodeState.seconds <= 0) startEpisode(nextEpisodeState.index); else renderNextEpisode();
+    }, 1000);
+    return true;
+  }
+  function renderNextEpisode() { $('next-episode-text').textContent = tr('الحلقة التالية: ', 'Next episode: ') + nextEpisodeState.label + tr(' خلال ', ' in ') + nextEpisodeState.seconds; }
+  function cancelNextEpisode() { clearInterval(nextEpisodeTimer); nextEpisodeTimer = null; nextEpisodeState = null; $('next-episode').hidden = true; }
+  $('next-episode-now').addEventListener('click', function () { if (nextEpisodeState) startEpisode(nextEpisodeState.index); });
+  $('next-episode-cancel').addEventListener('click', function () { cancelNextEpisode(); exitPlayback(); });
+  function nextEpisodeKey(event, key) {
+    var buttons = [$('next-episode-now'), $('next-episode-cancel')]; var at = buttons.indexOf(document.activeElement);
+    if (key === 'Enter') { event.preventDefault(); if (!event.repeat) (buttons[at] || buttons[0]).click(); return true; }
+    if (key === 'ArrowLeft' || key === 'ArrowRight') { buttons[at === 0 ? 1 : 0].focus(); event.preventDefault(); return true; }
+    if (/^Arrow/.test(key) || key === 'Tab') { event.preventDefault(); return true; }
+    return false;
+  }
   // Rows of the series page: left/right inside the seasons or episodes row,
   // up/down between the buttons, the seasons and the episodes.
   function seriesKey(event, key) {
@@ -1592,7 +1714,10 @@
       $('display-button').disabled = ['playing', 'waiting', 'paused', 'loading'].indexOf(state.state) < 0;
       $('display-fullscreen').disabled = $('display-button').disabled;
       updateChannelStates();
-      if (['error', 'play-rejected', 'startup-timeout', 'stall-timeout', 'ended'].indexOf(state.state) >= 0) {
+      if (state.state === 'ended' && watchMode && playingIndex !== null && entrySection(playingIndex) === 'series') {
+        // A finished episode offers the next one; after the last, back to the series page.
+        if (!offerNextEpisode()) { var finished = playingIndex; setTimeout(function () { if (playingIndex === finished && lastState === 'ended') exitPlayback(); }, 0); }
+      } else if (['error', 'play-rejected', 'startup-timeout', 'stall-timeout', 'ended'].indexOf(state.state) >= 0) {
         if (playingIndex === null) { stop(); focusSelected(); LGI18n.text($('status'), labels[state.state]); return; }
         if (watchMode && entrySection(playingIndex) === 'tv') {
           if (watchChannels === null) setWatchMode(true);
@@ -1833,6 +1958,7 @@
     }, 6000);
   }
   function stop() {
+    cancelNextEpisode(); closeEpisodePanel(false);
     cancelReconnect(true);
     cancelSwitch();
     setWatchMode(false);
@@ -1847,6 +1973,7 @@
     setTimeout(scheduleAutoUpdate, 0);
   }
   function setWatchMode(enabled) {
+    cancelNextEpisode(); closeEpisodePanel(false);
     closeWatchChannels();
     cancelSeek();
     closeTrackPicker(false);
@@ -2009,9 +2136,9 @@
     if (switchPending && playingIndex !== null) selected = playingIndex;
     cancelSwitch();
     $('seek-status').textContent = ''; $('track-status').textContent = '';
-    $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions();
+    $('media-controls').hidden = false; updatePlaybackControls(); updateTrackOptions(); updateEpisodeControls();
     LGI18n.text($('media-toggle'), retryablePlayback() ? 'إعادة المحاولة' : lastState === 'paused' ? 'متابعة' : 'إيقاف مؤقت');
-    $('media-toggle').focus();
+    ($('episode-controls').hidden ? $('media-toggle') : $('episode-list')).focus();
   }
   $('media-toggle').addEventListener('click', function () { cancelSwitch(); if (retryablePlayback()) requestChannel(playingIndex, false, true); else player.toggle(); });
   $('media-close').addEventListener('click', function () { cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true; document.body.focus(); });
@@ -3281,7 +3408,7 @@
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
     var isInput = event.target.tagName === 'INPUT';
     if (isInput && keyboardVisible) return;
-    var anyDialog = !$('track-picker').hidden || !$('group-manager').hidden || !$('sort-menu').hidden || !detailsPanel.hidden || !setup.hidden || !searchPanel.hidden || !diagnostics.hidden || !speedPanel.hidden || !!extraDialog();
+    var anyDialog = !$('track-picker').hidden || !episodePanel.hidden || !$('next-episode').hidden || !$('group-manager').hidden || !$('sort-menu').hidden || !detailsPanel.hidden || !setup.hidden || !searchPanel.hidden || !diagnostics.hidden || !speedPanel.hidden || !!extraDialog();
     var backKey = code === 461 || key === 'Escape';
     if (!backKey && !anyDialog && !isInput && customizationKey(event, key, code)) return;
     if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
@@ -3293,6 +3420,8 @@
       if (switchPending && playingIndex !== null) selected = playingIndex;
       cancelSwitch();
       if (watchChannels !== null) { closeWatchChannels(); exitPlayback(); focusActiveGroup(); return; }
+      if (!$('next-episode').hidden) { cancelNextEpisode(); exitPlayback(); return; }
+      if (!episodePanel.hidden) { closeEpisodePanel(true); return; }
       if (!$('track-picker').hidden) { closeTrackPicker(true); return; }
       if (!$('group-manager').hidden) { closeGroupManager(); return; }
       if (!$('sort-menu').hidden) { $('sort-menu').hidden = true; $('sort-button').setAttribute('aria-expanded', 'false'); $('sort-button').focus(); }
@@ -3308,6 +3437,16 @@
       else backToLibrary();
       return;
     }
+    // CH+/CH- while an episode plays: next or previous episode.
+    if (watchMode && isOnDemand() && (code === 33 || code === 34 || code === 427 || code === 428 || key === 'PageUp' || key === 'PageDown')) {
+      event.preventDefault(); if (event.repeat) return;
+      var playingShow = playingSeries(); var forward = code === 33 || code === 427 || key === 'PageUp';
+      var episodeTarget = playingShow && (forward ? playingShow.next : playingShow.prev);
+      if (episodeTarget) startEpisode(episodeTarget.index);
+      return;
+    }
+    if (!$('next-episode').hidden && nextEpisodeKey(event, key)) return;
+    if (!episodePanel.hidden && episodePanelKey(event, key)) return;
     if (!$('track-picker').hidden) {
       var trackButtons = visibleControls($('track-picker')); var trackPosition = trackButtons.indexOf(document.activeElement);
       if (code === 413) { event.preventDefault(); stop(); focusSelected(); }
@@ -3403,6 +3542,13 @@
       var media = $('media-controls'); var current = document.activeElement;
       var seekRow = [$('seek-back'), $('seek-position'), $('seek-forward')].filter(function (button) { return !button.disabled && button.offsetParent; });
       var seekIndex = seekRow.indexOf(current);
+      var episodeRow = visibleControls($('episode-controls')); var episodeAt = episodeRow.indexOf(current);
+      if (episodeAt >= 0) {
+        if (key === 'ArrowLeft' || key === 'ArrowRight') { var rowStep = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1; if (episodeRow[episodeAt + rowStep]) episodeRow[episodeAt + rowStep].focus(); }
+        else if (key === 'ArrowDown') (seekRow.indexOf($('seek-position')) >= 0 ? $('seek-position') : seekRow[0] || $('media-toggle')).focus();
+        event.preventDefault(); return;
+      }
+      if (key === 'ArrowUp' && episodeRow.length && ((seekIndex >= 0 && current !== $('seek-position')) || !seekRow.length)) { episodeRow[0].focus(); event.preventDefault(); return; }
       if (seekIndex >= 0) {
         if (current === $('seek-position') && (key === 'ArrowLeft' || key === 'ArrowRight')) {
           var increment = Math.max(10, Math.round(Number(current.max) / 100 / 10) * 10);
