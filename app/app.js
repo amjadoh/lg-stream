@@ -17,7 +17,7 @@
   var activeCategory = 'all';
   var categoryPositions = {};
   var categories = [['all', 'الكل'], ['sports', 'رياضة'], ['movies', 'قنوات أفلام'], ['news', 'أخبار'], ['kids', 'أطفال'], ['documentary', 'وثائقي'], ['other', 'غير مصنّف']];
-  var appearance = { theme: 'editorial', layout: 'compact', controls: 'compact' };
+  var appearance = { theme: 'editorial', layout: 'compact', controls: 'compact', introSkip: 'button' };
   var settingsReturn = null;
   var categoryReturn = 'header';
   var activeGroup = '';
@@ -635,7 +635,7 @@
     sources.forEach(function (entry, index) { if (favoriteUrls[entry.url]) favorites[index] = true; });
     activeGroup = state.group; selected = Math.max(0, sources.findIndex(function (entry) { return entry.url === state.selectedUrl; }));
     contentWindowStart = state.contentWindowStart; channelWindowStart = state.channelWindowStart; renderPrimary(); renderGroups(); renderChannels(); saveViewState(state.detailsOpen);
-    if (shouldFocus === false || document.hidden || unloading || !setup.hidden || !searchPanel.hidden || !speedPanel.hidden || !diagnostics.hidden || !$('group-manager').hidden || extraDialog()) return;
+    if (shouldFocus === false || document.hidden || unloading || !setup.hidden || !searchPanel.hidden || !myListPanel.hidden || !speedPanel.hidden || !diagnostics.hidden || !$('group-manager').hidden || extraDialog()) return;
     if (state.detailsOpen && sources[selected]) { if (entrySection(selected) === 'series') openSeries(selected); else openDetails(selected); } else focusSelected();
   }
   function sectionGroups() {
@@ -847,11 +847,12 @@
   function movieCard(index) {
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var details = sources[index] || {};
-      if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
+      if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.decoding = 'async'; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
       var name = document.createElement('span'); LGI18n.provider(name, activeSection === 'series' ? details.group || details.name : details.name, activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); saveViewState(false); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
       card.addEventListener('click', function () { if (activeSection === 'series') openSeries(index); else openDetails(index); });
       if (activeSection === 'movies') applyCardRating(card, index);
+      if (myList.length) markCard(card, index);
       return card;
   }
   function renderSortMenu(indexes) {
@@ -1393,6 +1394,185 @@
     });
   }
   function cancelSeriesRequests() { var list = seriesRequests; seriesRequests = []; list.forEach(function (controller) { controller.abort(); }); }
+  // ---- My List: movies and series kept by the owner, stored on this TV as
+  // keys only (a movie's provider id, a series' name), never links. ----
+  var MY_LIST_KEY = 'lg-stream-my-list-v1'; var MY_LIST_LIMIT = 500; var CONTINUE_LIMIT = 20; var ENTRY_KEY_SPACE = 4294967296;
+  var myList = [];
+  try { var storedList = JSON.parse(localStorage.getItem(MY_LIST_KEY) || 'null'); if (storedList && Array.isArray(storedList.items)) myList = storedList.items.filter(function (item) { return item && typeof item.k === 'string' && (item.t === 'm' || item.t === 's'); }).slice(0, MY_LIST_LIMIT); } catch (_) {}
+  var myListPanel = $('mylist-panel'); var myListReturn = false; var myListFocus = null;
+  function saveMyList() { try { localStorage.setItem(MY_LIST_KEY, JSON.stringify({ items: myList })); } catch (_) {} }
+  function listKey(index) {
+    var entry = sources[index]; if (!entry) return '';
+    var section = entrySection(index);
+    if (section === 'series') return entry.group ? 's:' + entry.group : '';
+    var key = section === 'movies' ? episodeKey(index) : ''; return key ? 'm:' + key : '';
+  }
+  function listItem(key) { return key ? myList.find(function (item) { return item.k === key; }) || null : null; }
+  function inMyList(index) { return !!listItem(listKey(index)); }
+  function toggleMyList(index) {
+    var key = listKey(index); if (!key) return false;
+    var existing = listItem(key);
+    if (existing) myList = myList.filter(function (item) { return item !== existing; });
+    else {
+      var series = key.charAt(0) === 's';
+      myList.unshift({ k: key, t: series ? 's' : 'm', a: Date.now(), n: series ? seriesEpisodes(sources[index].group).length : 0 });
+      if (myList.length > MY_LIST_LIMIT) myList.length = MY_LIST_LIMIT;
+    }
+    saveMyList(); refreshListMarks(); return !existing;
+  }
+  // A listed series remembers how many episodes there were when the owner last opened it.
+  function noteSeriesSeen(name, count) { var item = listItem('s:' + name); if (item && item.n !== count) { item.n = count; saveMyList(); } }
+  function markCard(card, index) {
+    var on = inMyList(index); var mark = card.querySelector('.mylist-mark');
+    card.classList.toggle('in-mylist', on);
+    if (on && !mark) { mark = document.createElement('i'); mark.className = 'mylist-mark'; mark.setAttribute('aria-hidden', 'true'); card.appendChild(mark); }
+    else if (!on && mark) mark.remove();
+  }
+  function renderListButton(button, index) {
+    var key = listKey(index); var on = !!listItem(key);
+    button.hidden = !key; button.classList.toggle('in-list', on); button.setAttribute('aria-pressed', String(on));
+    LGI18n.text(button, on ? 'في قائمتي ✓' : 'أضف إلى قائمتي');
+  }
+  function refreshListMarks() {
+    Array.prototype.forEach.call($('movie-grid').querySelectorAll('.movie-card'), function (card) { markCard(card, Number(card.dataset.index)); });
+    if (detailsIndex !== null) renderListButton($('details-mylist'), detailsIndex);
+    if (seriesView) renderListButton($('series-mylist'), seriesView.rep);
+  }
+  // One pass over the catalogue finds the listed and the part-watched items.
+  function myListData() {
+    var wantedMovies = new Set(); var wantedSeries = new Set(); var partialMovies = [];
+    myList.forEach(function (item) { if (item.t === 'm') wantedMovies.add(Number(item.k.slice(2))); else wantedSeries.add(item.k.slice(2)); });
+    Object.keys(seriesProgress.items).forEach(function (key) {
+      if (Math.floor(Number(key) / ENTRY_KEY_SPACE) !== 2 || api.episodeProgress(seriesProgress.items[key]) !== 'partial') return;
+      partialMovies.push(key); wantedMovies.add(Number(key));
+    });
+    Object.keys(seriesProgress.last).forEach(function (name) { wantedSeries.add(name); });
+    var movieAt = new Map(); var seriesAt = new Map();
+    if (entryKeys && entryKeys.length === sources.length) {
+      for (var index = 0; index < sources.length; index += 1) {
+        var section = entrySection(index);
+        if (section === 'movies') { if (wantedMovies.has(entryKeys[index]) && !movieAt.has(entryKeys[index]) && entryVisible(index)) movieAt.set(entryKeys[index], index); }
+        else if (section === 'series') { var name = sources[index].group; if (name && wantedSeries.has(name) && entryVisible(index)) { if (!seriesAt.has(name)) seriesAt.set(name, []); seriesAt.get(name).push(index); } }
+      }
+    }
+    var watching = [];
+    partialMovies.forEach(function (key) {
+      var index = movieAt.get(Number(key)); if (index === undefined) return; var progress = seriesProgress.items[key];
+      watching.push({ kind: 'movie', index: index, at: progress[2], progress: progress, note: remainingLabel(progress) });
+    });
+    Object.keys(seriesProgress.last).forEach(function (name) {
+      var episodes = seriesAt.get(name); if (!episodes) return;
+      var view = { name: name, seasons: api.seriesSeasons(sources, episodes) }; var next = nextEpisode(view);
+      if (!next.item || (next.mode !== 'resume' && next.mode !== 'next')) return;
+      var last = seriesProgress.items[seriesProgress.last[name]]; var label = episodeLabel(view, next.item);
+      var progress = next.mode === 'resume' ? episodeProgressOf(next.item.index) : null;
+      watching.push({ kind: 'series', name: name, index: next.item.index, rep: episodes[0], at: last ? last[2] : 0, progress: progress,
+        note: next.mode === 'resume' ? tr('استئناف ', 'Resume ') + label + ' · ' + remainingLabel(progress) : tr('الحلقة التالية: ', 'Next: ') + label });
+    });
+    watching.sort(function (a, b) { return b.at - a.at; });
+    var movies = []; var series = [];
+    myList.forEach(function (item) {
+      if (item.t === 'm') { var index = movieAt.get(Number(item.k.slice(2))); if (index !== undefined) movies.push({ kind: 'movie', index: index }); return; }
+      var name = item.k.slice(2); var episodes = seriesAt.get(name); if (!episodes) return;
+      series.push({ kind: 'series', name: name, index: episodes[0], rep: episodes[0], fresh: episodes.length > (item.n || 0) });
+    });
+    return { continue: watching.slice(0, CONTINUE_LIMIT), movies: movies, series: series };
+  }
+  function myListCard(item, row) {
+    var index = item.index; var entry = sources[index] || {}; var posterSource = sources[item.kind === 'series' ? item.rep : index] || {};
+    var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card mylist-card'; card.dataset.index = index; card.dataset.row = row;
+    if (posterSource.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.loading = 'lazy'; poster.src = posterSource.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
+    if (item.fresh) { var badge = document.createElement('b'); badge.className = 'mylist-new'; LGI18n.text(badge, 'حلقة جديدة'); card.appendChild(badge); }
+    var name = document.createElement('span'); LGI18n.provider(name, item.kind === 'series' ? item.name : entry.name, item.kind === 'series' ? 'مسلسل' : 'فيلم'); card.appendChild(name);
+    if (item.note) { var note = document.createElement('span'); note.className = 'mylist-note'; note.dataset.providerText = 'true'; note.textContent = item.note; card.appendChild(note); }
+    if (item.progress && item.progress[1] > 0) {
+      var bar = document.createElement('i'); bar.className = 'mylist-progress'; bar.setAttribute('aria-hidden', 'true');
+      var fill = document.createElement('i'); fill.style.width = Math.min(100, Math.round(item.progress[0] / item.progress[1] * 100)) + '%'; bar.appendChild(fill); card.appendChild(bar);
+    }
+    card.addEventListener('focus', function (event) { myListFocus = { row: row, index: index }; event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+    card.addEventListener('click', function () { openListItem(item, row); });
+    return card;
+  }
+  function renderMyList() {
+    var data = myListData(); var rows = $('mylist-rows'); rows.replaceChildren();
+    [['continue', 'أكمل المشاهدة', data.continue], ['movies', 'الأفلام', data.movies], ['series', 'المسلسلات', data.series]].forEach(function (row) {
+      if (!row[2].length) return;
+      var box = document.createElement('section'); box.className = 'search-section'; box.dataset.row = row[0];
+      var title = document.createElement('h3'); LGI18n.text(title, row[1]);
+      var count = document.createElement('small'); count.className = 'mylist-count'; count.dataset.providerText = 'true'; count.textContent = String(row[2].length);
+      box.appendChild(title); title.appendChild(count);
+      var strip = document.createElement('div'); strip.className = 'search-strip';
+      row[2].forEach(function (item) { strip.appendChild(myListCard(item, row[0])); });
+      box.appendChild(strip); rows.appendChild(box);
+    });
+    $('mylist-empty').hidden = rows.children.length > 0;
+  }
+  // Focus the card the owner left, else the same place in its row, else the first card.
+  function focusMyList(row, position) {
+    var target = null;
+    if (myListFocus && row === undefined) target = $('mylist-rows').querySelector('[data-row="' + myListFocus.row + '"][data-index="' + myListFocus.index + '"]');
+    if (!target && row !== undefined) {
+      var section = $('mylist-rows').querySelector('.search-section[data-row="' + row + '"]');
+      var items = section ? section.querySelector('.search-strip').children : [];
+      if (items.length) target = items[Math.min(position, items.length - 1)];
+    }
+    (target || $('mylist-rows').querySelector('.search-strip > button') || $('close-mylist')).focus();
+  }
+  function openMyList() {
+    cancelSwitch(); setPrimary(false); myListReturn = false; myListFocus = null;
+    myListPanel.hidden = false; renderMyList(); focusMyList();
+  }
+  function closeMyList() {
+    myListPanel.hidden = true; myListReturn = false; myListFocus = null; $('mylist-rows').replaceChildren();
+    setPrimary(true); $('nav-mylist').focus();
+  }
+  // Show the item in its library section (as search does), then open or play it.
+  function openListItem(item, row) {
+    var section = item.kind === 'series' ? 'series' : 'movies'; var entry = sources[item.index] || {};
+    stop(); activeCategory = 'all'; activeSection = section; activeGroup = section === 'series' ? '' : entry.group || '';
+    renderPrimary(); renderGroups(); renderChannels();
+    if (row === 'continue' && item.kind === 'movie') { var index = item.index; withResume(index, function () { selected = index; activateChannel(index); }, true); return; }
+    if (item.kind === 'series') {
+      openSeries(item.rep);
+      if (row === 'continue' && seriesView && seriesView.next.item) playEpisode(seriesView.next.item.index, seriesView.next.mode === 'resume');
+      return;
+    }
+    openDetails(item.index);
+  }
+  // Rows of My List: left/right inside a row, up/down between rows and to Back.
+  function myListKey(event, key) {
+    var focused = document.activeElement;
+    if (focused === $('close-mylist')) {
+      if (key === 'ArrowDown') { var first = $('mylist-rows').querySelector('.search-strip > button'); if (first) first.focus(); event.preventDefault(); return true; }
+      if (/^Arrow/.test(key)) { event.preventDefault(); return true; }
+      return false;
+    }
+    var strips = Array.prototype.slice.call($('mylist-rows').querySelectorAll('.search-strip'));
+    var strip = focused.parentNode; var row = strips.indexOf(strip); if (row < 0) return false;
+    var items = Array.prototype.slice.call(strip.children); var at = items.indexOf(focused);
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
+      if (items[at + step]) items[at + step].focus();
+    } else if (key === 'ArrowUp' || key === 'ArrowDown') {
+      var rect = focused.getBoundingClientRect(); var target = strips[row + (key === 'ArrowDown' ? 1 : -1)];
+      if (target) focusStripItem(target, (rect.left + rect.right) / 2); else if (key === 'ArrowUp') $('close-mylist').focus();
+    } else return false;
+    event.preventDefault(); return true;
+  }
+  // Blue on a movie or series card: add to or remove from My List.
+  function cardMenuTarget(element) {
+    if (!element || watchMode || !element.classList || !element.classList.contains('movie-card')) return null;
+    if (element.parentNode !== $('movie-grid') && !myListPanel.contains(element)) return null;
+    return listKey(Number(element.dataset.index)) ? element : null;
+  }
+  function openCardMenu(card) {
+    var index = Number(card.dataset.index); var entry = sources[index] || {};
+    menuContext = { kind: 'card', index: index }; menuReturn = card; cancelSwitch();
+    LGI18n.provider($('item-menu-title'), entrySection(index) === 'series' ? entry.group || entry.name : entry.name, 'عنصر');
+    ['menu-select', 'menu-move', 'menu-rename', 'menu-hide'].forEach(function (id) { $(id).hidden = true; });
+    LGI18n.text($('menu-mylist'), inMyList(index) ? 'إزالة من قائمتي' : 'إضافة إلى قائمتي'); $('menu-mylist').hidden = false;
+    $('item-menu').hidden = false; $('menu-mylist').focus();
+  }
   function openSeries(index, focusIndex) {
     var entry = sources[index]; if (!entry || !entry.group) { openDetails(index); return; }
     cancelSwitch(); cancelSeriesRequests();
@@ -1406,7 +1586,7 @@
     view.target = target.index; view.season = target.season;
     seriesView = view; seriesReturn = null;
     renderSeriesInfo(); renderSeriesSeasons(); renderSeriesEpisodes();
-    LGI18n.text($('series-status'), '');
+    LGI18n.text($('series-status'), ''); renderListButton($('series-mylist'), rep); noteSeriesSeen(name, episodes.length);
     seriesPanel.hidden = false; saveViewState(true);
     var focusTarget = focusIndex !== undefined ? $('series-episodes').querySelector('[data-index="' + view.target + '"]') : null;
     (focusTarget || $('series-continue')).focus();
@@ -1574,6 +1754,58 @@
   $('episode-prev').addEventListener('click', function () { var series = playingSeries(); if (series && series.prev) startEpisode(series.prev.index); });
   $('episode-next').addEventListener('click', function () { var series = playingSeries(); if (series && series.next) startEpisode(series.next.index); });
   $('episode-list').addEventListener('click', openEpisodePanel);
+  // ---- Skip intro: a button shown for 5 s. Without a saved intro it jumps
+  // 90 s (offered in the first 5 minutes); "Intro ends here" saves the intro
+  // of that series, so later episodes skip exactly (or automatically). ----
+  var INTRO_KEY = 'lg-stream-intros-v1'; var INTRO_FIXED = 90; var INTRO_WINDOW = 300; var INTRO_SHOW_MS = 5000; var INTRO_LIMIT = 300;
+  var intros = {};
+  try { var storedIntros = JSON.parse(localStorage.getItem(INTRO_KEY) || 'null'); if (storedIntros && typeof storedIntros === 'object') intros = storedIntros; } catch (_) {}
+  var introState = { index: null, shown: false, target: null, skipFrom: null, timer: null };
+  function introOf(index) { var name = sources[index] && sources[index].group; var value = name && Object.prototype.hasOwnProperty.call(intros, name) ? intros[name] : null; return Array.isArray(value) && value.length === 2 ? value : null; }
+  function hideIntroSkip() { if (introState) { clearTimeout(introState.timer); introState.timer = null; } $('intro-skip').hidden = true; }
+  function resetIntro(index) { hideIntroSkip(); introState = { index: index, shown: false, target: null, skipFrom: null, timer: null }; }
+  function offerIntroSkip(target, text) {
+    introState.shown = true; introState.target = target;
+    var note = text !== 'تخطي المقدمة'; LGI18n.text(note ? $('intro-skip-text') : $('intro-skip-button'), text);
+    $('intro-skip-text').hidden = !note; $('intro-skip-button').hidden = note; $('intro-skip').hidden = false;
+    clearTimeout(introState.timer); introState.timer = setTimeout(hideIntroSkip, INTRO_SHOW_MS);
+  }
+  function checkIntro(video) {
+    var index = playingIndex;
+    if (index === null || !watchMode || !sources[index] || entrySection(index) !== 'series' || !isFinite(video.duration) || !(video.duration > 0)) return;
+    if (introState.index !== index) resetIntro(index);
+    if (introState.shown || (pendingResume && pendingResume.index === index && !pendingResume.done)) return;
+    var time = video.currentTime; var saved = introOf(index);
+    if (saved) {
+      if (time < saved[0] || time >= saved[1] - 5) return;
+      if (appearance.introSkip === 'auto') { try { video.currentTime = saved[1]; } catch (_) {} offerIntroSkip(null, 'تم تخطي المقدمة'); }
+      else offerIntroSkip(saved[1], 'تخطي المقدمة');
+    } else if (time < INTRO_WINDOW && video.duration > 600) offerIntroSkip(null, 'تخطي المقدمة');
+  }
+  // OK while the button shows: to the saved end, or 90 s on.
+  function skipIntro() {
+    var video = $('video-host').querySelector('video'); if (!video || introState.index !== playingIndex) return;
+    var from = video.currentTime; var target = introState.target !== null ? introState.target : from + INTRO_FIXED;
+    if (isFinite(video.duration)) target = Math.min(target, video.duration - 5);
+    introState.skipFrom = from; hideIntroSkip();
+    try { video.currentTime = target; } catch (_) {}
+  }
+  // "Intro ends here": saved for the series; it starts where the owner last
+  // pressed Skip in this episode, else 90 s earlier.
+  function markIntroEnd() {
+    var video = $('video-host').querySelector('video'); var index = playingIndex;
+    if (!video || index === null || !sources[index] || !sources[index].group) return;
+    var end = Math.round(video.currentTime); if (!(end > 5)) return;
+    var start = introState.index === index && introState.skipFrom !== null && introState.skipFrom < end ? introState.skipFrom : Math.max(0, end - INTRO_FIXED);
+    var name = sources[index].group; delete intros[name]; intros[name] = [Math.round(start), end];
+    var names = Object.keys(intros); if (names.length > INTRO_LIMIT) names.slice(0, names.length - INTRO_LIMIT).forEach(function (old) { delete intros[old]; });
+    try { localStorage.setItem(INTRO_KEY, JSON.stringify(intros)); } catch (_) {}
+    var button = $('intro-mark'); button.textContent = tr('حُفظت نهاية المقدمة (', 'Intro end saved (') + timeLabel(end) + ')';
+    clearTimeout(markIntroEnd.timer); markIntroEnd.timer = setTimeout(function () { LGI18n.text(button, 'نهاية المقدمة هنا'); }, 3000);
+  }
+  $('intro-skip-button').addEventListener('click', skipIntro);
+  $('intro-mark').addEventListener('click', markIntroEnd);
+
   // Side list of the playing series' episodes, over the running video.
   var episodePanel = $('episode-panel'); var episodePanelSeason = null;
   function openEpisodePanel() {
@@ -1649,6 +1881,49 @@
   function renderNextEpisode() { $('next-episode-text').textContent = tr('تبدأ الحلقة التالية (', 'Next episode (') + nextEpisodeState.label + tr(') خلال ', ') starts in ') + secondsLabel(nextEpisodeState.seconds); }
   function secondsLabel(count) { return appLanguage() === 'en' ? count + (count === 1 ? ' second' : ' seconds') : count === 1 ? 'ثانية واحدة' : count === 2 ? 'ثانيتين' : count + (count <= 10 ? ' ثوانٍ' : ' ثانية'); }
   function cancelNextEpisode() { clearInterval(nextEpisodeTimer); nextEpisodeTimer = null; nextEpisodeState = null; $('next-episode').hidden = true; }
+  // A movie or episode that fails (often the provider still counting the
+  // previous connection on a one-connection account) is retried three times,
+  // 3, 6 and 10 s apart; then the page it came from explains what happened.
+  var VOD_RETRY_DELAYS = [3000, 6000, 10000]; var VOD_RETRY_TOTAL = 8;
+  var vodRetry = { index: null, count: 0, total: 0, played: false, timer: null };
+  function cancelVodRetry(reset) {
+    clearTimeout(vodRetry.timer); vodRetry.timer = null; $('vod-retry').hidden = true;
+    if (reset) { vodRetry.index = null; vodRetry.count = 0; vodRetry.total = 0; vodRetry.played = false; }
+  }
+  function scheduleVodRetry(state) {
+    if (playingIndex === null || !watchMode || !isOnDemand() || document.hidden || unloading) return false;
+    if (['error', 'startup-timeout', 'stall-timeout'].indexOf(state.state) < 0) return false;
+    if (vodRetry.timer !== null) return true;
+    var index = playingIndex;
+    if (vodRetry.index !== index) { cancelVodRetry(true); vodRetry.index = index; }
+    if (vodRetry.count >= VOD_RETRY_DELAYS.length || vodRetry.total >= VOD_RETRY_TOTAL) return false;
+    var delay = VOD_RETRY_DELAYS[vodRetry.count]; vodRetry.count += 1; vodRetry.total += 1;
+    // After real playback the retry resumes where it stopped; before, it keeps the chosen start.
+    var progress = episodeProgressOf(index);
+    if (vodRetry.played && progress && progress[0] >= 5) pendingResume = { index: index, at: progress[0], done: false };
+    else if (pendingResume && pendingResume.index === index) pendingResume.done = false;
+    cancelSeek(); closeTrackPicker(false); $('media-controls').hidden = true; cancelNextEpisode(); closeEpisodePanel(false);
+    $('vod-retry-text').textContent = tr('تعذّر الاتصال بالمصدر. إعادة المحاولة ', 'Could not reach the source. Retry ') + vodRetry.count + tr(' من ', ' of ') + VOD_RETRY_DELAYS.length + tr(' خلال ', ' in ') + secondsLabel(delay / 1000) + '…';
+    $('fullscreen-hint').hidden = true; $('status').textContent = tr('جارٍ إعادة المحاولة…', 'Retrying…');
+    $('vod-retry').hidden = false; $('vod-retry-cancel').focus();
+    vodRetry.timer = setTimeout(function () {
+      vodRetry.timer = null; $('vod-retry').hidden = true;
+      if (playingIndex !== index || !retryablePlayback() || document.hidden || unloading) return;
+      if (watchMode) document.body.focus();
+      scheduler.immediate({ index: index, requestedAt: performance.now(), retry: true, auto: true });
+    }, delay);
+    return true;
+  }
+  // After the last retry: back to the series page or the movie details, with the reason.
+  function giveUpOnDemand(index, code) {
+    var series = entrySection(index) === 'series';
+    cancelVodRetry(true); exitPlayback();
+    if (!series) openDetails(index);
+    var note = series && !seriesPanel.hidden ? $('series-status') : !series && !detailsPanel.hidden ? $('details-status') : $('status');
+    note.textContent = (series ? tr('تعذّر تشغيل الحلقة بعد ثلاث محاولات لإعادة الاتصال.', 'The episode could not be played after three retries.') : tr('تعذّر تشغيل الفيلم بعد ثلاث محاولات لإعادة الاتصال.', 'The movie could not be played after three retries.')) +
+      tr(' ربما لم يُغلق المزوّد الاتصال السابق بعد؛ أعد المحاولة بعد لحظات.', ' The provider may still be holding the previous connection; try again in a moment.') + (code ? ' (' + code + ')' : '');
+  }
+  $('vod-retry-cancel').addEventListener('click', function () { cancelVodRetry(true); exitPlayback(); });
   $('next-episode-now').addEventListener('click', function () { if (nextEpisodeState) startEpisode(nextEpisodeState.index); });
   $('next-episode-cancel').addEventListener('click', function () { cancelNextEpisode(); exitPlayback(); });
   function nextEpisodeKey(event, key) {
@@ -1714,6 +1989,7 @@
     var officialTrailer = !!tmdbKey && activeSection === 'movies';
     LGI18n.text($('details-status'), officialTrailer ? 'يُفتح الإعلان الرسمي في تطبيق YouTube، وعند الرجوع منه أو انتهائه تعود إلى هذا الفيلم.' : details.trailer ? 'إعلان المزود متوفر.' : 'سيُفتح بحث YouTube بالاسم والسنة. قد يعيدك زر الرجوع إلى الرئيسية؛ افتح LG Stream للعودة لنفس التفاصيل.');
     LGI18n.text($('details-trailer'), officialTrailer || details.trailer ? 'مشاهدة الإعلان' : 'بحث الإعلان في YouTube');
+    renderListButton($('details-mylist'), index);
     detailsPanel.hidden = false; saveViewState(true); $('details-play').focus();
     loadProviderDetails(index);
   }
@@ -1729,7 +2005,7 @@
       $('video-host').appendChild(video);
       ['loadedmetadata', 'resize'].forEach(function (name) { video.addEventListener(name, applyPictureFit); });
       video.addEventListener('loadedmetadata', function () { resumeEpisode(video); });
-      video.addEventListener('timeupdate', function () { trackEpisode(video, false); });
+      video.addEventListener('timeupdate', function () { trackEpisode(video, false); checkIntro(video); });
       video.addEventListener('pause', function () { trackEpisode(video, true); });
       video.addEventListener('ended', function () { trackEpisode(video, true, true); });
       requestAnimationFrame(applyPictureFit);
@@ -1743,7 +2019,7 @@
     onState: function (state) {
       if (state.channel) trackInterruptions(state);
       lastState = state.state;
-      if (state.state === 'playing') scheduleControlsHide();
+      if (state.state === 'playing') { scheduleControlsHide(); if (vodRetry.index === playingIndex) { vodRetry.count = 0; vodRetry.played = true; } }
       document.body.dataset.state = state.state;
       LGI18n.text($('status'), labels[state.state] || 'جاهز');
       if (state.state === 'error' && state.errorCode) LGI18n.text($('status'), LGI18n.original($('status')) + ' (' + state.errorCode + ')');
@@ -1764,6 +2040,11 @@
           if (watchChannels === null) setWatchMode(true);
           $('fullscreen-hint').hidden = true;
           LGI18n.text($('status'), watchChannels === null ? 'البث مقطوع — أكمل بالسهم فوق أو تحت، أو اضغط رجوع' : 'البث مقطوع — اختر قناة واضغط موافق');
+        } else if (scheduleVodRetry(state)) {
+          // Waiting for the next automatic attempt.
+        } else if (watchMode && isOnDemand() && ['error', 'startup-timeout', 'stall-timeout'].indexOf(state.state) >= 0) {
+          var failedIndex = playingIndex; var failedCode = state.errorCode;
+          setTimeout(function () { if (playingIndex === failedIndex && retryablePlayback()) giveUpOnDemand(failedIndex, failedCode); }, 0);
         } else if (watchMode || isOnDemand()) { setWatchMode(false); if (isOnDemand()) renderChannels(); $('retry-button').focus(); }
         scheduleReconnect(state);
       }
@@ -1862,6 +2143,11 @@
     else $('start-button').focus();
   }
   function focusSelected() {
+    // With My List open (or left for playback), focus goes back to it, not the library under it.
+    if (!watchMode && detailsPanel.hidden && seriesPanel.hidden && (myListReturn || !myListPanel.hidden)) {
+      if (myListPanel.hidden) { myListReturn = false; myListPanel.hidden = false; renderMyList(); }
+      focusMyList(); return;
+    }
     if (activeSection !== 'movies' && activeSection !== 'series') { focusChannel(selected); return; }
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected);
     if (position >= 0 && (position < contentWindowStart || position >= contentWindowStart + contentWindowSize)) contentWindowStart = Math.floor(Math.max(0, position - 4) / 4) * 4;
@@ -1869,6 +2155,11 @@
     var card = $('movie-grid').querySelector('[data-index="' + selected + '"]') || $('movie-grid').querySelector('.movie-card');
     if (card) card.focus(); else { var group = $('groups').querySelector('.group-button.active'); if (group) group.focus(); }
   }
+  // A held arrow moves the card focus once per painted frame: repeats that
+  // arrive before the last move is on screen are dropped, so the focus stops
+  // when the key is released instead of running on through queued presses.
+  var gridMovePending = false;
+  function markGridMove() { gridMovePending = true; requestAnimationFrame(function () { requestAnimationFrame(function () { gridMovePending = false; }); }); }
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected);
@@ -1886,10 +2177,13 @@
     var next = Math.max(0, Math.min(indexes.length - 1, position + step));
     if (next === position) return true;
     if (next < contentWindowStart || next >= contentWindowStart + contentWindowSize) {
-      contentWindowStart = step > 0 ? Math.floor(Math.max(0, next - (contentWindowSize - 4)) / 4) * 4 : Math.floor(next / 4) * 4;
+      // Keep two rows past the focused one in the direction of travel, so the
+      // grid changes every third press instead of on every press (measured on the TV).
+      var rowStart = Math.floor(next / 4) * 4;
+      contentWindowStart = Math.max(0, step > 0 ? rowStart - (contentWindowSize - 12) : rowStart - 8);
       contentWindowStart = Math.min(contentMaxStart(indexes.length), contentWindowStart); renderMovieWindow();
     }
-    var card = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (card) card.focus(); return true;
+    var card = $('movie-grid').querySelector('[data-index="' + indexes[next] + '"]'); if (card) card.focus(); markGridMove(); return true;
   }
   function moveGroupFocus(step) {
     var current = document.activeElement;
@@ -1969,7 +2263,7 @@
     lastConfirmIndex = index; lastConfirmAt = now; requestChannel(index, false);
   }
   function requestChannel(index, coalesce, retry) {
-    cancelReconnect(true);
+    cancelReconnect(true); cancelVodRetry(true);
     var intent = { index: index, requestedAt: performance.now(), retry: !!retry };
     if (watchMode && coalesce && sources[index]) {
       announcementIndex = index; announcementQualityReady = false;
@@ -1999,7 +2293,7 @@
     }, 6000);
   }
   function stop() {
-    cancelNextEpisode(); closeEpisodePanel(false);
+    cancelNextEpisode(); closeEpisodePanel(false); cancelVodRetry(true);
     cancelReconnect(true);
     cancelSwitch();
     setWatchMode(false);
@@ -2018,7 +2312,8 @@
     closeWatchChannels();
     cancelSeek();
     closeTrackPicker(false);
-    watchMode = enabled;
+    watchMode = enabled; hideIntroSkip();
+    if (enabled && !myListPanel.hidden) { myListPanel.hidden = true; myListReturn = true; }
     $('media-controls').hidden = true;
     document.body.classList.toggle('watch-mode', enabled);
     clearTimeout(hintTimer);
@@ -2907,8 +3202,8 @@
   }
   function renderAppearance() {
     document.body.dataset.theme = appearance.theme; document.body.dataset.layout = appearance.layout; document.body.dataset.controls = appearance.controls;
-    Array.prototype.forEach.call($('appearance-panel').querySelectorAll('[data-layout], [data-controls], [data-theme-choice]'), function (button) {
-      button.setAttribute('aria-pressed', String(button.dataset.themeChoice ? button.dataset.themeChoice === appearance.theme : button.dataset.layout ? button.dataset.layout === appearance.layout : button.dataset.controls === appearance.controls));
+    Array.prototype.forEach.call($('appearance-panel').querySelectorAll('[data-layout], [data-controls], [data-theme-choice], [data-intro]'), function (button) {
+      button.setAttribute('aria-pressed', String(button.dataset.themeChoice ? button.dataset.themeChoice === appearance.theme : button.dataset.layout ? button.dataset.layout === appearance.layout : button.dataset.intro ? button.dataset.intro === appearance.introSkip : button.dataset.controls === appearance.controls));
     });
     var shortcuts = $('category-shortcuts');
     if (appearance.layout === 'tabs') document.querySelector('.library-panel').appendChild(shortcuts);
@@ -3009,9 +3304,9 @@
       else if (id === 'settings-appearance') { $('appearance-panel').hidden = false; $('appearance-panel').querySelector('[data-theme-choice="' + appearance.theme + '"]').focus(); }
     });
   });
-  Array.prototype.forEach.call($('appearance-panel').querySelectorAll('[data-layout], [data-controls], [data-theme-choice]'), function (button) {
+  Array.prototype.forEach.call($('appearance-panel').querySelectorAll('[data-layout], [data-controls], [data-theme-choice], [data-intro]'), function (button) {
     button.addEventListener('click', function () {
-      if (button.dataset.themeChoice) appearance.theme = button.dataset.themeChoice; else if (button.dataset.layout) appearance.layout = button.dataset.layout; else appearance.controls = button.dataset.controls;
+      if (button.dataset.themeChoice) appearance.theme = button.dataset.themeChoice; else if (button.dataset.layout) appearance.layout = button.dataset.layout; else if (button.dataset.intro) appearance.introSkip = button.dataset.intro; else appearance.controls = button.dataset.controls;
       renderAppearance();
       try { localStorage.setItem('lg-stream-appearance-v1', JSON.stringify(appearance)); LGI18n.text($('appearance-status'), 'حُفظ المظهر. المشاهدة مستمرة.'); }
       catch (_) { LGI18n.text($('appearance-status'), 'تغيّر المظهر لهذه الجلسة؛ تعذر حفظ الاختيار.'); }
@@ -3027,6 +3322,7 @@
     if (savedAppearance && ['editorial', 'cinema'].indexOf(savedAppearance.theme) >= 0) appearance.theme = savedAppearance.theme;
     if (savedAppearance && ['compact', 'tabs', 'vertical'].indexOf(savedAppearance.layout) >= 0) appearance.layout = savedAppearance.layout;
     if (savedAppearance && ['compact', 'comfortable'].indexOf(savedAppearance.controls) >= 0) appearance.controls = savedAppearance.controls;
+    if (savedAppearance && ['button', 'auto'].indexOf(savedAppearance.introSkip) >= 0) appearance.introSkip = savedAppearance.introSkip;
   } catch (_) {}
   renderAppearance();
 
@@ -3107,7 +3403,7 @@
     menuContext = { kind: channel ? 'channel' : 'group', index: channel ? Number(target.dataset.index) : null, group: channel ? null : target.dataset.group };
     menuReturn = target; cancelSwitch();
     LGI18n.provider($('item-menu-title'), itemName(target), channel ? 'القناة' : 'المجموعة');
-    $('menu-rename').hidden = !channel;
+    $('menu-rename').hidden = !channel; $('menu-select').hidden = false; $('menu-move').hidden = false; $('menu-hide').hidden = false; $('menu-mylist').hidden = true;
     $('item-menu').hidden = false; $('menu-select').focus();
   }
   function closeItemMenu(restoreFocus) {
@@ -3332,6 +3628,18 @@
   $('menu-hide').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); menuReturn = null; if (context) { beginEdit('menu'); hideItems(context.kind, [context.kind === 'group' ? context.group : context.index]); } });
   $('menu-rename').addEventListener('click', function () { var context = menuContext; closeItemMenu(false); if (context && context.kind === 'channel') { beginEdit('menu'); openRename(context.index); } });
   $('close-item-menu').addEventListener('click', function () { closeItemMenu(true); });
+  $('menu-mylist').addEventListener('click', function () {
+    var context = menuContext; var card = menuReturn; if (!context || context.kind !== 'card') return;
+    var row = card && card.dataset.row; var position = card && card.parentNode ? Array.prototype.indexOf.call(card.parentNode.children, card) : 0;
+    $('item-menu').hidden = true; menuContext = null; menuReturn = null;
+    var added = toggleMyList(context.index);
+    if (!myListPanel.hidden) { myListFocus = null; renderMyList(); focusMyList(row, position); }
+    else { if (card && card.isConnected && card.offsetParent) card.focus(); else focusSelected(); showOrganizeStatus(added ? 'أُضيف إلى قائمتي.' : 'أُزيل من قائمتي.'); }
+  });
+  $('details-mylist').addEventListener('click', function () { if (detailsIndex !== null) LGI18n.text($('details-status'), toggleMyList(detailsIndex) ? 'أُضيف إلى قائمتي.' : 'أُزيل من قائمتي.'); });
+  $('series-mylist').addEventListener('click', function () { if (seriesView) LGI18n.text($('series-status'), toggleMyList(seriesView.rep) ? 'أُضيف إلى قائمتي.' : 'أُزيل من قائمتي.'); });
+  $('nav-mylist').addEventListener('click', openMyList);
+  $('close-mylist').addEventListener('click', closeMyList);
   $('select-move').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (kind && items.length) startMove(kind, items); });
   $('select-hide').addEventListener('click', function () { var kind = selectState && selectState.kind; var items = selectedItems(); if (!kind || !items.length) return; selectState = null; document.body.classList.remove('select-mode'); $('select-bar').hidden = true; hideItems(kind, items); });
   $('select-cancel').addEventListener('click', exitSelect);
@@ -3424,6 +3732,7 @@
       event.preventDefault();
       var target = holdTarget(document.activeElement);
       if (target) openItemMenu(target);
+      else if (cardMenuTarget(document.activeElement)) openCardMenu(document.activeElement);
       else showOrganizeStatus('الزر الأزرق يفتح خيارات القناة أو المجموعة المحددة في القائمة.');
       return true;
     }
@@ -3474,7 +3783,7 @@
     if (!key || key === 'Unidentified') key = { 13: 'Enter', 37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown' }[code];
     var isInput = event.target.tagName === 'INPUT';
     if (isInput && keyboardVisible) return;
-    var anyDialog = !$('track-picker').hidden || !episodePanel.hidden || !$('next-episode').hidden || !$('group-manager').hidden || !$('sort-menu').hidden || !detailsPanel.hidden || !setup.hidden || !searchPanel.hidden || !diagnostics.hidden || !speedPanel.hidden || !!extraDialog();
+    var anyDialog = !myListPanel.hidden || !$('track-picker').hidden || !episodePanel.hidden || !$('next-episode').hidden || !$('vod-retry').hidden || !$('group-manager').hidden || !$('sort-menu').hidden || !detailsPanel.hidden || !setup.hidden || !searchPanel.hidden || !diagnostics.hidden || !speedPanel.hidden || !!extraDialog();
     var backKey = code === 461 || key === 'Escape';
     if (!backKey && !anyDialog && !isInput && customizationKey(event, key, code)) return;
     if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
@@ -3487,6 +3796,7 @@
       cancelSwitch();
       if (watchChannels !== null) { closeWatchChannels(); exitPlayback(); focusActiveGroup(); return; }
       if (!$('next-episode').hidden) { cancelNextEpisode(); exitPlayback(); return; }
+      if (!$('vod-retry').hidden) { cancelVodRetry(true); exitPlayback(); return; }
       if (!episodePanel.hidden) { closeEpisodePanel(true); return; }
       if (!$('track-picker').hidden) { closeTrackPicker(true); return; }
       if (!$('group-manager').hidden) { closeGroupManager(); return; }
@@ -3497,6 +3807,7 @@
       else if (!diagnostics.hidden) closeDiagnostics();
       else if (!speedPanel.hidden) closeSpeed();
       else if (extraDialog()) closeExtraDialog();
+      else if (!myListPanel.hidden) closeMyList();
       else if (moveState) finishMove(false);
       else if (selectState) { if ($('select-bar').contains(document.activeElement)) exitSelect(); else { selectReturn = document.activeElement; var barActions = visibleControls($('select-bar')).filter(function (button) { return !button.disabled; }); (barActions[0] || $('select-cancel')).focus(); } }
       else if (watchMode) { if (!$('media-controls').hidden) { cancelSeek(); $('media-controls').hidden = true; document.body.focus(); } else exitPlayback(); }
@@ -3511,6 +3822,7 @@
       if (episodeTarget) startEpisode(episodeTarget.index);
       return;
     }
+    if (!$('vod-retry').hidden && (key === 'Enter' || /^Arrow/.test(key) || key === 'Tab')) { event.preventDefault(); if (key === 'Enter' && !event.repeat) $('vod-retry-cancel').click(); else $('vod-retry-cancel').focus(); return; }
     if (!$('next-episode').hidden && nextEpisodeKey(event, key)) return;
     if (!episodePanel.hidden && episodePanelKey(event, key)) return;
     if (!$('track-picker').hidden) {
@@ -3526,7 +3838,7 @@
       } else if (/^Arrow/.test(key) || [33, 34, 427, 428].indexOf(code) >= 0) event.preventDefault();
       return;
     }
-    var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : extraDialog();
+    var dialog = !$('group-manager').hidden ? $('group-manager') : !$('sort-menu').hidden ? $('sort-menu') : !detailsPanel.hidden ? detailsPanel : !setup.hidden ? setup : !searchPanel.hidden ? searchPanel : !diagnostics.hidden ? diagnostics : !speedPanel.hidden ? speedPanel : extraDialog() || (!myListPanel.hidden ? myListPanel : null);
     if (dialog) {
       if (key === 'Enter' && event.repeat && !isInput) { event.preventDefault(); return; }
       if (dialog === searchPanel) {
@@ -3534,6 +3846,10 @@
         if (searchKey(event, key)) return;
       }
       if (dialog === seriesPanel && seriesKey(event, key)) return;
+      if (dialog === myListPanel) {
+        if (code === BLUE_KEY) { event.preventDefault(); if (!event.repeat && cardMenuTarget(document.activeElement)) openCardMenu(document.activeElement); return; }
+        if (myListKey(event, key)) return;
+      }
       if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager') && !$('manager-visibility').hidden) {
         if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
         else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
@@ -3591,6 +3907,8 @@
       if (key === 'ArrowRight') { showPlaybackControls(); event.preventDefault(); return; }
       if (key === 'ArrowLeft' || key === 'Tab' || [33, 34, 427, 428].indexOf(code) >= 0 || key === 'PageUp' || key === 'PageDown') { event.preventDefault(); return; }
     }
+    // OK while Skip intro shows presses it.
+    if (watchMode && key === 'Enter' && $('media-controls').hidden && !$('intro-skip').hidden && !$('intro-skip-button').hidden) { event.preventDefault(); if (!event.repeat) skipIntro(); return; }
     if (watchMode && $('media-controls').hidden && key === 'Enter') { showWatchChannels(); event.preventDefault(); return; }
     if (watchMode && $('media-controls').hidden && playingIndex !== null && entrySection(playingIndex) === 'tv' && (key === 'ArrowUp' || key === 'ArrowDown')) {
       var liveIndexes = visibleIndexes();
@@ -3656,6 +3974,7 @@
     if (isInput && key !== 'ArrowUp' && key !== 'ArrowDown') return;
     // Up stops at the sort button above movie/series cards; Back or the groups side leaves them.
     if (key === 'ArrowUp' && document.activeElement === $('sort-button') && (activeSection === 'movies' || activeSection === 'series')) { event.preventDefault(); return; }
+    if (event.repeat && gridMovePending && /^Arrow/.test(key) && document.activeElement.classList.contains('movie-card') && document.activeElement.parentNode === $('movie-grid')) { event.preventDefault(); return; }
     if ((key === 'ArrowDown' && (moveChannelWindow(1) || moveContentWindow(4) || moveGroupFocus(1))) || (key === 'ArrowUp' && (moveChannelWindow(-1) || moveContentWindow(-4) || moveGroupFocus(-1)))) { event.preventDefault(); return; }
     if (watchMode && !$('media-controls').hidden && key === 'Enter' && $('media-controls').contains(document.activeElement)) {
       if (event.repeat && (document.activeElement.id === 'audio-language' || document.activeElement.id === 'subtitle-language' || document.activeElement.id === 'media-display')) event.preventDefault();

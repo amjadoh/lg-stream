@@ -98,10 +98,10 @@ async function main() {
     assert.equal(await page.locator('body').getAttribute('data-theme'), 'editorial');
     const nav=page.locator('.primary-panel button');
     const boxes=await nav.evaluateAll(nodes=>nodes.map(n=>({id:n.id||n.dataset.section,x:n.getBoundingClientRect().x})));
-    assert.deepEqual(boxes.map(b=>b.id), ['nav-search','favorites','tv','movies','series']);
+    assert.deepEqual(boxes.map(b=>b.id), ['nav-search','favorites','tv','movies','series','nav-mylist']);
     assert.ok(boxes.every((b,i)=>!i||b.x>boxes[i-1].x),'Arabic menu starts physically left with Search');
     await page.locator('#nav-search').focus();
-    for(const id of ['favorites','tv','movies','series']){await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.id||document.activeElement.dataset.section),id)}
+    for(const id of ['favorites','tv','movies','series','nav-mylist']){await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.id||document.activeElement.dataset.section),id)}
     await page.keyboard.press('ArrowUp');assert.equal(await page.evaluate(()=>document.activeElement.id),'nav-settings');
     await page.keyboard.press('ArrowRight');assert.equal(await page.evaluate(()=>document.activeElement.id),'setup-button');
     await page.keyboard.press('ArrowLeft');assert.equal(await page.evaluate(()=>document.activeElement.id),'nav-settings');
