@@ -1508,7 +1508,14 @@
       if (key === 'ArrowLeft' || key === 'ArrowRight') {
         var items = Array.prototype.slice.call(strip.children); var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
         var next = items[items.indexOf(focused) + step]; if (next) next.focus();
-      } else if (key === 'ArrowUp') { var up = inEpisodes ? activeSeason() || actions[0] : actions[0]; if (up) up.focus(); }
+      } else if (inEpisodes && (key === 'ArrowUp' || key === 'ArrowDown')) {
+        // Episode grid: up/down by a whole row; up from the first row leaves to the seasons or buttons.
+        var cells = Array.prototype.slice.call(strip.children); var columns = getComputedStyle(strip).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+        var position = cells.indexOf(focused); var target = position + (key === 'ArrowDown' ? columns : -columns);
+        if (key === 'ArrowDown' && target >= cells.length && Math.floor(position / columns) < Math.floor((cells.length - 1) / columns)) target = cells.length - 1;
+        if (target >= 0 && target < cells.length) cells[target].focus();
+        else if (key === 'ArrowUp') { var above = activeSeason() || actions[0]; if (above) above.focus(); }
+      } else if (key === 'ArrowUp') { var up = actions[0]; if (up) up.focus(); }
       else if (key === 'ArrowDown') { if (inSeasons) { var down = episodeTarget(); if (down) down.focus(); } }
       else return false;
       event.preventDefault(); return true;
