@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createStore } = require('../app/catalog-store.js');
+const { createStore, sameAccount } = require('../app/catalog-store.js');
 
 function fakeIndexedDB({ openDelay = 0, commitDelay = 30, abortThrows = false, failWrite = () => false, seed = {} } = {}) {
   const records = { meta: new Map(seed.meta || []), chunks: new Map(seed.chunks || []) };
@@ -208,4 +208,36 @@ test('meta records for sources and customization survive clearCatalog but not cl
   assert.equal((await store.loadMeta(['sources'])).records.sources.activeId, 's1');
   await store.clear();
   assert.equal((await store.loadMeta(['sources'])).records.sources, null);
+});
+
+test('a new server address for the same account keeps HLS and hidden groups', async () => {
+  const indexed = fakeIndexedDB({ commitDelay: 1 });
+  const store = createStore({ indexedDB: indexed });
+  const oldServer = 'http://old.example.test:8080/get.php?username=user&password=pass&type=m3u_plus&output=ts';
+  const newServer = 'http://new.example.test:2095/get.php?username=user&password=pass&type=m3u_plus&output=ts';
+  const entries = [{ url: 'http://old.example.test:8080/user/pass/42', name: 'Synthetic live', group: 'News' }];
+  const hiddenGroups = { tv: ['News'], movies: [], series: [] };
+  await store.save(oldServer, entries);
+  await store.saveLiveTransport(oldServer, 'hls');
+  await store.saveHiddenGroups(oldServer, hiddenGroups);
+  const moved = await store.save(newServer, entries);
+  assert.equal(moved.liveTransport, 'hls', 'HLS follows the account to the new server');
+  assert.deepEqual(moved.hiddenGroups, hiddenGroups, 'Hidden groups follow the account to the new server');
+  const cold = await createStore({ indexedDB: indexed }).load();
+  assert.equal(cold.liveTransport, 'hls');
+  assert.deepEqual(cold.hiddenGroups, hiddenGroups);
+  const otherAccount = await store.save('http://new.example.test:2095/get.php?username=user&password=other', entries);
+  assert.equal(otherAccount.liveTransport, 'original', 'Another password is another source');
+  assert.equal(otherAccount.hiddenGroups, null);
+});
+
+test('same account means same path, username and password on any host', () => {
+  const link = (host, user = 'u', pass = 'p', path = '/get.php') => `http://${host}${path}?username=${user}&password=${pass}`;
+  assert.equal(sameAccount(link('a.test:80'), link('b.test:2095')), true);
+  assert.equal(sameAccount(link('a.test'), link('a.test', 'u', 'x')), false);
+  assert.equal(sameAccount(link('a.test'), link('a.test', 'v', 'p')), false);
+  assert.equal(sameAccount(link('a.test'), link('b.test', 'u', 'p', '/other.php')), false);
+  assert.equal(sameAccount('https://a.test/list.m3u', 'https://b.test/list.m3u'), false, 'Plain links without an account must match exactly');
+  assert.equal(sameAccount('https://a.test/list.m3u', 'https://a.test/list.m3u'), true);
+  assert.equal(sameAccount('', link('a.test')), false);
 });

@@ -22,6 +22,23 @@
       transaction.onabort = function () { reject(failure || transaction.error || new Error('storage transaction failed')); };
     });
   }
+  // The same Xtream account on another server address (the provider changed
+  // its host or port) keeps the owner's settings: same path, username and
+  // password. Any other change is a different source.
+  function accountOf(link) {
+    try {
+      var parsed = new URL(link);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      var username = parsed.searchParams.get('username'); var password = parsed.searchParams.get('password');
+      return username && password ? parsed.pathname.toLowerCase() + '\n' + username + '\n' + password : null;
+    } catch (_) { return null; }
+  }
+  function sameAccount(left, right) {
+    if (!left || !right) return false;
+    if (left === right) return true;
+    var account = accountOf(left);
+    return account !== null && account === accountOf(right);
+  }
   function createStore(options) {
     options = options || {};
     var indexed = options.indexedDB !== undefined ? options.indexedDB : (typeof indexedDB !== 'undefined' ? indexedDB : null);
@@ -94,7 +111,7 @@
           for (var entryIndex = 0; entryIndex < ownEntries.length; entryIndex += 1) entries[offset++] = ownEntries[entryIndex];
         }
         if (offset !== meta.count) return { state: 'corrupt' };
-        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt, hiddenGroups: preferences && preferences.source === meta.source ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && transport.source === meta.source && transport.value === 'hls' ? 'hls' : 'original' };
+        return { state: 'complete', source: meta.source, entries: entries, revision: meta.revision, savedAt: meta.savedAt, hiddenGroups: preferences && sameAccount(preferences.source, meta.source) ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && sameAccount(transport.source, meta.source) && transport.value === 'hls' ? 'hls' : 'original' };
       } catch (_) { return { state: 'error' }; }
     }
     async function cleanup(database, revision) {
@@ -151,7 +168,7 @@
         writingRevision = null;
         var preferences = completed[0]; var transport = completed[1];
         cleanup(database, revision);
-        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && preferences.source === source ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && transport.source === source && transport.value === 'hls' ? 'hls' : 'original' };
+        return { state: 'complete', revision: revision, count: entries.length, savedAt: savedAt, hiddenGroups: preferences && sameAccount(preferences.source, source) ? copyHiddenGroups(preferences.hiddenGroups) : null, liveTransport: transport && sameAccount(transport.source, source) && transport.value === 'hls' ? 'hls' : 'original' };
       } catch (error) { activeWrite = null; return { state: generation !== writeGeneration || error && error.name === 'AbortError' ? 'cancelled' : error && error.name === 'QuotaExceededError' ? 'quota' : 'error' }; }
     }
     function copyHiddenGroups(hiddenGroups) {
@@ -229,5 +246,5 @@
     }
     return { load: load, save: save, clear: clear, clearCatalog: clearCatalog, cancel: cancel, saveHiddenGroups: saveHiddenGroups, saveLiveTransport: saveLiveTransport, loadMeta: loadMeta, saveMeta: saveMeta };
   }
-  return { createStore: createStore, CHUNK_SIZE: CHUNK_SIZE };
+  return { createStore: createStore, sameAccount: sameAccount, CHUNK_SIZE: CHUNK_SIZE };
 }));
