@@ -813,7 +813,15 @@
       poster.src = poster.dataset.src; poster.removeAttribute('data-src');
     });
   }
-  function schedulePosterCheck() { if (!posterFrame) posterFrame = requestAnimationFrame(updateVisiblePosters); }
+  // While the arrows move through the cards, posters wait until the focus has
+  // rested 300 ms: decoding large covers for rows passed on the way made held
+  // keys run on for seconds in Series (measured on the TV).
+  var POSTER_REST_MS = 300; var lastGridMove = 0; var posterTimer = null;
+  function schedulePosterCheck() {
+    var wait = lastGridMove + POSTER_REST_MS - performance.now();
+    if (wait > 0) { clearTimeout(posterTimer); posterTimer = setTimeout(schedulePosterCheck, wait + 5); return; }
+    if (!posterFrame) posterFrame = requestAnimationFrame(updateVisiblePosters);
+  }
   function renderMovies(indexes) {
     var cards = activeSection === 'movies' || activeSection === 'series';
     $('movie-browser').hidden = !cards;
@@ -2159,7 +2167,7 @@
   // arrive before the last move is on screen are dropped, so the focus stops
   // when the key is released instead of running on through queued presses.
   var gridMovePending = false;
-  function markGridMove() { gridMovePending = true; requestAnimationFrame(function () { requestAnimationFrame(function () { gridMovePending = false; }); }); }
+  function markGridMove() { lastGridMove = performance.now(); schedulePosterCheck(); gridMovePending = true; requestAnimationFrame(function () { requestAnimationFrame(function () { gridMovePending = false; }); }); }
   function moveContentWindow(step) {
     if ((activeSection !== 'movies' && activeSection !== 'series') || !document.activeElement.classList.contains('movie-card')) return false;
     var indexes = visibleIndexes(); var position = indexes.indexOf(selected);
