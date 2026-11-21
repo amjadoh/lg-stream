@@ -308,8 +308,16 @@
     var patterns = hints.map(catalogWordPattern);
     if (compactBrand) patterns.push(catalogBrands.find(function (brand) { return brand[0] === catalogBrand(compactBrand); })[1].source);
     var aliasHint = patterns.length ? new RegExp(patterns.join('|'), 'iu') : null;
+    // A series is one result: its provider group holds all of its episodes, so
+    // episodes collapse to the first one of each series (the card shows the series).
+    var seenSeries = Object.create(null);
     function collect(index, section) {
       if (!matches[section]) return;
+      if (section === 'series') {
+        var seriesKey = entries[index].group ? 'g' + entries[index].group : 'i' + index;
+        if (seenSeries[seriesKey]) return;
+        seenSeries[seriesKey] = true;
+      }
       counts[section] += 1;
       var list = matches[section];
       if (list.length < limit || index < list[list.length - 1]) {
@@ -318,8 +326,18 @@
       }
     }
     var matched = [];
+    var groupMatches = Object.create(null);
+    function groupMatch(group) {
+      if (!group) return false;
+      if (!(group in groupMatches)) groupMatches[group] = group.toLocaleLowerCase().indexOf(query) >= 0;
+      return groupMatches[group];
+    }
     function direct(index) {
-      if ((entries[index].name || '').toLocaleLowerCase().indexOf(query) < 0) return;
+      if ((entries[index].name || '').toLocaleLowerCase().indexOf(query) < 0) {
+        // An episode also matches through its series name (the group).
+        if (!groupMatch(entries[index].group) || sectionForIndex(index) !== 'series') return;
+        matched.push(index); collect(index, 'series'); return;
+      }
       matched.push(index); collect(index, sectionForIndex(index));
     }
     if (candidates) candidates.forEach(direct);

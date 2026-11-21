@@ -397,11 +397,12 @@
     } else {
       button.className = 'movie-card';
       if (item.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.loading = 'lazy'; poster.src = item.poster; poster.addEventListener('error', function () { this.remove(); }); button.appendChild(poster); }
-      var name = document.createElement('span'); LGI18n.provider(name, item.name, section === 'movies' ? 'فيلم' : 'مسلسل'); button.appendChild(name);
+      // Series results show the series (its group), not the matching episode.
+      var name = document.createElement('span'); LGI18n.provider(name, section === 'series' ? item.group || item.name : item.name, section === 'movies' ? 'فيلم' : 'مسلسل'); button.appendChild(name);
       if (section === 'movies') applyCardRating(button, index);
     }
     button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
-    button.addEventListener('click', function () { rememberSearch($('channel-search').value); closeSearch(); if (section !== 'tv') stop(); activeCategory = 'all'; activeSection = section; activeGroup = item.group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section === 'tv') activateChannel(index); else openDetails(index); });
+    button.addEventListener('click', function () { rememberSearch($('channel-search').value); closeSearch(); if (section !== 'tv') stop(); activeCategory = 'all'; activeSection = section; activeGroup = item.group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section === 'tv') activateChannel(index); else if (section === 'series') { selected = index; contentWindowStart = 0; focusSelected(); } else openDetails(index); });
     return button;
   }
   function renderSearch() {

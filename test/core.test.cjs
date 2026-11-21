@@ -614,3 +614,25 @@ test('Trailers: the official TMDB YouTube trailer opens the YouTube app on that 
   assert.equal(api.youtubeVideoTarget('m8e-FF8MsqU'), 'https://www.youtube.com/tv?v=m8e-FF8MsqU');
   assert.equal(api.youtubeVideoTarget('x'), null);
 });
+
+test('search shows each series once, found by an episode or by the series name', () => {
+  const entries = [
+    { name: 'Al Bayt.S01.E01', group: 'البيت الكبير' },
+    { name: 'Al Bayt.S01.E02', group: 'البيت الكبير' },
+    { name: 'Al Bayt.S02.E01', group: 'البيت الكبير' },
+    { name: 'Other.S01.E01', group: 'مسلسل آخر' },
+    { name: 'Al Bayt (film)', group: 'أفلام' },
+    { name: 'Lone episode' }, { name: 'Lone episode' }
+  ];
+  const section = index => index === 4 ? 'movies' : 'series';
+  const byEpisode = searchCatalog(entries, 'al bayt', section, 12);
+  assert.deepEqual(byEpisode.matches.series, [0]);
+  assert.equal(byEpisode.counts.series, 1);
+  assert.deepEqual(byEpisode.matches.movies, [4]);
+  const byName = searchCatalog(entries, 'البيت', section, 12);
+  assert.deepEqual(byName.matches.series, [0], 'The series name finds the series even when episode names differ');
+  assert.equal(byName.counts.series, 1);
+  const narrowed = searchCatalog(entries, 'البيت الك', section, 12, null, byName.matched);
+  assert.deepEqual(narrowed.matches.series, [0], 'Narrowing keeps series found by name');
+  assert.equal(searchCatalog(entries, 'lone', section, 12).counts.series, 2, 'Episodes without a group stay separate');
+});
