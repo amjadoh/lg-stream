@@ -94,3 +94,6 @@ input, .speed-connection, .speed-results li, .group-switch { background: var(--p
 .search-section h3, .search-history h3, .group-switch[aria-pressed="true"] .switch-state { color: var(--accent); }
 .search-page .search-channel, .search-page .history-item, .search-page .search-strip .movie-card { border-color: var(--line); background-color: var(--panel); }
 .search-page .search-channel:focus, .search-page .history-item:focus, .search-page .search-strip .movie-card:focus { border-color: var(--focus-ring); background-color: var(--focus); color: var(--focus-text); }
+.series-page .episode-card { border-color: var(--line); background-color: var(--panel); }
+.series-page .episode-card:focus { border-color: var(--focus-ring); background-color: var(--focus); color: var(--focus-text); }
+.series-card .series-meta, .series-seasons button[aria-pressed="true"] { color: var(--accent); }

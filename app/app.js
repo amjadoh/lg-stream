@@ -91,7 +91,11 @@
   // position. Everything below is applied once per catalogue or edit and is
   // never touched on the playback path.
   var sourceList = []; var activeSourceId = null; var sourcesLoaded = false;
-  var catalogMeta = { customization: null, knownKeys: null, newKeys: null };
+  var catalogMeta = { customization: null, knownKeys: null, newKeys: null, seriesCatalog: null };
+  // Series categories from the provider's Xtream API (get_series_categories +
+  // get_series), kept on the TV per catalogue revision; null until known.
+  var seriesCatalog = null; var seriesCatalogRequest = null; var seriesCatalogTimer = null; var seriesCatalogTried = '';
+  var OTHER_SERIES = 'أخرى';
   var custom = emptyCustomization();
   var entryKeys = null; var newFlags = null; var hiddenFlags = null; var displayOrder = null; var catalogTotals = { tv: 0, movies: 0, series: 0 };
   var NEW_GROUP = '\u0002new';
@@ -235,6 +239,12 @@
     sectionCache.orderedGroups = masterOrder(activeSection) ? sectionCache.groups : api.orderedCatalogGroups(sectionCache.groups);
     sectionCache.fresh = newFlags ? sectionCache.all.filter(function (index) { return newFlags[index]; }) : [];
     sectionCache.groupLabels = groupLabels(activeSection, Array.from(allGroups));
+    if (activeSection === 'series') {
+      // One card per series inside the provider's categories (see api.seriesSectionIndex).
+      var base = sectionCache; var view = api.seriesSectionIndex(base, seriesCatalog, OTHER_SERIES); var freshSeries = new Set();
+      base.fresh.forEach(function (index) { var list = base.byGroup[sources[index].group || '']; if (list) freshSeries.add(list[0]); });
+      sectionCache = { all: view.all, groups: view.groups, byGroup: view.byGroup, orderedGroups: view.groups, fresh: view.all.filter(function (index) { return freshSeries.has(index); }), groupLabels: api.groupDisplayNames(view.groups), episodes: base.byGroup };
+    }
     sectionCacheKey = cacheKey; return sectionCache;
   }
   function groupLabels(section, groups) {
@@ -402,7 +412,7 @@
       if (section === 'movies') applyCardRating(button, index);
     }
     button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
-    button.addEventListener('click', function () { rememberSearch($('channel-search').value); closeSearch(); if (section !== 'tv') stop(); activeCategory = 'all'; activeSection = section; activeGroup = item.group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section === 'tv') activateChannel(index); else if (section === 'series') { selected = index; contentWindowStart = 0; focusSelected(); } else openDetails(index); });
+    button.addEventListener('click', function () { rememberSearch($('channel-search').value); closeSearch(); if (section !== 'tv') stop(); activeCategory = 'all'; activeSection = section; activeGroup = section === 'series' ? '' : item.group || ''; renderPrimary(); renderGroups(); renderChannels(); if (section === 'tv') activateChannel(index); else if (section === 'series') openSeries(index); else openDetails(index); });
     return button;
   }
   function renderSearch() {
@@ -501,6 +511,7 @@
   }
   function clearCatalogMeta() { entryKeys = null; newFlags = null; hiddenFlags = null; displayOrder = null; custom = emptyCustomization(); }
   function applyCatalog(entries, source, revision, savedAt, restored, visibility, transport, keys) {
+    closeSeriesPanel(false); cancelSeriesCatalog(); seriesCatalog = storedSeriesCatalog(source);
     setHiddenGroups(visibility);
     liveTransport = transport === 'hls' ? 'hls' : 'original';
     sources = entries; prepareCatalog(source, keys);
@@ -519,7 +530,55 @@
     renderSourceCard();
     $('manage-groups-button').disabled = playlistRunning || groupSettingsSaving;
     if (restored) LGI18n.text($('status'), 'استُعيدت القائمة المحفوظة — اختر ما تريد تشغيله');
+    scheduleSeriesCatalog();
   }
+  function storedSeriesCatalog(source) {
+    var record = catalogMeta.seriesCatalog;
+    if (!record || !sameAccount(record.source, source) || !Array.isArray(record.categories) || !record.series || typeof record.series !== 'object') return null;
+    return { categories: record.categories, series: record.series, revision: record.revision };
+  }
+  function cancelSeriesCatalog() {
+    clearTimeout(seriesCatalogTimer); seriesCatalogTimer = null;
+    if (seriesCatalogRequest) { var request = seriesCatalogRequest; seriesCatalogRequest = null; request.abort(); }
+  }
+  // Once per catalogue revision, a few seconds after it is ready: the category
+  // list (~5 KB) and the series list (several MB on large providers). Only
+  // the name -> [category, id] map is kept. API requests, never a stream.
+  function scheduleSeriesCatalog() {
+    clearTimeout(seriesCatalogTimer); seriesCatalogTimer = null;
+    var source = activePlaylistUrl; var revision = activeCatalogRevision; var attempt = source + '\u0001' + revision;
+    if (!source || seriesCatalogRequest || !api.xtreamApiUrl(source, 'get_series') || typeof AbortController !== 'function') return;
+    if ((seriesCatalog && seriesCatalog.revision === revision) || seriesCatalogTried === attempt) return;
+    seriesCatalogTimer = setTimeout(function () { seriesCatalogTimer = null; loadSeriesCatalog(source, revision, attempt); }, 8000);
+  }
+  function loadSeriesCatalog(source, revision, attempt) {
+    if (source !== activePlaylistUrl || revision !== activeCatalogRevision || document.hidden || unloading) return;
+    if (playlistRunning) { scheduleSeriesCatalog(); return; }
+    seriesCatalogTried = attempt;
+    var controller = new AbortController(); seriesCatalogRequest = controller;
+    var timeout = setTimeout(function () { controller.abort(); }, 90000);
+    Promise.all([fetchJson(api.xtreamApiUrl(source, 'get_series_categories'), controller), fetchJson(api.xtreamApiUrl(source, 'get_series'), controller)]).then(function (replies) {
+      clearTimeout(timeout); if (seriesCatalogRequest === controller) seriesCatalogRequest = null;
+      if (controller.signal.aborted || source !== activePlaylistUrl || revision !== activeCatalogRevision) return;
+      var catalog = api.seriesCatalog(replies[0], replies[1]); if (!catalog) return;
+      seriesCatalog = { categories: catalog.categories, series: catalog.series, revision: revision };
+      catalogMeta.seriesCatalog = { key: 'series-catalog', source: source, revision: revision, savedAt: Date.now(), categories: catalog.categories, series: catalog.series };
+      catalogStore.saveMeta([catalogMeta.seriesCatalog]);
+      refreshSeriesView();
+    });
+  }
+  function refreshSeriesView() {
+    invalidateViews();
+    if (activeSection !== 'series' || watchMode || !seriesPanel.hidden) return;
+    var focused = document.activeElement; var inGroups = !!(focused && focused.closest && focused.closest('#groups')); var inGrid = !!(focused && focused.closest && focused.closest('#movie-grid'));
+    activeGroup = ''; renderGroups(); renderChannels();
+    if (inGroups) focusActiveGroup(); else if (inGrid) focusSelected();
+  }
+  function seriesInfoFor(name) {
+    var key = String(name || '').trim();
+    return seriesCatalog && Object.prototype.hasOwnProperty.call(seriesCatalog.series, key) ? seriesCatalog.series[key] : null;
+  }
+  function seriesCategoryName(name) { var info = seriesInfoFor(name); return info && info[0] >= 0 && seriesCatalog.categories[info[0]] ? seriesCatalog.categories[info[0]] : OTHER_SERIES; }
   function captureRuntimeView() {
     return { section: activeSection, category: activeCategory, group: activeGroup, sort: contentSort, selectedUrl: sources[selected] && sources[selected].url, favoriteUrls: Object.keys(favorites).map(function (index) { return sources[index] && sources[index].url; }).filter(Boolean), contentWindowStart: contentWindowStart, channelWindowStart: channelWindowStart, detailsOpen: detailsIndex !== null };
   }
@@ -573,7 +632,7 @@
     activeGroup = state.group; selected = Math.max(0, sources.findIndex(function (entry) { return entry.url === state.selectedUrl; }));
     contentWindowStart = state.contentWindowStart; channelWindowStart = state.channelWindowStart; renderPrimary(); renderGroups(); renderChannels(); saveViewState(state.detailsOpen);
     if (shouldFocus === false || document.hidden || unloading || !setup.hidden || !searchPanel.hidden || !speedPanel.hidden || !diagnostics.hidden || !$('group-manager').hidden || extraDialog()) return;
-    if (state.detailsOpen && sources[selected]) openDetails(selected); else focusSelected();
+    if (state.detailsOpen && sources[selected]) { if (entrySection(selected) === 'series') openSeries(selected); else openDetails(selected); } else focusSelected();
   }
   function sectionGroups() {
     return sectionIndex().orderedGroups;
@@ -585,7 +644,13 @@
       hiddenGroups[section] = new Set(value && Array.isArray(value[section]) ? value[section].filter(function (name) { return typeof name === 'string'; }) : []);
     });
   }
-  function entryVisible(index) { return !(hiddenFlags && hiddenFlags[index]) && !hiddenGroups[entrySection(index)].has(sources[index].group || ''); }
+  function entryVisible(index) {
+    if (hiddenFlags && hiddenFlags[index]) return false;
+    var section = entrySection(index); var group = sources[index].group || '';
+    if (hiddenGroups[section].has(group)) return false;
+    // A hidden series category hides every series in it.
+    return !(section === 'series' && seriesCatalog && hiddenGroups.series.size && hiddenGroups.series.has(seriesCategoryName(group)));
+  }
   function masterOrder(section) { return section !== 'favorites' && displayOrder && displayOrder[section] ? displayOrder[section].order : null; }
   function collectManagedGroups() {
     if (managedSection === 'hidden') {
@@ -595,6 +660,17 @@
       if (entryKeys && wanted.size) for (var index = 0; index < entryKeys.length; index += 1) if (wanted.has(entryKeys[index])) rows.push({ name: entryKeys[index], index: index, label: null, count: '', order: wanted.get(entryKeys[index]) });
       rows.sort(function (left, right) { return left.order - right.order; });
       managedGroups = rows; managedWindowStart = 0; return;
+    }
+    if (managedSection === 'series' && seriesCatalog) {
+      // Series are managed by the provider's categories: count series, not episodes.
+      var perCategory = new Map(); var seenSeries = new Set();
+      sources.forEach(function (entry, index) {
+        var name = entry.group || ''; if (!name || seenSeries.has(name) || entrySection(index) !== 'series') return;
+        seenSeries.add(name); var category = seriesCategoryName(name); perCategory.set(category, (perCategory.get(category) || 0) + 1);
+      });
+      var order = seriesCatalog.categories.concat([OTHER_SERIES]).filter(function (name, position, list) { return perCategory.has(name) && list.indexOf(name) === position; });
+      var categoryLabels = api.groupDisplayNames(order);
+      managedGroups = order.map(function (name) { return { name: name, label: categoryLabels.get(name), count: perCategory.get(name) }; }); managedWindowStart = 0; return;
     }
     var counts = new Map();
     sources.forEach(function (entry, index) {
@@ -739,7 +815,7 @@
     $('movie-browser').hidden = !cards;
     $('empty-state').hidden = cards || playingIndex !== null;
     if (!cards) return;
-    LGI18n.text($('movie-count'), indexes.length + (activeSection === 'movies' ? ' فيلم' : ' حلقة أو فيديو'));
+    LGI18n.text($('movie-count'), indexes.length + (activeSection === 'movies' ? ' فيلم' : ' مسلسل'));
     if (activeGroup === NEW_GROUP) LGI18n.text($('movie-title'), 'جديد'); else LGI18n.provider($('movie-title'), activeGroup, activeSection === 'movies' ? 'الأفلام' : 'المسلسلات', sectionIndex().groupLabels.get(activeGroup));
     $('movie-grid').replaceChildren();
     contentWindowStart = Math.max(0, Math.min(contentWindowStart, contentMaxStart(indexes.length)));
@@ -768,9 +844,9 @@
       var card = document.createElement('button'); card.type = 'button'; card.className = 'movie-card'; card.dataset.index = index;
       var details = sources[index] || {};
       if (details.poster) { var poster = document.createElement('img'); poster.className = 'movie-poster'; poster.alt = ''; poster.dataset.src = details.poster; poster.addEventListener('error', function () { this.remove(); }); card.appendChild(poster); }
-      var name = document.createElement('span'); LGI18n.provider(name, sources[index].name, activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
+      var name = document.createElement('span'); LGI18n.provider(name, activeSection === 'series' ? details.group || details.name : details.name, activeSection === 'movies' ? 'فيلم' : 'مسلسل'); card.appendChild(name);
       card.addEventListener('focus', function (event) { selected = Number(event.currentTarget.dataset.index); saveViewState(false); event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
-      card.addEventListener('click', function () { openDetails(index); });
+      card.addEventListener('click', function () { if (activeSection === 'series') openSeries(index); else openDetails(index); });
       if (activeSection === 'movies') applyCardRating(card, index);
       return card;
   }
@@ -1220,6 +1296,245 @@
     $('imdb-key').value = ''; $('tmdb-key').value = '';
   }
   function closeDetails() { cancelDetailsRequest(); cancelTrailerRequest(); detailsPanel.hidden = true; $('details-poster').removeAttribute('src'); detailsIndex = null; saveViewState(false); focusSelected(); }
+  // ---- Series page -----------------------------------------------------------
+  // Poster, description, rating, seasons and episodes of one series, with a
+  // continue button. Episodes come from the saved playlist; lengths and the
+  // description from the provider (get_series_info), rating from TMDB.
+  var seriesPanel = $('series-panel');
+  var seriesView = null; var seriesReturn = null; var seriesRequests = [];
+  var seriesInfoCache = new Map(); var tmdbTvCache = new Map();
+  function tr(arabic, english) { return appLanguage() === 'en' ? english : arabic; }
+  // Watch progress per episode [seconds, length, saved at] and the last
+  // episode per series, on this TV only; at most 400 episodes.
+  var SERIES_PROGRESS_KEY = 'lg-stream-series-progress-v1'; var SERIES_PROGRESS_LIMIT = 400;
+  var seriesProgress = { last: {}, items: {} }; var progressSavedAt = 0; var pendingResume = null;
+  try {
+    var storedProgress = JSON.parse(localStorage.getItem(SERIES_PROGRESS_KEY) || 'null');
+    if (storedProgress && typeof storedProgress === 'object') seriesProgress = { last: storedProgress.last && typeof storedProgress.last === 'object' ? storedProgress.last : {}, items: storedProgress.items && typeof storedProgress.items === 'object' ? storedProgress.items : {} };
+  } catch (_) {}
+  function saveSeriesProgress(force) {
+    var now = Date.now(); if (!force && now - progressSavedAt < 10000) return;
+    progressSavedAt = now; try { localStorage.setItem(SERIES_PROGRESS_KEY, JSON.stringify(seriesProgress)); } catch (_) {}
+  }
+  function episodeKey(index) { return entryKeys && entryKeys.length === sources.length && index !== null && index >= 0 ? String(entryKeys[index]) : ''; }
+  function episodeProgressOf(index) { var key = episodeKey(index); return key && Object.prototype.hasOwnProperty.call(seriesProgress.items, key) ? seriesProgress.items[key] : null; }
+  function trackEpisode(video, force, ended) {
+    var index = playingIndex;
+    if (index === null || !sources[index] || entrySection(index) !== 'series' || !video || !isFinite(video.duration) || !(video.duration > 0)) return;
+    if (pendingResume && pendingResume.index === index && !pendingResume.done) return;
+    var key = episodeKey(index); var name = sources[index].group; if (!key || !name) return;
+    var position = ended ? video.duration : video.currentTime; if (!(position >= 0)) return;
+    seriesProgress.items[key] = [Math.round(position), Math.round(video.duration), Date.now()];
+    seriesProgress.last[name] = key;
+    var keys = Object.keys(seriesProgress.items);
+    if (keys.length > SERIES_PROGRESS_LIMIT) {
+      keys.sort(function (a, b) { return seriesProgress.items[a][2] - seriesProgress.items[b][2]; });
+      keys.slice(0, keys.length - SERIES_PROGRESS_LIMIT).forEach(function (old) { delete seriesProgress.items[old]; });
+      Object.keys(seriesProgress.last).forEach(function (series) { if (!seriesProgress.items[seriesProgress.last[series]]) delete seriesProgress.last[series]; });
+    }
+    saveSeriesProgress(force);
+  }
+  // A partly watched episode starts where it stopped (once, after metadata).
+  function resumeEpisode(video) {
+    if (!pendingResume || pendingResume.index !== playingIndex || pendingResume.done) return;
+    pendingResume.done = true;
+    if (isFinite(video.duration) && video.duration > pendingResume.at + 60) { try { video.currentTime = pendingResume.at; } catch (_) {} }
+  }
+  function seriesEpisodes(name) {
+    var list = [];
+    for (var index = 0; index < sources.length; index += 1) if (sources[index].group === name && entrySection(index) === 'series' && entryVisible(index)) list.push(index);
+    return list;
+  }
+  function flatEpisodes(view) { var list = []; view.seasons.forEach(function (season) { season.episodes.forEach(function (item) { list.push(item); }); }); return list; }
+  function episodeItem(view, index) { return flatEpisodes(view).find(function (item) { return item.index === index; }) || null; }
+  // What "continue" plays: the stopped episode, else the one after the last
+  // finished episode, else the first.
+  function nextEpisode(view) {
+    var list = flatEpisodes(view); var lastKey = seriesProgress.last[view.name];
+    var position = lastKey ? list.findIndex(function (item) { return episodeKey(item.index) === lastKey; }) : -1;
+    if (position < 0) return { item: list[0], mode: 'start' };
+    var state = api.episodeProgress(episodeProgressOf(list[position].index));
+    if (state === 'watched') return list[position + 1] ? { item: list[position + 1], mode: 'next' } : { item: list[position], mode: 'again' };
+    return { item: list[position], mode: state === 'partial' ? 'resume' : 'start' };
+  }
+  function episodeLabel(view, item) {
+    if (!item) return '';
+    if (item.season > 0) return tr('م', 'S') + item.season + ' ' + tr('ح', 'E') + item.episode;
+    var position = view.seasons[view.seasons.length - 1].episodes.indexOf(item);
+    return tr('الحلقة ', 'Episode ') + (item.episode || position + 1);
+  }
+  function episodeSeconds(view, index) {
+    var serial = entryKeys && entryKeys.length === sources.length ? api.providerSerial(entryKeys[index]) : null;
+    var fromProvider = view.info && serial !== null ? view.info.durations[String(serial)] : 0;
+    var progress = episodeProgressOf(index);
+    return fromProvider || (progress ? progress[1] : 0);
+  }
+  function seriesRequestJson(url) {
+    if (!url || typeof AbortController !== 'function') return Promise.resolve(null);
+    var controller = new AbortController(); seriesRequests.push(controller);
+    var timeout = setTimeout(function () { controller.abort(); }, 15000);
+    return fetchJson(url, controller).then(function (reply) {
+      clearTimeout(timeout); seriesRequests = seriesRequests.filter(function (item) { return item !== controller; });
+      return controller.signal.aborted ? null : reply;
+    });
+  }
+  function cancelSeriesRequests() { var list = seriesRequests; seriesRequests = []; list.forEach(function (controller) { controller.abort(); }); }
+  function openSeries(index, focusIndex) {
+    var entry = sources[index]; if (!entry || !entry.group) { openDetails(index); return; }
+    cancelSwitch(); cancelSeriesRequests();
+    var name = entry.group; var episodes = seriesEpisodes(name); if (!episodes.length) return;
+    if (activeSection !== 'series') { activeSection = 'series'; activeCategory = 'all'; activeGroup = ''; renderPrimary(); renderGroups(); renderChannels(); }
+    var own = sectionIndex().episodes; var rep = own && own[name] ? own[name][0] : episodes[0];
+    selected = rep;
+    var view = { name: name, rep: rep, count: episodes.length, seasons: api.seriesSeasons(sources, episodes), info: null, tmdb: null, loading: false };
+    view.next = nextEpisode(view);
+    var target = focusIndex !== undefined ? episodeItem(view, focusIndex) || view.next.item : view.next.item;
+    view.target = target.index; view.season = target.season;
+    seriesView = view; seriesReturn = null;
+    renderSeriesInfo(); renderSeriesSeasons(); renderSeriesEpisodes();
+    LGI18n.text($('series-status'), '');
+    seriesPanel.hidden = false; saveViewState(true);
+    var focusTarget = focusIndex !== undefined ? $('series-episodes').querySelector('[data-index="' + view.target + '"]') : null;
+    (focusTarget || $('series-continue')).focus();
+    loadSeriesExtras(view);
+  }
+  function closeSeriesPanel(focus) {
+    if (seriesPanel.hidden) return;
+    cancelSeriesRequests(); seriesPanel.hidden = true; seriesView = null; $('series-poster').removeAttribute('src');
+    $('series-episodes').replaceChildren(); $('series-seasons').replaceChildren();
+    saveViewState(false); if (focus) focusSelected();
+  }
+  function renderSeriesInfo() {
+    var view = seriesView; if (!view) return; var entry = sources[view.rep] || {};
+    LGI18n.provider($('series-title'), view.name, 'مسلسل');
+    $('series-poster').hidden = !entry.poster; seriesPanel.querySelector('.series-head').classList.toggle('no-poster', !entry.poster);
+    if (entry.poster && $('series-poster').getAttribute('src') !== entry.poster) $('series-poster').src = entry.poster;
+    var numbered = view.seasons.filter(function (season) { return season.season > 0; }).length; var parts = [];
+    var year = (view.info && view.info.year) || (view.tmdb && view.tmdb.year); if (year) parts.push(year);
+    if (numbered > 1) parts.push(numbered + tr(' مواسم', ' seasons')); else if (numbered === 1) parts.push(tr('موسم واحد', '1 season'));
+    parts.push(view.count + tr(' حلقة', view.count === 1 ? ' episode' : ' episodes'));
+    if (view.info && view.info.genre) parts.push(view.info.genre);
+    var meta = $('series-meta'); meta.dataset.providerText = 'true'; meta.replaceChildren(document.createTextNode(parts.join(' · ')));
+    var rating = view.tmdb && view.tmdb.rating ? 'TMDB ' + view.tmdb.rating : view.info && view.info.rating ? '★ ' + view.info.rating : '';
+    if (rating) { var badge = document.createElement('span'); badge.className = 'series-rating'; badge.textContent = rating; meta.appendChild(badge); }
+    var plot = (view.tmdb && view.tmdb.plot) || (view.info && view.info.plot) || '';
+    $('series-description').textContent = plot || (view.loading ? tr('جارٍ جلب الوصف…', 'Loading the description…') : '');
+    var next = view.next; var label = episodeLabel(view, next.item);
+    var button = $('series-continue'); button.dataset.providerText = 'true';
+    button.textContent = next.mode === 'resume' ? tr('متابعة ', 'Continue ') + label : next.mode === 'next' ? tr('التالية: ', 'Next: ') + label : tr('تشغيل ', 'Play ') + label;
+  }
+  function renderSeriesSeasons() {
+    var view = seriesView; var list = $('series-seasons'); list.replaceChildren();
+    if (!view || view.seasons.length < 2) return;
+    view.seasons.forEach(function (season) {
+      var button = document.createElement('button'); button.type = 'button'; button.dataset.season = season.season; button.dataset.providerText = 'true';
+      button.textContent = season.season > 0 ? tr('الموسم ', 'Season ') + season.season : tr('أخرى', 'Other');
+      button.setAttribute('aria-pressed', String(season.season === view.season));
+      button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); showSeason(season.season); });
+      button.addEventListener('click', function () { showSeason(season.season); var first = $('series-episodes').querySelector('.episode-card'); if (first) first.focus(); });
+      list.appendChild(button);
+    });
+  }
+  function showSeason(number) {
+    var view = seriesView; if (!view || view.season === number) return;
+    view.season = number;
+    Array.prototype.forEach.call($('series-seasons').children, function (button) { button.setAttribute('aria-pressed', String(Number(button.dataset.season) === number)); });
+    renderSeriesEpisodes();
+  }
+  function renderSeriesEpisodes() {
+    var view = seriesView; var list = $('series-episodes'); if (!view) return;
+    var focused = list.contains(document.activeElement) ? document.activeElement.dataset.index : null;
+    list.replaceChildren();
+    var season = view.seasons.find(function (item) { return item.season === view.season; }) || view.seasons[0];
+    season.episodes.forEach(function (item, position) {
+      var button = document.createElement('button'); button.type = 'button'; button.className = 'episode-card'; button.dataset.index = item.index; button.dataset.providerText = 'true';
+      var progress = episodeProgressOf(item.index); var state = api.episodeProgress(progress);
+      if (state === 'watched') button.classList.add('watched');
+      var number = document.createElement('span'); number.className = 'episode-number'; number.textContent = tr('الحلقة ', 'Episode ') + (item.episode || position + 1);
+      var details = []; var seconds = episodeSeconds(view, item.index);
+      if (seconds) details.push(Math.max(1, Math.round(seconds / 60)) + tr(' د', ' min'));
+      if (state === 'watched') details.push(tr('شوهدت', 'Watched'));
+      else if (state === 'partial') details.push(tr('وقفت عند ', 'Stopped at ') + Math.floor(progress[0] / 60) + tr(' د', ' min'));
+      var meta = document.createElement('span'); meta.className = 'episode-meta'; meta.textContent = details.join(' · ');
+      button.appendChild(number); button.appendChild(meta);
+      if (state === 'partial') { var bar = document.createElement('span'); bar.className = 'episode-bar'; var fill = document.createElement('i'); fill.style.width = Math.min(100, Math.round(progress[0] / progress[1] * 100)) + '%'; bar.appendChild(fill); button.appendChild(bar); }
+      button.addEventListener('focus', function (event) { event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+      button.addEventListener('click', function () { playEpisode(item.index); });
+      list.appendChild(button);
+    });
+    if (focused !== null) { var again = list.querySelector('[data-index="' + focused + '"]'); if (again) again.focus(); }
+  }
+  function loadSeriesExtras(view) {
+    var info = seriesInfoFor(view.name); var seriesId = info ? info[1] : 0;
+    if (seriesId && seriesInfoCache.has(seriesId)) view.info = seriesInfoCache.get(seriesId);
+    else if (seriesId) {
+      var url = api.xtreamApiUrl(activePlaylistUrl, 'get_series_info', { series_id: seriesId });
+      if (url) {
+        view.loading = true;
+        seriesRequestJson(url).then(function (reply) {
+          view.loading = false; var details = api.seriesInfo(reply);
+          if (details) { seriesInfoCache.set(seriesId, details); if (seriesInfoCache.size > 40) seriesInfoCache.delete(seriesInfoCache.keys().next().value); view.info = details; }
+          if (seriesView === view) { renderSeriesInfo(); renderSeriesEpisodes(); }
+        });
+      }
+    }
+    var title = api.tmdbTitle(view.name); var lang = appLanguage(); var cacheKey = lang + '\u0001' + title;
+    if (tmdbKey && title) {
+      if (tmdbTvCache.has(cacheKey)) view.tmdb = tmdbTvCache.get(cacheKey);
+      else seriesRequestJson(api.tmdbTvSearchUrl(tmdbKey, title, lang)).then(function (reply) {
+        if (!reply) return; var show = api.tmdbTvResult(reply, lang); tmdbTvCache.set(cacheKey, show);
+        if (tmdbTvCache.size > 80) tmdbTvCache.delete(tmdbTvCache.keys().next().value);
+        if (seriesView === view) { view.tmdb = show; renderSeriesInfo(); }
+      });
+    }
+    renderSeriesInfo(); renderSeriesEpisodes();
+  }
+  function playEpisode(index) {
+    var view = seriesView; if (!view || !sources[index]) return;
+    var progress = episodeProgressOf(index);
+    pendingResume = api.episodeProgress(progress) === 'partial' ? { index: index, at: progress[0], done: false } : null;
+    var name = view.name; closeSeriesPanel(false); seriesReturn = name; selected = index;
+    activateChannel(index);
+  }
+  // Rows of the series page: left/right inside the seasons or episodes row,
+  // up/down between the buttons, the seasons and the episodes.
+  function seriesKey(event, key) {
+    var focused = document.activeElement; var strip = focused.parentNode;
+    var inSeasons = strip === $('series-seasons'); var inEpisodes = strip === $('series-episodes');
+    var actions = visibleControls(seriesPanel.querySelector('.series-actions')); var inActions = actions.indexOf(focused) >= 0;
+    var activeSeason = function () { return $('series-seasons').querySelector('[aria-pressed="true"]') || $('series-seasons').querySelector('button'); };
+    var episodeTarget = function () { return $('series-episodes').querySelector('[data-index="' + (seriesView ? seriesView.target : -1) + '"]') || $('series-episodes').querySelector('.episode-card'); };
+    if (inSeasons || inEpisodes) {
+      if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        var items = Array.prototype.slice.call(strip.children); var step = (key === 'ArrowLeft') === (document.documentElement.dir !== 'ltr') ? 1 : -1;
+        var next = items[items.indexOf(focused) + step]; if (next) next.focus();
+      } else if (key === 'ArrowUp') { var up = inEpisodes ? activeSeason() || actions[0] : actions[0]; if (up) up.focus(); }
+      else if (key === 'ArrowDown') { if (inSeasons) { var down = episodeTarget(); if (down) down.focus(); } }
+      else return false;
+      event.preventDefault(); return true;
+    }
+    if (inActions && key === 'ArrowDown') { var below = activeSeason() || episodeTarget(); if (below) below.focus(); event.preventDefault(); return true; }
+    return false;
+  }
+  $('series-continue').addEventListener('click', function () { if (seriesView && seriesView.next.item) playEpisode(seriesView.next.item.index); });
+  $('close-series').addEventListener('click', function () { closeSeriesPanel(true); });
+  $('series-poster').addEventListener('error', function () { this.hidden = true; this.removeAttribute('src'); seriesPanel.querySelector('.series-head').classList.add('no-poster'); });
+  // Trailer: TMDB's official one, else the provider's, else a YouTube search.
+  $('series-trailer').addEventListener('click', function () {
+    var view = seriesView; if (!view || !prepareForegroundAction()) return;
+    var year = (view.info && view.info.year) || (view.tmdb && view.tmdb.year) || '';
+    var fallback = function () {
+      if (view.info && view.info.youtube) openYoutube(api.youtubeVideoTarget(view.info.youtube), true);
+      else openYoutube(api.youtubeSearchTarget(view.name, year), false);
+    };
+    if (!(tmdbKey && view.tmdb && view.tmdb.id)) { fallback(); return; }
+    LGI18n.text($('series-status'), 'جارٍ البحث عن الإعلان الرسمي…');
+    seriesRequestJson(api.tmdbTvVideosUrl(tmdbKey, view.tmdb.id)).then(function (reply) {
+      if (seriesView !== view) return;
+      var trailer = reply ? api.tmdbTrailer(reply, appLanguage()) : '';
+      if (trailer) openYoutube(api.youtubeVideoTarget(trailer), true); else fallback();
+    });
+  });
   function openDetails(index) {
     cancelSwitch();
     selected = index; detailsIndex = index; var details = sources[index] || {};
@@ -1244,6 +1559,10 @@
     mountVideo: function (video) {
       $('video-host').appendChild(video);
       ['loadedmetadata', 'resize'].forEach(function (name) { video.addEventListener(name, applyPictureFit); });
+      video.addEventListener('loadedmetadata', function () { resumeEpisode(video); });
+      video.addEventListener('timeupdate', function () { trackEpisode(video, false); });
+      video.addEventListener('pause', function () { trackEpisode(video, true); });
+      video.addEventListener('ended', function () { trackEpisode(video, true, true); });
       requestAnimationFrame(applyPictureFit);
       ['loadedmetadata', 'durationchange', 'timeupdate', 'progress'].forEach(function (name) { video.addEventListener(name, function () { if (video.parentNode && !$('media-controls').hidden) updatePlaybackControls(); }); });
       [video.audioTracks, video.textTracks].forEach(function (tracks) {
@@ -1546,10 +1865,13 @@
   function cancelSeek() { clearTimeout(seekTimer); seekTimer = null; pendingSeek = null; }
   function isOnDemand() { return playingIndex !== null && /^(movies|series)$/.test(entrySection(playingIndex)); }
   function exitPlayback() {
+    var episode = playingIndex; var video = $('video-host').querySelector('video'); if (video) trackEpisode(video, true);
     if (switchPending && playingIndex !== null) selected = playingIndex;
     cancelSwitch();
     LGI18n.text($('status'), labels[lastState] || 'جاهز');
     if (isOnDemand() || (playingIndex === null && lastState !== 'idle')) stop(); else setWatchMode(false);
+    // Back from an episode started on the series page returns to that page.
+    if (episode !== null && seriesReturn && sources[episode] && entrySection(episode) === 'series' && sources[episode].group === seriesReturn) { openSeries(episode, episode); return; }
     focusSelected();
   }
   function timeLabel(seconds) {
@@ -2134,22 +2456,23 @@
   // YouTube refuses its embedded player inside a local webOS app (error 153,
   // measured on the TV), so trailers open in the YouTube app.
   function openYoutube(target, video) {
+    var note = !seriesPanel.hidden ? $('series-status') : $('details-status');
     stop();
-    if (!target || typeof window.PalmServiceBridge !== 'function') { LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube مباشرة على هذا الجهاز.'); return; }
-    LGI18n.text($('details-status'), video ? 'جارٍ فتح الإعلان في تطبيق YouTube…' : 'جارٍ إرسال البحث إلى تطبيق YouTube…');
+    if (!target || typeof window.PalmServiceBridge !== 'function') { LGI18n.text(note, 'تعذر فتح تطبيق YouTube مباشرة على هذا الجهاز.'); return; }
+    LGI18n.text(note, video ? 'جارٍ فتح الإعلان في تطبيق YouTube…' : 'جارٍ إرسال البحث إلى تطبيق YouTube…');
     try {
       youtubeBridge = new window.PalmServiceBridge();
       youtubeBridge.onservicecallback = function (raw) {
         var accepted = false;
         try { accepted = JSON.parse(raw).returnValue === true; } catch (_) {}
-        LGI18n.text($('details-status'), !accepted ? 'تعذر فتح تطبيق YouTube.' : video ? 'فُتح الإعلان في تطبيق YouTube.' : 'أُرسل طلب البحث إلى تطبيق YouTube.');
+        LGI18n.text(note, !accepted ? 'تعذر فتح تطبيق YouTube.' : video ? 'فُتح الإعلان في تطبيق YouTube.' : 'أُرسل طلب البحث إلى تطبيق YouTube.');
         youtubeBridge = null;
         if (!accepted && trailerWatchArmed) { trailerWatchArmed = false; callTrailerService('stopWatch'); }
       };
-    } catch (_) { youtubeBridge = null; LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube.'); return; }
+    } catch (_) { youtubeBridge = null; LGI18n.text(note, 'تعذر فتح تطبيق YouTube.'); return; }
     var launch = function () {
       try { youtubeBridge.call('luna://com.webos.applicationManager/launch', JSON.stringify({ id: 'youtube.leanback.v4', params: { contentTarget: target } })); }
-      catch (_) { youtubeBridge = null; LGI18n.text($('details-status'), 'تعذر فتح تطبيق YouTube.'); }
+      catch (_) { youtubeBridge = null; LGI18n.text(note, 'تعذر فتح تطبيق YouTube.'); }
     };
     // Arm the return before YouTube opens: once YouTube is in front, webOS
     // suspends this page and a request still in flight is lost (measured).
@@ -2330,7 +2653,7 @@
 
 
   function extraDialog() {
-    return ['exit-confirm', 'category-picker', 'appearance-panel', 'imdb-panel', 'settings-home', 'item-menu', 'rename-panel', 'edit-confirm'].map($).find(function (panel) { return !panel.hidden; }) || null;
+    return ['exit-confirm', 'category-picker', 'appearance-panel', 'imdb-panel', 'settings-home', 'item-menu', 'rename-panel', 'edit-confirm', 'series-panel'].map($).find(function (panel) { return !panel.hidden; }) || null;
   }
   var exitReturn = null;
   function focusSection() {
@@ -2379,6 +2702,7 @@
     else if (panel.id === 'imdb-panel') { closeImdbPanel(); returnToSettings(); }
     else if (panel.id === 'category-picker') focusCategoryReturn();
     else if (panel.id === 'item-menu') closeItemMenu(true);
+    else if (panel.id === 'series-panel') { panel.hidden = false; closeSeriesPanel(true); }
     else if (panel.id === 'rename-panel') closeRename();
     else if (panel.id === 'edit-confirm') { panel.hidden = false; if (editSession && editSession.origin === 'settings') $('edit-continue').click(); else $('edit-discard').click(); }
   }
@@ -2517,7 +2841,7 @@
   function holdTarget(element) {
     if (!element || watchMode || watchChannels !== null || !customizable()) return null;
     if (element.classList.contains('channel-button') && element.parentNode && element.parentNode.parentNode === $('channels') && activeSection !== 'favorites') return element;
-    if (element.classList.contains('group-button') && element.parentNode === $('groups') && element.dataset.group && element.dataset.group !== NEW_GROUP && activeSection !== 'favorites') return element;
+    if (element.classList.contains('group-button') && element.parentNode === $('groups') && element.dataset.group && element.dataset.group !== NEW_GROUP && activeSection !== 'favorites' && !(activeSection === 'series' && seriesCatalog)) return element;
     return null;
   }
   function placeRing(target) {
@@ -2997,6 +3321,7 @@
         if (code === BLUE_KEY && document.activeElement.classList.contains('history-item')) { event.preventDefault(); if (!event.repeat) forgetSearch(document.activeElement); return; }
         if (searchKey(event, key)) return;
       }
+      if (dialog === seriesPanel && seriesKey(event, key)) return;
       if (dialog === $('group-manager') && key === 'ArrowUp' && document.activeElement === $('close-group-manager') && !$('manager-visibility').hidden) {
         if (managedGroups.length) focusManagedGroup(managedGroups.length - 1);
         else dialog.querySelector('[data-manage-section="' + managedSection + '"]').focus();
@@ -3164,12 +3489,13 @@
     }
   });
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } stop(); if (!setup.hidden) closeSetup(); }
+    if (document.hidden) { ['exit-confirm', 'settings-home', 'appearance-panel', 'category-picker'].forEach(function (id) { $(id).hidden = true; }); exitReturn = null; settingsReturn = null; $('group-manager').hidden = true; managedGroups = []; $('managed-groups').replaceChildren(); cancelSpeed(); if (playlistAutomatic) { autoNextAttemptAt = Date.now() + 5 * 60 * 1000; cancelPlaylist(); } var hiddenVideo = $('video-host').querySelector('video'); if (hiddenVideo) trackEpisode(hiddenVideo, true); stop(); if (!setup.hidden) closeSetup(); }
     else if (!speedPanel.hidden) $('speed-wired').focus();
     else if (!detailsPanel.hidden) $('details-trailer').focus();
+    else if (!seriesPanel.hidden) $('series-trailer').focus();
     else if (setup.hidden && diagnostics.hidden) focusSelected();
     if (!document.hidden && trailerWatchArmed) { trailerWatchArmed = false; callTrailerService('stopWatch'); }
-    if (!document.hidden) { restoreRetryAt = 0; scheduleAutoUpdate(); }
+    if (!document.hidden) { restoreRetryAt = 0; scheduleAutoUpdate(); scheduleSeriesCatalog(); }
   });
   window.addEventListener('pageshow', function () { unloading = false; restoreRetryAt = 0; scheduleAutoUpdate(); });
   window.addEventListener('pagehide', function () {
@@ -3180,9 +3506,9 @@
   });
   var restoreGeneration = sourceGeneration;
   renderPrimary(); renderGroups(); renderChannels(); $('start-button').focus();
-  Promise.all([catalogStore.load(), catalogStore.loadMeta(['sources', 'customization', 'known-keys', 'new-keys'])]).then(function (loaded) {
+  Promise.all([catalogStore.load(), catalogStore.loadMeta(['sources', 'customization', 'known-keys', 'new-keys', 'series-catalog'])]).then(function (loaded) {
     var saved = loaded[0]; var records = loaded[1].records || {};
-    catalogMeta = { customization: records.customization, knownKeys: records['known-keys'], newKeys: records['new-keys'] };
+    catalogMeta = { customization: records.customization, knownKeys: records['known-keys'], newKeys: records['new-keys'], seriesCatalog: records['series-catalog'] };
     if (records.sources && Array.isArray(records.sources.list)) {
       sourceList = records.sources.list.filter(function (item) { return item && typeof item.id === 'string' && typeof item.url === 'string'; }).map(function (item) { return { id: item.id, name: typeof item.name === 'string' && item.name.trim() ? item.name : DEFAULT_SOURCE_NAME, url: item.url, addedAt: item.addedAt || 0 }; });
       activeSourceId = sourceList.some(function (item) { return item.id === records.sources.activeId; }) ? records.sources.activeId : null;
@@ -3202,7 +3528,7 @@
         catalogMeta.knownKeys = { key: 'known-keys', source: saved.source, keys: api.sortedKeys(entryKeys) };
         catalogStore.saveMeta([catalogMeta.knownKeys]);
       }
-      if (!document.hidden && !extraDialog() && setup.hidden && searchPanel.hidden && speedPanel.hidden && diagnostics.hidden) { if (pendingViewState && pendingViewState.detailsOpen && sources[selected] && entryVisible(selected)) openDetails(selected); else focusSelected(); }
+      if (!document.hidden && !extraDialog() && setup.hidden && searchPanel.hidden && speedPanel.hidden && diagnostics.hidden) { if (pendingViewState && pendingViewState.detailsOpen && sources[selected] && entryVisible(selected)) { if (entrySection(selected) === 'series') openSeries(selected); else openDetails(selected); } else focusSelected(); }
       scheduleAutoUpdate();
     } else if (saved.state !== 'empty') {
       LGI18n.text($('status'), 'تعذر استعادة القائمة المحفوظة — أعد فتح التطبيق للمحاولة مجددًا.');

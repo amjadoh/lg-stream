@@ -135,6 +135,8 @@
   " حلقة أو فيديو": " episodes or videos",
   "فيلم": "Movie",
   "مسلسل": "Series",
+  " مسلسل": " series",
+  "أخرى": "Other",
   "ترتيب: ": "Sort: ",
   "المزوّد": "Provider",
   "أبجدي": "Alphabetical",

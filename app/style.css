@@ -365,3 +365,31 @@ body[data-layout="vertical"] #category-shortcuts button { flex-shrink: 0; width:
 .manager-tip { margin: 4px 0 0; }
 .manager-option:focus { background: #4a3514; outline: 5px solid #ffd98a; outline-offset: 3px; box-shadow: 0 0 0 10px rgba(255,217,138,.18); }
 .manager-option:focus strong { color: #ffd98a; }
+/* Series page: full screen, sizes follow the screen height (720p and 1080p alike). */
+.modal.series-page { padding: 0; align-items: stretch; justify-content: stretch; }
+.series-page .series-card { width: 100%; max-width: none; height: 100%; max-height: none; border: 0; border-radius: 0; padding: 4vh 4vw 3vh; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
+.series-head { display: grid; grid-template-columns: 26vh minmax(0, 1fr); gap: 3vw; min-height: 0; }
+.series-head.no-poster { grid-template-columns: minmax(0, 1fr); }
+.series-poster { width: 26vh; height: 38vh; object-fit: cover; border-radius: 1.6vh; background: #172338; }
+.series-body { min-width: 0; display: flex; flex-direction: column; }
+.series-body h2 { font-size: 4.4vh; line-height: 1.2; margin: 0 0 1vh; }
+/* Provider titles and plots may be Latin; keep them on the page's reading side. */
+html:not([dir="ltr"]) .series-body h2, html:not([dir="ltr"]) .series-card .series-description { text-align: right; }
+html[dir="ltr"] .series-body h2, html[dir="ltr"] .series-card .series-description { text-align: left; }
+.series-card .series-meta { font-size: 2.6vh; line-height: 1.4; color: #f6d28a; margin: 0 0 1.2vh; }
+.series-card .series-rating { display: inline-block; direction: ltr; unicode-bidi: isolate; margin: 0 1vw; padding: .2vh .8vh; border-radius: .8vh; background: #01b4e4; color: #04111f; font-weight: bold; }
+.series-card .series-description { font-size: 2.7vh; line-height: 1.55; color: #e3eaf3; margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5; overflow: hidden; unicode-bidi: plaintext; text-align: start; }
+.series-actions { margin-top: 2.4vh; }
+.series-actions button { font-size: 2.8vh; padding: 1.1vh 2.2vw; }
+.series-card #series-status { font-size: 1.9vh; margin: 1vh 0 0; min-height: 2.4vh; }
+.series-seasons, .series-episodes { display: flex; gap: 1.2vw; overflow: hidden; flex-shrink: 0; padding: 1vh .6vw 1.4vh; }
+.series-seasons { margin-top: 2vh; }
+.series-seasons:empty { display: none; }
+.series-seasons button { flex: 0 0 auto; font-size: 2.5vh; padding: .9vh 1.8vw; }
+.series-seasons button[aria-pressed="true"] { border-color: #f6d28a; color: #f6d28a; }
+.episode-card { position: relative; flex: 0 0 auto; width: 15vw; min-height: 13vh; display: flex; flex-direction: column; justify-content: center; gap: .6vh; padding: 1.4vh 1vw; text-align: start; white-space: normal; overflow: hidden; border: 2px solid #3b4d64; background-color: #1a2633; }
+.episode-card .episode-number { font-size: 2.8vh; font-weight: bold; }
+.episode-card .episode-meta { font-size: 2vh; color: #b5c2d3; }
+.episode-card .episode-bar { position: absolute; left: 0; right: 0; bottom: 0; height: .7vh; background: rgba(255,255,255,.14); }
+.episode-card .episode-bar i { display: block; height: 100%; background: #e2ad45; }
+.episode-card.watched .episode-number::after { content: ' ✓'; color: #7bd88f; }

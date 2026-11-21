@@ -188,9 +188,12 @@ async function main() {
     await page.keyboard.press('ArrowLeft');await page.keyboard.press('ArrowLeft');assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('group-button')),true,'English left edge goes to physically left groups');
     for(const section of ['movies','series']){
       await page.locator('.primary-button[data-section="'+section+'"]').click();
-      await page.locator('#groups [data-group="فيديو"]').click();
+      // Series without the provider's categories: one "all" list, never one group per series.
+      const groupButton=section==='movies'?page.locator('#groups [data-group="فيديو"]'):page.locator('#groups .group-button').first();
+      if(section==='series')assert.equal(await page.locator('#groups [data-group="فيديو"]').count(),0,'A series is not shown as a group');
+      const groupName=await groupButton.getAttribute('data-group');await groupButton.click();
       assert.equal(await page.evaluate(()=>document.activeElement.classList.contains('movie-card')),true);
-      await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.dataset.group),'فيديو');
+      await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.dataset.group),groupName);
       await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.dataset.section),section);
       await page.keyboard.press('Escape');assert.equal(await page.locator('#exit-confirm').isVisible(),true);
       assert.equal(await page.locator('#exit-title').innerText(),'Do you want to exit the app?');
