@@ -459,7 +459,8 @@
     if (record.names && typeof record.names === 'object') Object.keys(record.names).forEach(function (key) { if (typeof record.names[key] === 'string' && record.names[key].trim()) value.names[key] = record.names[key].slice(0, 80); });
     return value;
   }
-  function customizationFor(source) { return catalogMeta.customization && catalogMeta.customization.source === source ? catalogMeta.customization : null; }
+  var sameAccount = window.LGCatalogStore.sameAccount;
+  function customizationFor(source) { return catalogMeta.customization && sameAccount(catalogMeta.customization.source, source) ? catalogMeta.customization : null; }
   // Once per catalogue: stable keys, new-item flags from the last refresh,
   // hidden channels, renamed channels and the master display order.
   function prepareCatalog(source, keys) {
@@ -471,7 +472,7 @@
     }
     entryKeys = keys;
     custom = normalizeCustomization(customizationFor(source));
-    var fresh = catalogMeta.newKeys && catalogMeta.newKeys.source === source ? catalogMeta.newKeys.keys : null;
+    var fresh = catalogMeta.newKeys && sameAccount(catalogMeta.newKeys.source, source) ? catalogMeta.newKeys.keys : null;
     newFlags = null;
     if (fresh && fresh.length) {
       var flags = new Uint8Array(count); var marked = 0;
@@ -1954,7 +1955,7 @@
           for (var count = 0; count < 400 && index < entries.length; count += 1, index += 1) { keys[index] = api.entryKey(entries[index].url); entries[index].k = keys[index]; }
         }
         if (index < entries.length) { setTimeout(step, 0); return; }
-        var previous = catalogMeta.knownKeys && catalogMeta.knownKeys.source === url && catalogMeta.knownKeys.keys && catalogMeta.knownKeys.keys.length ? catalogMeta.knownKeys.keys : null;
+        var previous = catalogMeta.knownKeys && sameAccount(catalogMeta.knownKeys.source, url) && catalogMeta.knownKeys.keys && catalogMeta.knownKeys.keys.length ? catalogMeta.knownKeys.keys : null;
         var compared = api.newItemFlags(keys, previous);
         var freshKeys = [];
         if (compared.count) for (var at = 0; at < keys.length; at += 1) if (compared.flags[at]) freshKeys.push(keys[at]);
@@ -3197,7 +3198,7 @@
       applyCatalog(saved.entries, saved.source, saved.revision, saved.savedAt, true, saved.hiddenGroups, saved.liveTransport);
       // First start after the upgrade: remember today's items so the next
       // refresh can tell which ones are new.
-      if (!(catalogMeta.knownKeys && catalogMeta.knownKeys.source === saved.source) && entryKeys) {
+      if (!(catalogMeta.knownKeys && sameAccount(catalogMeta.knownKeys.source, saved.source)) && entryKeys) {
         catalogMeta.knownKeys = { key: 'known-keys', source: saved.source, keys: api.sortedKeys(entryKeys) };
         catalogStore.saveMeta([catalogMeta.knownKeys]);
       }
