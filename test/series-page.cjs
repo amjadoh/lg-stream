@@ -52,7 +52,7 @@ async function main() {
         if (url.includes('/player_api.php')) {
           const params = new URL(url).searchParams; const action = params.get('action'); window.__api.push(action);
           const reply = action === 'get_series_categories' ? [{ category_id: '10', category_name: 'Drama' }, { category_id: '20', category_name: 'Comedy' }]
-            : action === 'get_series' ? [{ name: 'Alpha', series_id: 1, category_id: '10' }, { name: 'Beta', series_id: 2, category_id: '20' }]
+            : action === 'get_series' ? [{ name: 'Alpha', series_id: 1, category_id: '10' }, { name: 'Beta', series_id: 2, category_id: '20' }, { name: 'Delta', series_id: 4, category_id: '20' }]
             : action === 'get_series_info' ? { info: { plot: 'Alpha provider plot', genre: 'Drama', releaseDate: '2021-03-01', rating: '7.8' }, episodes: { 1: [{ id: '301', info: { duration_secs: 1800 } }, { id: '302', info: { duration_secs: 1700 } }] } }
             : null;
           return { ok: true, json: async () => reply };
@@ -63,6 +63,7 @@ async function main() {
         item('series', 'Alpha', 301, 'Alpha.S01.E01'); item('series', 'Alpha', 302, 'Alpha.S01.E02'); item('series', 'Alpha', 303, 'Alpha.S02.E01');
         item('series', 'Beta', 401, 'Beta S01E01');
         item('series', 'Gamma', 501, 'Gamma S01E01');
+        for (let episode = 1; episode <= 12; episode++) item('series', 'Delta', 600 + episode, 'Delta S01E' + String(episode).padStart(2, '0'));
         const bytes = new TextEncoder().encode(lines.join('\n'));
         return { ok: true, headers: { get: name => name.toLowerCase() === 'content-length' ? String(bytes.byteLength) : null }, body: new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } }) };
       };
@@ -79,7 +80,7 @@ async function main() {
       await page.locator('.primary-button[data-section="series"]').click();
     };
     await chooseSeries();
-    assert.equal(await page.locator('#movie-grid .movie-card').count(), 3, 'One card per series');
+    assert.equal(await page.locator('#movie-grid .movie-card').count(), 4, 'One card per series');
     assert.equal(await page.locator('#groups [data-group="Alpha"]').count(), 0, 'A series is never a group');
 
     // The provider's categories arrive in the background, in provider order;
@@ -133,6 +134,30 @@ async function main() {
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#series-panel').isVisible(), false);
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('movie-card')), true, 'Back from the page returns to the series card');
+    // A long season fills the page as a grid: down/up move a whole row.
+    await page.locator('#groups [data-group="Comedy"]').click();
+    await page.locator('#movie-grid .movie-card', { hasText: 'Delta' }).click();
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    const cells = page.locator('#series-episodes .episode-card');
+    assert.equal(await cells.count(), 12);
+    const boxes = await cells.evaluateAll(nodes => nodes.map(node => { const r = node.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y) }; }));
+    assert.equal(new Set(boxes.map(box => box.y)).size, 3, 'Twelve episodes are three rows of five');
+    assert.ok(boxes[0].y === boxes[4].y && boxes[5].y > boxes[0].y && boxes[1].x < boxes[0].x, 'Rows run right to left in Arabic');
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-series-grid-1080.png') });
+    const focusedCell = () => page.evaluate(() => Array.from(document.querySelectorAll('#series-episodes .episode-card')).indexOf(document.activeElement));
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await focusedCell(), 0);
+    await page.keyboard.press('ArrowLeft'); assert.equal(await focusedCell(), 1);
+    await page.keyboard.press('ArrowDown'); assert.equal(await focusedCell(), 6);
+    await page.keyboard.press('ArrowDown'); assert.equal(await focusedCell(), 11, 'Down into a shorter last row lands on its last episode');
+    await page.keyboard.press('ArrowDown'); assert.equal(await focusedCell(), 11);
+    await page.keyboard.press('ArrowUp'); assert.equal(await focusedCell(), 6);
+    await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowUp');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'series-continue', 'Up from the first row returns to the buttons');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-series-grid-720.png') });
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.keyboard.press('Escape');
     assert.deepEqual(errors, []);
     console.log('Series page: provider categories, one card per series, details, seasons/episodes navigation, play and Back to the page, watched mark and next episode passed. Synthetic media only.');
   } finally {
