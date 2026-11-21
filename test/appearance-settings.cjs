@@ -195,10 +195,11 @@ async function main() {
       await page.locator(`.primary-button[data-section="${section}"]`).click();
       await key('ArrowRight'); await key('Enter');
       assert.match(await page.locator('#details-rating').innerText(), /8.4/);
-      await key('Enter'); await key('Enter', 'media-toggle');
+      // A series episode opens its controls on the episodes button, above the timeline.
+      await key('Enter'); await key('Enter', section === 'series' ? 'episode-list' : 'media-toggle');
       assert.equal(await page.locator('#audio-language').isDisabled(), true);
       assert.equal(await page.locator('#subtitle-language').isDisabled(), true);
-      await key('ArrowUp', 'seek-position'); await key('ArrowUp', 'seek-back');
+      await key(section === 'series' ? 'ArrowDown' : 'ArrowUp', 'seek-position'); await key('ArrowUp', 'seek-back');
       await key('ArrowRight', 'seek-position'); await key('ArrowDown', 'seek-forward');
       await key('Enter');
       await page.waitForFunction(() => document.querySelector('video').currentTime >= 30);

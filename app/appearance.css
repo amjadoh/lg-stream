@@ -103,4 +103,9 @@ input, .speed-connection, .speed-results li, .group-switch { background: var(--p
 .series-page .episode-card.watched .episode-number { color: var(--muted); }
 .series-page .episode-card:focus, .series-page .episode-card.watched:focus { border-color: var(--focus-ring); background: var(--focus); color: var(--focus-text); }
 .series-page .episode-card:focus .episode-number { color: var(--focus-text); }
+.episode-row { border-color: #2d3b52; border-inline-start: 4px solid var(--accent); background: linear-gradient(160deg, #1d2a3e, #141d2c); color: var(--accent); }
+.episode-row .episode-row-meta { color: var(--muted); }
+.episode-row.watched { border-inline-start-color: #3d6b4b; background: #0f1622; color: var(--muted); }
+.episode-row.current .episode-row-meta { color: var(--accent); }
+.episode-row:focus, .episode-row.watched:focus { border-color: var(--focus-ring); background: var(--focus); color: var(--focus-text); }
 .series-card .series-meta, .series-seasons button[aria-pressed="true"] { color: var(--accent); }
