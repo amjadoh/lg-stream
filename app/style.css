@@ -368,7 +368,7 @@ body[data-layout="vertical"] #category-shortcuts button { flex-shrink: 0; width:
 /* Series page: full screen, sizes follow the screen height (720p and 1080p alike). */
 .modal.series-page { padding: 0; align-items: stretch; justify-content: stretch; }
 .series-page .series-card { width: 100%; max-width: none; height: 100%; max-height: none; border: 0; border-radius: 0; padding: 4vh 4vw 3vh; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
-.series-head { display: grid; grid-template-columns: 26vh minmax(0, 1fr); gap: 3vw; min-height: 0; }
+.series-head { display: grid; grid-template-columns: 26vh minmax(0, 1fr); gap: 3vw; min-height: 0; flex-shrink: 0; }
 .series-head.no-poster { grid-template-columns: minmax(0, 1fr); }
 .series-poster { width: 26vh; height: 38vh; object-fit: cover; border-radius: 1.6vh; background: #172338; }
 .series-body { min-width: 0; display: flex; flex-direction: column; }
@@ -384,7 +384,7 @@ html[dir="ltr"] .series-body h2, html[dir="ltr"] .series-card .series-descriptio
 .series-card #series-status { font-size: 1.9vh; margin: 1vh 0 0; min-height: 2.4vh; }
 .series-seasons { display: flex; gap: 1.2vw; overflow: hidden; flex-shrink: 0; padding: 1vh .6vw 1.4vh; }
 /* Episodes fill the rest of the page as a grid and scroll inside it. */
-.series-episodes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: min-content; align-content: start; gap: 1.6vh 1.2vw; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding: 1vh .6vw 1.4vh; }
+.series-episodes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: min-content; align-content: start; gap: 1.6vh 1.2vw; flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; padding: 1vh .6vw 1.4vh; scroll-padding: 1vh 0 1.4vh; }
 .series-episodes::-webkit-scrollbar { display: none; }
 .series-seasons { margin-top: 2vh; }
 .series-seasons:empty { display: none; }
