@@ -41,6 +41,9 @@ async function main() {
       proto.play = function () {
         own(this).paused = false; window.__mediaStarts = (window.__mediaStarts || 0) + 1;
         queueMicrotask(() => { if (!this.isConnected || own(this).paused) return; this.dispatchEvent(new Event('playing')); });
+        // Steady progress so the player sees a live picture, as a real decoder would.
+        clearInterval(own(this).clock);
+        own(this).clock = setInterval(() => { if (!this.isConnected) { clearInterval(own(this).clock); return; } if (own(this).paused) return; own(this).time += 0.5; this.dispatchEvent(new Event('timeupdate')); }, 500);
         return Promise.resolve();
       };
       proto.pause = function () { own(this).paused = true; this.dispatchEvent(new Event('pause')); };
@@ -60,6 +63,7 @@ async function main() {
         const lines = ['#EXTM3U'];
         const item = (section, group, id, title) => { lines.push('#EXTINF:-1 group-title="' + group + '",' + title); lines.push('https://media.invalid/' + section + '/user/pass/' + id + '.mp4'); };
         item('live', 'News', 1, 'Live One');
+        item('movie', 'Films', 700, 'Film One');
         item('series', 'Alpha', 301, 'Alpha.S01.E01'); item('series', 'Alpha', 302, 'Alpha.S01.E02'); item('series', 'Alpha', 303, 'Alpha.S02.E01');
         item('series', 'Beta', 401, 'Beta S01E01');
         item('series', 'Gamma', 501, 'Gamma S01E01');
@@ -138,7 +142,18 @@ async function main() {
     const playing = () => page.evaluate(() => { const video = document.querySelector('video'); return video ? video.src.split('/').pop() : null; });
     const channelKey = code => page.evaluate(code => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode: code, bubbles: true })), code);
     const endEpisode = () => page.evaluate(() => document.querySelector('video').dispatchEvent(new Event('ended')));
+    // Episode 1 stopped at 28:20 of 30:00: replaying it asks where to start.
     await page.locator('#series-episodes .episode-card').first().click();
+    await page.locator('#resume-prompt').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('video').count(), 0, 'Nothing plays until the viewer chooses');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'resume-continue');
+    assert.match(await page.locator('#resume-continue').innerText(), /0:28:20/);
+    await page.screenshot({ path: path.join(root, 'artifacts/ui-resume-1080.png') });
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#resume-prompt').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.classList.contains('episode-card')), true, 'Back on the question returns to the episode');
+    await page.locator('#series-episodes .episode-card').first().click();
+    await page.keyboard.press('ArrowLeft'); await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('video'));
     assert.equal(await playing(), '301.mp4');
     await page.keyboard.press('Enter');
@@ -195,6 +210,8 @@ async function main() {
     assert.equal(await page.locator('video').count(), 0, 'The last episode ending returns to the series page');
     await page.locator('#series-seasons button').first().click();
     await page.locator('#series-episodes .episode-card').first().click();
+    await page.waitForFunction(() => document.querySelector('video') || !document.getElementById('resume-prompt').hidden);
+    if (await page.locator('#resume-prompt').isVisible()) await page.locator('#resume-restart').click();
     await page.waitForFunction(() => document.querySelector('video'));
     await endEpisode();
     await page.locator('#next-episode').waitFor({ state: 'visible' });
@@ -236,6 +253,44 @@ async function main() {
     await page.screenshot({ path: path.join(root, 'artifacts/ui-series-grid-720.png') });
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.keyboard.press('Escape');
+
+    // While Delta's first episode plays, the controls hide 10 s after the last key.
+    await page.locator('#movie-grid .movie-card', { hasText: 'Delta' }).click();
+    await page.locator('#series-continue').click();
+    await page.waitForFunction(() => document.querySelector('video'));
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#media-controls').isVisible(), true);
+    await page.waitForTimeout(6000); await page.keyboard.press('ArrowDown');
+    await page.waitForTimeout(6000);
+    assert.equal(await page.locator('#media-controls').isVisible(), true, 'Each key press restarts the 10 s');
+    await page.waitForTimeout(4500);
+    assert.equal(await page.locator('#media-controls').isVisible(), false, 'The controls hide 10 s after the last key');
+    assert.equal(await page.locator('video').count(), 1, 'Hiding the controls keeps playing');
+    await page.keyboard.press('Escape');
+    await page.locator('#series-panel').waitFor({ state: 'visible' });
+    await page.keyboard.press('Escape');
+
+    // A movie stopped part way asks too; Back on the question returns to its details.
+    await page.locator('#groups .group-button').first().focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.locator('.primary-button[data-section="movies"]').click();
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.locator('#details-play').click();
+    await page.waitForFunction(() => document.querySelector('video'));
+    await page.evaluate(() => window.__setMedia(600, 5400));
+    await page.keyboard.press('Escape');
+    if (await page.locator('video').count()) await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('video'));
+    await page.locator('#movie-grid .movie-card').first().click();
+    await page.locator('#details-play').click();
+    await page.locator('#resume-prompt').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#resume-continue').innerText(), /0:10:00/);
+    await page.keyboard.press('Escape');
+    await page.locator('#details-panel').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('video').count(), 0);
+    await page.locator('#details-play').click();
+    await page.locator('#resume-continue').click();
+    await page.waitForFunction(() => document.querySelector('video'));
     assert.deepEqual(errors, []);
     console.log('Series page: provider categories, one card per series, details, seasons/episodes navigation, play and Back to the page, watched mark and next episode passed. Synthetic media only.');
   } finally {

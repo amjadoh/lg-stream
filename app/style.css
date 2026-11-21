@@ -264,6 +264,9 @@ input::placeholder { color: #7f90a7; }
 .media-controls .form-actions { gap: 10px; }
 /* Series episodes while watching: a row in the controls, a side list over the
    video, and the countdown to the next episode. */
+#resume-prompt { z-index: 30; }
+.resume-card { min-width: 560px; }
+.resume-card h2 { margin: 0 0 22px; }
 .episode-controls { display: flex; gap: 10px; margin-bottom: 10px; }
 .media-controls .episode-controls button, body[data-controls] .media-controls .episode-controls button { padding: 6px 14px; font-size: 21px; }
 .episode-controls[hidden] { display: none; }

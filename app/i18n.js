@@ -70,6 +70,7 @@
   "إلغاء": "Cancel",
   "الحلقات": "Episodes",
   "تشغيل الآن": "Play now",
+  "من البداية": "From the beginning",
   "موافق: تشغيل · يمين ويسار: الموسم · رجوع: إغلاق": "OK: play · Left/Right: season · Back: close",
   "رياضة": "Sports",
   "قنوات أفلام": "Movie channels",
