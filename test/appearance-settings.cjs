@@ -195,11 +195,11 @@ async function main() {
       await page.locator(`.primary-button[data-section="${section}"]`).click();
       await key('ArrowRight'); await key('Enter');
       assert.match(await page.locator('#details-rating').innerText(), /8.4/);
-      // A series episode opens its controls on the episodes button, above the timeline.
+      // A series episode opens its controls (an arrow; OK pauses) on the episodes button, above the timeline.
       await key('Enter');
       // At an episode's start OK first belongs to Skip intro, shown for 5 s.
       if (section === 'series') await page.waitForFunction(() => document.querySelector('video') && document.getElementById('intro-skip').hidden, null, { timeout: 8000 });
-      await key('Enter', section === 'series' ? 'episode-list' : 'media-toggle');
+      await key('ArrowUp', section === 'series' ? 'episode-list' : 'media-toggle');
       assert.equal(await page.locator('#audio-language').isDisabled(), true);
       assert.equal(await page.locator('#subtitle-language').isDisabled(), true);
       await key(section === 'series' ? 'ArrowDown' : 'ArrowUp', 'seek-position'); await key('ArrowUp', 'seek-back');

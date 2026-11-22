@@ -3917,6 +3917,11 @@
     }
     // OK while Skip intro shows presses it.
     if (watchMode && key === 'Enter' && $('media-controls').hidden && !$('intro-skip').hidden && !$('intro-skip-button').hidden) { event.preventDefault(); if (!event.repeat) skipIntro(); return; }
+    // OK in a movie or episode pauses it and shows the controls on "Resume", so
+    // a second OK resumes. Paused controls stay; once playing they hide after 10 s.
+    if (watchMode && $('media-controls').hidden && key === 'Enter' && playingIndex !== null && isOnDemand() && !retryablePlayback()) {
+      event.preventDefault(); if (!event.repeat) { cancelSwitch(); player.toggle(); showPlaybackControls(); $('media-toggle').focus(); } return;
+    }
     if (watchMode && $('media-controls').hidden && key === 'Enter') { showWatchChannels(); event.preventDefault(); return; }
     if (watchMode && $('media-controls').hidden && playingIndex !== null && entrySection(playingIndex) === 'tv' && (key === 'ArrowUp' || key === 'ArrowDown')) {
       var liveIndexes = visibleIndexes();
