@@ -159,8 +159,10 @@ async function main() {
     await page.keyboard.press('ArrowLeft'); await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('video'));
     assert.equal(await playing(), '301.mp4');
-    await page.keyboard.press('Enter');
+    // An arrow opens the controls without pausing (OK pauses).
+    await page.keyboard.press('ArrowUp');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'episode-list', 'Episode controls open on the episodes button');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), false, 'An arrow does not pause');
     assert.equal(await page.locator('#episode-prev').isVisible(), false, 'No previous button on the first episode');
     assert.match(await page.locator('#episode-next').innerText(), /م1 ح2/);
     const order = await page.locator('#episode-controls button:visible').evaluateAll(nodes => nodes.map(node => node.id + ':' + Math.round(node.getBoundingClientRect().x)));
@@ -261,14 +263,26 @@ async function main() {
     await page.locator('#movie-grid .movie-card', { hasText: 'Delta' }).click();
     await page.locator('#series-continue').click();
     await page.waitForFunction(() => document.querySelector('video'));
+    // OK pauses the episode and shows the controls on "Resume"; they hide after 10 s while paused.
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#media-controls').isVisible(), true);
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'OK paused the episode');
+    await page.waitForFunction(() => document.getElementById('media-toggle').textContent === 'متابعة');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'media-toggle');
+    await page.waitForTimeout(10500);
+    assert.equal(await page.locator('#media-controls').isVisible(), false, 'Paused controls hide after 10 s');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Still paused');
+    // A second OK resumes and shows the controls; they hide 10 s after the last key.
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), false, 'OK resumed the episode');
+    assert.equal(await page.locator('#media-controls').isVisible(), true, 'Resuming shows the controls');
     await page.waitForTimeout(6000); await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(6000);
     assert.equal(await page.locator('#media-controls').isVisible(), true, 'Each key press restarts the 10 s');
     await page.waitForTimeout(4500);
     assert.equal(await page.locator('#media-controls').isVisible(), false, 'The controls hide 10 s after the last key');
     assert.equal(await page.locator('video').count(), 1, 'Hiding the controls keeps playing');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), false);
     await page.keyboard.press('Escape');
     await page.locator('#series-panel').waitFor({ state: 'visible' });
     await page.keyboard.press('Escape');
