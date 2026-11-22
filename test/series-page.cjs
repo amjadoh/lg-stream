@@ -263,17 +263,19 @@ async function main() {
     await page.locator('#movie-grid .movie-card', { hasText: 'Delta' }).click();
     await page.locator('#series-continue').click();
     await page.waitForFunction(() => document.querySelector('video'));
-    // OK pauses the episode and shows the controls on "Resume"; paused, they stay.
+    // OK pauses the episode and shows the controls on "Resume"; they hide after 10 s while paused.
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#media-controls').isVisible(), true);
     assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'OK paused the episode');
     await page.waitForFunction(() => document.getElementById('media-toggle').textContent === 'متابعة');
     assert.equal(await page.evaluate(() => document.activeElement.id), 'media-toggle');
-    await page.waitForTimeout(11000);
-    assert.equal(await page.locator('#media-controls').isVisible(), true, 'Paused controls stay');
-    // A second OK resumes; then the controls hide 10 s after the last key.
+    await page.waitForTimeout(10500);
+    assert.equal(await page.locator('#media-controls').isVisible(), false, 'Paused controls hide after 10 s');
+    assert.equal(await page.evaluate(() => document.querySelector('video').paused), true, 'Still paused');
+    // A second OK resumes and shows the controls; they hide 10 s after the last key.
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate(() => document.querySelector('video').paused), false, 'OK resumed the episode');
+    assert.equal(await page.locator('#media-controls').isVisible(), true, 'Resuming shows the controls');
     await page.waitForTimeout(6000); await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(6000);
     assert.equal(await page.locator('#media-controls').isVisible(), true, 'Each key press restarts the 10 s');

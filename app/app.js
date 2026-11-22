@@ -2482,7 +2482,7 @@
     if (!watchMode || !isOnDemand() || $('media-controls').hidden) return;
     controlsHideTimer = setTimeout(function () {
       controlsHideTimer = null;
-      if (!watchMode || !isOnDemand() || $('media-controls').hidden || !$('track-picker').hidden || pendingSeek !== null || lastState !== 'playing') return;
+      if (!watchMode || !isOnDemand() || $('media-controls').hidden || !$('track-picker').hidden || pendingSeek !== null || (lastState !== 'playing' && lastState !== 'paused')) return;
       $('media-controls').hidden = true; document.body.focus();
     }, CONTROLS_HIDE_MS);
   }
@@ -3917,8 +3917,8 @@
     }
     // OK while Skip intro shows presses it.
     if (watchMode && key === 'Enter' && $('media-controls').hidden && !$('intro-skip').hidden && !$('intro-skip-button').hidden) { event.preventDefault(); if (!event.repeat) skipIntro(); return; }
-    // OK in a movie or episode pauses it and shows the controls on "Resume", so
-    // a second OK resumes. Paused controls stay; once playing they hide after 10 s.
+    // OK in a movie or episode pauses it and shows the controls on "Resume"; they
+    // hide after the usual 10 s, paused or not. OK again resumes and shows them.
     if (watchMode && $('media-controls').hidden && key === 'Enter' && playingIndex !== null && isOnDemand() && !retryablePlayback()) {
       event.preventDefault(); if (!event.repeat) { cancelSwitch(); player.toggle(); showPlaybackControls(); $('media-toggle').focus(); } return;
     }
